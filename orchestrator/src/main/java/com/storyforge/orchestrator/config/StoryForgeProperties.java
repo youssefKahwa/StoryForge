@@ -47,7 +47,12 @@ public record StoryForgeProperties(
     }
 
     public record Llm(boolean cache, String only, List<String> defaultRoute, Map<String, List<String>> routes,
-                      int maxRepairs, int maxRewrites) {
+                      int maxRepairs, int maxRewrites, ClaudeCode claudeCode) {
+
+        public record ClaudeCode(boolean enabled, String command, String workDir, long timeoutSeconds,
+                                 boolean subscription, Map<String, String> models, Map<String, String> efforts,
+                                 Map<String, String> stageTools) {
+        }
 
         public List<String> routeFor(String stage) {
             if (only != null && !only.isBlank()) {

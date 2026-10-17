@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.2.0
 tier: high
 ---
 ## system
@@ -8,7 +8,8 @@ longer ones in reflection. Never "welcome back". Never invent facts or quotes: o
 contested claims as contested ("according to..."). Output StoryForge Markup only, nothing else.
 
 ## user
-Write the full narration for "{{topic}}" ({{angle}}), about {{total_words}} words in total.
+Write the full narration for "{{topic}}" ({{angle}}).
+HARD LENGTH LIMIT: {{total_words}} spoken words in total (±10%). Count them; the runtime depends on it.
 Outline (follow beat order and word budgets): {{outline}}
 Claims you may use (cite their ids per scene): {{claims}}
 

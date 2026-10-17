@@ -22,6 +22,8 @@ public class OutlineStage implements StageWorker {
 
     private static final Logger log = LoggerFactory.getLogger(OutlineStage.class);
 
+    private static final double SPEECH_SHARE = 0.9;
+
     private final LlmRouter llm;
     private final FormatRegistry formats;
     private final JsonMapper json;
@@ -73,7 +75,7 @@ public class OutlineStage implements StageWorker {
         double total = draft.beats().stream().mapToInt(beat -> Math.max(1, beat.targetSeconds())).sum();
         List<Outline.Beat> beats = draft.beats().stream().map(beat -> {
             int seconds = (int) Math.round(Math.max(1, beat.targetSeconds()) / total * targetSeconds);
-            return beat.withBudget(seconds, (int) Math.round(seconds * wordsPerMinute / 60.0));
+            return beat.withBudget(seconds, (int) Math.round(seconds * wordsPerMinute / 60.0 * SPEECH_SHARE));
         }).toList();
         return new Outline(targetSeconds, beats);
     }

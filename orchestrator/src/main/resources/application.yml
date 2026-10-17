@@ -69,15 +69,23 @@ storyforge:
     cache: true
     only: ""
     max-repairs: 2
-    max-rewrites: 2
-    default-route: [claude-code, nvidia]
-    routes:
-      select: [nvidia, claude-code]
-      research: [nvidia, claude-code]
-      outline: [nvidia, claude-code]
-      script: [claude-code, nvidia]
-      critique: [nvidia, claude-code]
-      package: [nvidia, claude-code]
+    max-rewrites: 1
+    default-route: [claude-code]
+    routes: {}
+    claude-code:
+      enabled: true
+      command: claude
+      work-dir: ${storyforge.data-dir}/claude-work
+      timeout-seconds: 900
+      subscription: true
+      models:
+        fast: haiku
+        high: sonnet
+      efforts:
+        fast: low
+        high: medium
+      stage-tools:
+        research: WebSearch,WebFetch
   qa:
     loudness-target: -14
     loudness-tolerance: 1

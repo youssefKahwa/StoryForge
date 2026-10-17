@@ -1,5 +1,6 @@
 package com.storyforge.orchestrator.model;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -9,6 +10,10 @@ public record Critique(
         double hook,
         boolean passed,
         int rewrites,
+        int words,
+        double estimatedSeconds,
+        int targetSeconds,
+        boolean lengthOk,
         List<String> coldRead,
         List<Flag> flags) {
 
@@ -20,7 +25,21 @@ public record Critique(
         double avg = safe.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
         double hookScore = safe.getOrDefault("hook", 0.0);
         boolean pass = avg >= minAverage && hookScore >= minHook;
-        return new Critique(safe, Math.round(avg * 100) / 100.0, hookScore, pass, rewriteCount,
-                coldRead == null ? List.of() : coldRead, flags == null ? List.of() : flags);
+        return new Critique(safe, Math.round(avg * 100) / 100.0, hookScore, pass, rewriteCount, words, estimatedSeconds,
+                targetSeconds, lengthOk, coldRead == null ? List.of() : coldRead, flags == null ? List.of() : flags);
+    }
+
+    public Critique withLength(int wordCount, double seconds, int target, double tolerance, int wordsPerMinute) {
+        boolean ok = target <= 0 || Math.abs(seconds - target) <= target * tolerance;
+        List<Flag> allFlags = new ArrayList<>(flags);
+        if (!ok) {
+            long wordDelta = Math.round(Math.abs(seconds - target) * wordsPerMinute / 60.0);
+            allFlags.add(new Flag("all", "major", "Script runs about " + Math.round(seconds) + "s when narrated; the "
+                    + "target is " + target + "s. " + (seconds > target ? "Cut" : "Add") + " about " + wordDelta
+                    + " words (currently " + wordCount + ").", false));
+        }
+        double rounded = Math.round(seconds * 10) / 10.0;
+        return new Critique(scores, average, hook, passed && ok, rewrites, wordCount, rounded, target, ok, coldRead,
+                List.copyOf(allFlags));
     }
 }

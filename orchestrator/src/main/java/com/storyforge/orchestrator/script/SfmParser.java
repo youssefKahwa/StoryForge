@@ -45,7 +45,7 @@ public final class SfmParser {
                 current.header(header.group(2));
                 continue;
             }
-            if (current == null || line.isEmpty() || line.startsWith("#")) {
+            if (current == null || line.isEmpty() || line.startsWith("#") || line.startsWith("```")) {
                 continue;
             }
             Matcher directive = DIRECTIVE.matcher(line);

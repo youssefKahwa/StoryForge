@@ -55,7 +55,11 @@ class MockPipelineE2ETest {
         if (Files.exists(dir)) {
             try (Stream<Path> walk = Files.walk(dir)) {
                 for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
-                    Files.delete(path);
+                    try {
+                        Files.delete(path);
+                    } catch (IOException locked) {
+                        System.out.println("Could not delete (locked on Windows?): " + path);
+                    }
                 }
             }
         }

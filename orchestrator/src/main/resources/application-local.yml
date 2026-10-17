@@ -1,0 +1,9 @@
+storyforge:
+  llm:
+    only: claude-code
+  providers:
+    tts: mock
+    image: mock
+    alignment: mock
+    render: ffmpeg
+    publish: mock

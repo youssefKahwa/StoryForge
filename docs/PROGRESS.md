@@ -16,11 +16,19 @@
 - Tests: 19 unit tests + 2 end-to-end mock pipeline tests.
 - Demo: `scripts/e2e-mock.ps1` (about 70 s placeholder 1080p MP4 + QA report, zero API keys).
 
-## Next: M1, the brain (real AI, free)
-1. `ClaudeCodeLlmProvider` (ProcessBuilder, flags from ADR-002, JSON schema per stage, timeout, usage parsing).
-   Measure the real token footprint of a minimal call.
-2. `NvidiaLlmProvider` (OpenAI-compatible HTTP). Owner creates a free key at build.nvidia.com and puts it in `.env`.
-3. Research fetchers (Wikipedia/MediaWiki, Wikidata, Internet Archive, LoC, Chronicling America) + LLM extraction.
+### M1 (in progress): Claude Code brain (2026-10-17)
+- `ClaudeCodeLlmProvider` is the only AI provider (ADR-012): haiku/low effort for light stages, sonnet/medium for
+  research (WebSearch + WebFetch only), script and rewrite. Prompt on stdin, system prompt as file, `--safe-mode`.
+- Research gate repair: one follow-up call finds second sources; claims still single-sourced become "contested".
+- Length control: estimated narrated seconds (words, speed, pauses) feed the critique/rewrite loop; max 1 rewrite.
+- Critic judges facts only against dossier claims (it once "corrected" a true date from memory).
+- First real run (#33, Mary Celeste, 90 s target): 10 real sources, QA passed, ~51k input / ~52k output tokens,
+  most of it in critique + one sonnet rewrite.
+
+## Next: finish M1
+- Real 12–16 min run on the `local` profile and check Pro usage per video.
+- Trim outline output (9k tokens for a short video), consider `--json-schema` per stage.
+- Optional: research fetchers (Wikipedia/MediaWiki, Wikidata, Internet Archive, LoC, Chronicling America) + LLM extraction.
    Gate: ≥ 8 sources.
 4. JSON Schemas in `schemas/` + validation for the NVIDIA path; repair loop already exists.
 5. `local` profile: real LLMs, mock media.

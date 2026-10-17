@@ -98,3 +98,15 @@ listed is not the same as being callable**:
   needs another free source (candidates: Cloudflare Workers AI free tier, Pollinations). Re-test before M3.
 **Consequence for M1:** `NvidiaLlmProvider` takes an ordered model list per tier, with a short connect timeout, and
 skips models that return 404 or time out. Tier `fast` = nemotron-3-super first.
+
+## ADR-012 Claude Code is the only AI provider (2026-10-17, owner request)
+Supersedes the routing split in ADR-002. Every LLM stage routes to `claude-code` (`default-route: [claude-code]`,
+and the `local` profile pins `llm.only: claude-code`). NVIDIA stays out of the route; the key in `.env` is unused.
+- Models by prompt tier: `fast` = haiku (select, outline, critique, package), `high` = sonnet (research, script,
+  rewrite).
+- Least privilege: `--tools ""` for every stage except research, which gets `--tools WebSearch,WebFetch
+  --allowedTools WebSearch,WebFetch`. Always `--safe-mode --strict-mcp-config --disable-slash-commands
+  --no-session-persistence --permission-mode dontAsk`, with the system prompt passed as a file (no Windows quoting
+  issues) and the user prompt on stdin (no command-line length limit).
+- Measured 2026-10-17 (v2.1.287, Pro login): a minimal haiku call costs ~600 input tokens and ~1.7 s. On a
+  subscription the cost is recorded as $0; the notional API price is ignored by the cost guard.

@@ -26,6 +26,9 @@ public class CritiqueStage implements StageWorker {
     private record Version(String markup, List<Scene> scenes, Critique critique) {
     }
 
+    private static final double LENGTH_MARGIN = 0.8;
+    private static final double SPEECH_SHARE = 0.9;
+
     private final LlmRouter llm;
     private final JsonMapper json;
     private final StoryForgeProperties properties;
@@ -51,16 +54,24 @@ public class CritiqueStage implements StageWorker {
         Outline outline = context.files().read(Stage.OUTLINE, "outline.json", Outline.class);
         Dossier dossier = context.files().read(Stage.RESEARCH, "dossier.json", Dossier.class);
         String outlineJson = json.writeValueAsString(outline.beats());
+        String claimsJson = json.writeValueAsString(dossier.claims());
         String markup = context.files().readText(Stage.SCRIPT, "script.sfm.md");
 
+        int wordsPerMinute = properties.video().wordsPerMinute();
+        int targetSeconds = context.run().targetSeconds();
+        double tolerance = properties.qa().durationTolerance() * LENGTH_MARGIN;
+        int targetWords = (int) Math.round(targetSeconds * wordsPerMinute / 60.0 * SPEECH_SHARE);
         Version best = null;
         int maxRewrites = properties.llm().maxRewrites();
         for (int round = 0; round <= maxRewrites; round++) {
             Critique critique = llm.json(context, stage(), "critique",
-                            Map.of("script", markup, "outline", outlineJson), Critique.class)
+                            Map.of("script", markup, "outline", outlineJson, "claims", claimsJson), Critique.class)
                     .evaluated(properties.qa().criticAverage(), properties.qa().criticHook(), round);
-            Version version = new Version(markup, SfmParser.parse(markup), critique);
-            if (best == null || critique.average() > best.critique().average()) {
+            List<Scene> scenes = SfmParser.parse(markup);
+            critique = critique.withLength(wordCount(scenes), estimatedSeconds(scenes, wordsPerMinute), targetSeconds,
+                    tolerance, wordsPerMinute);
+            Version version = new Version(markup, scenes, critique);
+            if (best == null || better(critique, best.critique())) {
                 best = version;
             }
             if (critique.passed() || round == maxRewrites) {
@@ -72,7 +83,8 @@ public class CritiqueStage implements StageWorker {
                     "script", markup,
                     "critique", json.writeValueAsString(critique),
                     "outline", outlineJson,
-                    "claims", json.writeValueAsString(dossier.claims())));
+                    "claims", claimsJson,
+                    "total_words", String.valueOf(targetWords)));
             try {
                 SfmParser.parse(rewritten);
                 markup = rewritten;
@@ -83,5 +95,28 @@ public class CritiqueStage implements StageWorker {
         context.files().write(Stage.CRITIQUE, "critique.json", best.critique());
         context.files().writeText(Stage.CRITIQUE, "script.sfm.md", best.markup());
         context.files().write(Stage.CRITIQUE, "scenes.json", best.scenes());
+    }
+
+    static double estimatedSeconds(List<Scene> scenes, int wordsPerMinute) {
+        double total = 0;
+        for (Scene scene : scenes) {
+            double speed = scene.speed() > 0 ? scene.speed() : 1.0;
+            total += scene.words().size() * 60.0 / (wordsPerMinute * speed);
+            total += (scene.silenceBeforeMs() + scene.silenceAfterMs()) / 1000.0;
+            total += scene.segments().stream().filter(Scene.Segment::silent).mapToInt(Scene.Segment::pauseMs).sum()
+                    / 1000.0;
+        }
+        return total;
+    }
+
+    static int wordCount(List<Scene> scenes) {
+        return scenes.stream().mapToInt(scene -> scene.words().size()).sum();
+    }
+
+    static boolean better(Critique candidate, Critique current) {
+        if (candidate.lengthOk() != current.lengthOk()) {
+            return candidate.lengthOk();
+        }
+        return candidate.average() > current.average();
     }
 }
