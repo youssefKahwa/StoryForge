@@ -26,5 +26,5 @@
 5. `local` profile: real LLMs, mock media.
 
 ## Blocked / needs owner
-- NVIDIA API key (free) before M1 step 2.
+- ~~NVIDIA API key~~ done (in `.env`). Images: NVIDIA FLUX not reachable, so pick another free image source before M3.
 - Docker Desktop must be started for the Postgres profile (the `h2` profile works without it).

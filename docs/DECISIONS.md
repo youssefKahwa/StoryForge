@@ -86,3 +86,15 @@ A retention policy for heavy intermediates matters early because of the disk.
 ## ADR-010 Default publish slot (2026-10-17)
 Saturday 14:00 America/New_York (English-speaking audience). Upload happens at the end of the pipeline; publish time
 is the first slot after the 24 h veto window. The Learn stage will replace this with the learned best slot (M6).
+
+## ADR-011 NVIDIA free key: what actually works (verified 2026-10-17)
+Key created (expires 2027-10-17), stored only in `.env` (git-ignored). `GET /v1/models` lists 81 models, but **being
+listed is not the same as being callable**:
+- `nvidia/nemotron-3-super-120b-a12b`: works, ~2 s for a small JSON reply. It is a reasoning model (84 of 120
+  completion tokens were reasoning), so `max_tokens` needs generous headroom or the JSON gets truncated.
+- `moonshotai/kimi-k2.6`: 404 "Function not found for account" (not enabled for this key).
+- `deepseek-ai/deepseek-v4.1-flash`: no response within 90 s.
+- `flux.1-schnell` image endpoint: no response within 280 s (two tries). **Not usable for now.** The M3 image provider
+  needs another free source (candidates: Cloudflare Workers AI free tier, Pollinations). Re-test before M3.
+**Consequence for M1:** `NvidiaLlmProvider` takes an ordered model list per tier, with a short connect timeout, and
+skips models that return 404 or time out. Tier `fast` = nemotron-3-super first.
