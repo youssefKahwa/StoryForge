@@ -1,0 +1,32 @@
+{
+  "topic": "{{topic}}",
+  "sources": [
+    { "id": "s1", "title": "Mock primary record", "url": "https://archive.example.org/record-1", "publisher": "Mock Archive", "tier": "primary", "accessed": "2026-10-17" },
+    { "id": "s2", "title": "Mock academic paper", "url": "https://journal.example.edu/paper-2", "publisher": "Mock Journal", "tier": "academic", "accessed": "2026-10-17" },
+    { "id": "s3", "title": "Mock newspaper report", "url": "https://news.example.com/story-3", "publisher": "Mock Times", "tier": "press", "accessed": "2026-10-17" },
+    { "id": "s4", "title": "Mock encyclopedia entry", "url": "https://encyclopedia.example.net/entry-4", "publisher": "Mock Encyclopedia", "tier": "encyclopedic", "accessed": "2026-10-17" },
+    { "id": "s5", "title": "Mock museum catalogue", "url": "https://museum.example.org/catalogue-5", "publisher": "Mock Museum", "tier": "primary", "accessed": "2026-10-17" },
+    { "id": "s6", "title": "Mock historian blog", "url": "https://historian.example.io/post-6", "publisher": "Mock Historian", "tier": "other", "accessed": "2026-10-17" },
+    { "id": "s7", "title": "Mock inquiry transcript", "url": "https://inquiry.example.gov/transcript-7", "publisher": "Mock Inquiry", "tier": "primary", "accessed": "2026-10-17" },
+    { "id": "s8", "title": "Mock magazine feature", "url": "https://magazine.example.co/feature-8", "publisher": "Mock Magazine", "tier": "press", "accessed": "2026-10-17" }
+  ],
+  "claims": [
+    { "id": "c1", "text": "Mock claim: the signal stopped in the early morning.", "sourceIds": ["s1", "s3"], "key": true, "contested": false },
+    { "id": "c2", "text": "Mock claim: the official explanation was disputed.", "sourceIds": ["s2"], "key": false, "contested": true },
+    { "id": "c3", "text": "Mock claim: the crew had run the route many times.", "sourceIds": ["s4"], "key": false, "contested": false },
+    { "id": "c4", "text": "Mock claim: a partial message was sent on day two.", "sourceIds": ["s7"], "key": false, "contested": false },
+    { "id": "c5", "text": "Mock claim: later log entries are in a different hand.", "sourceIds": ["s5", "s7"], "key": true, "contested": false },
+    { "id": "c6", "text": "Mock claim: the search ended after nine days.", "sourceIds": ["s3", "s8"], "key": false, "contested": false },
+    { "id": "c7", "text": "Mock claim: a letter found years later named a second writer.", "sourceIds": ["s6", "s8"], "key": true, "contested": true }
+  ],
+  "timeline": [
+    { "date": "Day 1", "event": "Departure", "sourceIds": ["s4"] },
+    { "date": "Day 2", "event": "Partial message", "sourceIds": ["s7"] },
+    { "date": "Day 9", "event": "Search called off", "sourceIds": ["s3"] }
+  ],
+  "characters": [ { "name": "The crew (anonymous, mock)", "role": "protagonists", "living": false } ],
+  "places": ["A mock coastline", "A mock harbor town"],
+  "contested": ["Who wrote the later log entries"],
+  "wowFacts": ["Every entry after Tuesday is in a different hand", "The letter surfaced decades later in an attic"],
+  "visualNotes": ["Storm-dark coastline at night", "Lamplit logbook pages with two handwriting styles"]
+}

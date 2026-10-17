@@ -1,0 +1,93 @@
+spring:
+  application:
+    name: storyforge-orchestrator
+  config:
+    import: optional:file:../.env[.properties]
+  datasource:
+    url: jdbc:postgresql://localhost:${PG_PORT:5432}/storyforge
+    username: storyforge
+    password: ${DB_PASSWORD:storyforge}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
+      fail-on-unknown-properties: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+storyforge:
+  data-dir: ${STORYFORGE_DATA_DIR:${user.home}/storyforge-data}
+  prompts-dir: ../prompts
+  config-dir: ../config
+  cors-origins:
+    - http://localhost:8000
+    - http://localhost:9000
+  defaults:
+    target-seconds: 960
+    format: GREAT_STORIES
+    language: en
+  worker:
+    enabled: true
+    poll-ms: 3000
+  budget:
+    max-usd-per-video: 0
+  media:
+    ffmpeg: ffmpeg
+    ffprobe: ffprobe
+    timeout-seconds: 3600
+  video:
+    width: 1920
+    height: 1080
+    fps: 30
+    words-per-minute: 150
+  shots:
+    min-seconds: 3
+    max-seconds: 6
+    max-same-type: 3
+    interrupt-every-seconds: 60
+  providers:
+    tts: mock
+    image: mock
+    alignment: mock
+    render: ffmpeg
+    publish: mock
+  llm:
+    cache: true
+    only: ""
+    max-repairs: 2
+    max-rewrites: 2
+    default-route: [claude-code, nvidia]
+    routes:
+      select: [nvidia, claude-code]
+      research: [nvidia, claude-code]
+      outline: [nvidia, claude-code]
+      script: [claude-code, nvidia]
+      critique: [nvidia, claude-code]
+      package: [nvidia, claude-code]
+  qa:
+    loudness-target: -14
+    loudness-tolerance: 1
+    true-peak-max: -1
+    duration-tolerance: 0.10
+    min-sources: 8
+    critic-average: 8
+    critic-hook: 9
+  publish:
+    day: SATURDAY
+    time: "14:00"
+    zone: America/New_York
+    veto-hours: 24

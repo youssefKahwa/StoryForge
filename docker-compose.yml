@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: storyforge-postgres
+    environment:
+      POSTGRES_DB: storyforge
+      POSTGRES_USER: storyforge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-storyforge}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - storyforge-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storyforge -d storyforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  storyforge-pg:

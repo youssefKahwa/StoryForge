@@ -1,0 +1,11 @@
+storyforge:
+  defaults:
+    target-seconds: 70
+  llm:
+    only: mock
+  providers:
+    tts: mock
+    image: mock
+    alignment: mock
+    render: ffmpeg
+    publish: mock

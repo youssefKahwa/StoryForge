@@ -1,0 +1,13 @@
+.env
+*.log
+data/
+target/
+node_modules/
+dashboard/.cache/
+dashboard/public/
+library/**/*.mp3
+library/**/*.wav
+library/**/*.ogg
+library/**/*.flac
+.idea/
+.vscode/

@@ -1,0 +1,10 @@
+{
+  "scores": {
+    "hook": 9, "clarity": 8, "stakes": 8, "curiosity_gaps": 9, "pacing_variety": 8,
+    "specificity": 8, "originality": 8, "factual_traceability": 9, "ending_payoff": 8
+  },
+  "coldRead": ["0:00-1:00 Viewer knows the signal stopped, that the logbook changed hands, and wants to know who the second writer was."],
+  "flags": [
+    { "sceneId": "04", "severity": "minor", "issue": "Mock flag: name the wrong place for extra specificity.", "resolved": false }
+  ]
+}

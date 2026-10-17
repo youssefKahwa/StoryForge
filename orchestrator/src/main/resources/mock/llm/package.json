@@ -1,0 +1,18 @@
+{
+  "titles": [
+    "The Missing Hours of {{topic}}",
+    "Why {{topic}} Was Never Really Solved",
+    "{{topic}}: The Letter Nobody Read",
+    "Every Entry After Tuesday Was Written by Someone Else",
+    "The Truth About {{topic}} Was Hidden in an Attic",
+    "{{topic}} Explained",
+    "What Really Happened? A Mock Title That Is Deliberately Far Too Long To Fit In Sixty Characters",
+    "9 Days, 1 Logbook, 2 Writers",
+    "THE SIGNAL STOPPED",
+    "A Different Hand"
+  ],
+  "hookLine": "At three in the morning the signal stopped, and the story everyone thinks they know began.",
+  "tags": ["{{topic}}", "mystery", "history", "unsolved", "documentary", "storytelling", "true story", "mock"],
+  "pinnedComment": "Who do you think wrote the entries after Tuesday?",
+  "thumbnailText": "A Different Hand"
+}

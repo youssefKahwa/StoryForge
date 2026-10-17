@@ -1,0 +1,12 @@
+{
+  "beats": [
+    { "beat": "cold_open", "chapterTitle": "The Signal Stops", "targetSeconds": 9, "summary": "The signal goes dark at 3 a.m.", "rehook": "What happened in that moment?", "claimIds": ["c1"] },
+    { "beat": "promise", "chapterTitle": null, "targetSeconds": 8, "summary": "Promise the real answer.", "rehook": "Why did the official answer fail?", "claimIds": ["c2"] },
+    { "beat": "context", "chapterTitle": "An Ordinary Route", "targetSeconds": 9, "summary": "A routine crew on a routine route.", "rehook": "What changed that week?", "claimIds": ["c3"] },
+    { "beat": "escalation_1", "chapterTitle": null, "targetSeconds": 8, "summary": "The half-finished message.", "rehook": "Who sent it?", "claimIds": ["c4"] },
+    { "beat": "midpoint_twist", "chapterTitle": "A Different Hand", "targetSeconds": 7, "summary": "The logbook's second writer.", "rehook": "Whose hand was it?", "claimIds": ["c5"] },
+    { "beat": "dark_moment", "chapterTitle": null, "targetSeconds": 8, "summary": "The search is called off.", "rehook": "Is the truth lost forever?", "claimIds": ["c6"] },
+    { "beat": "climax", "chapterTitle": "The Letter in the Attic", "targetSeconds": 8, "summary": "A letter names the second writer.", "rehook": null, "claimIds": ["c5", "c7"] },
+    { "beat": "resolution", "chapterTitle": "What the Truth Waited For", "targetSeconds": 11, "summary": "Reflection and tease.", "rehook": null, "claimIds": [] }
+  ]
+}

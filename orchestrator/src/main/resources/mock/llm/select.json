@@ -1,0 +1,14 @@
+{
+  "angle": "The mystery everyone thinks is solved, told from the hours nobody can account for",
+  "corePromise": "By the end you will know what most likely happened to {{topic}} and why the official answer never added up",
+  "titleSeeds": ["The missing hours of {{topic}}", "Why {{topic}} was never solved"],
+  "backups": [
+    { "title": "Placeholder backup story A", "angle": "Mock backup angle" },
+    { "title": "Placeholder backup story B", "angle": "Mock backup angle" }
+  ],
+  "scores": {
+    "demand": 8, "english_gap": 7, "story_strength": 9, "visualizability": 8,
+    "research_availability": 8, "legal_safety": 9, "channel_fit": 9, "freshness": 7
+  },
+  "reasoning": "Canned mock brief. Strong mystery structure, good visual potential, safe to cover."
+}

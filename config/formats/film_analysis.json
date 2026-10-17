@@ -1,0 +1,25 @@
+{
+  "id": "film_analysis",
+  "name": "Film Analysis",
+  "minMinutes": 12,
+  "maxMinutes": 18,
+  "beats": [
+    { "id": "hook_thesis", "purpose": "A provocative question the video answers.", "share": 0.05 },
+    { "id": "spoiler_context", "purpose": "Spoiler notice plus release, director and why it matters, in one breath.", "share": 0.04 },
+    { "id": "recap", "purpose": "Recap in our own words, summarized, never scene-by-scene. Max 30% of runtime.", "share": 0.25 },
+    { "id": "pillar_1", "purpose": "Analysis pillar: theme.", "share": 0.12 },
+    { "id": "pillar_2", "purpose": "Analysis pillar: character arc.", "share": 0.12 },
+    { "id": "pillar_3", "purpose": "Analysis pillar: symbolism or craft (described, not shown).", "share": 0.12 },
+    { "id": "counter_reading", "purpose": "The strongest alternative interpretation.", "share": 0.12 },
+    { "id": "verdict", "purpose": "Answer the hook question.", "share": 0.12 },
+    { "id": "tease", "purpose": "One-line tease of the next video.", "share": 0.06 }
+  ],
+  "style": {
+    "artDirection": "symbolic minimal graphics",
+    "promptPrefix": "minimal symbolic illustration, flat shapes, limited palette, generous negative space",
+    "negativePrompt": "film stills, actors, celebrity likeness, movie posters, copyrighted characters, logos, text",
+    "palette": ["#0e0e10", "#f2efe9", "#d9480f", "#495057"],
+    "fonts": ["Bebas Neue", "Inter"],
+    "realistic": false
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "great_stories",
+  "name": "Great Stories",
+  "minMinutes": 14,
+  "maxMinutes": 20,
+  "beats": [
+    { "id": "cold_open", "purpose": "Start in the middle of the most intense moment and state the stakes. Never 'welcome back'.", "share": 0.03 },
+    { "id": "promise", "purpose": "What the viewer will understand by the end; open the main loop.", "share": 0.03 },
+    { "id": "context", "purpose": "Who, where, when, told through a character, not a lecture.", "share": 0.12 },
+    { "id": "escalation_1", "purpose": "Intention, obstacle, consequence. Raise the stakes.", "share": 0.12 },
+    { "id": "escalation_2", "purpose": "Intention, obstacle, consequence. Raise the stakes again.", "share": 0.11 },
+    { "id": "midpoint_twist", "purpose": "A revelation that reframes everything.", "share": 0.1 },
+    { "id": "escalation_3", "purpose": "The new understanding drives a higher-stakes push.", "share": 0.11 },
+    { "id": "dark_moment", "purpose": "Things look lost.", "share": 0.1 },
+    { "id": "climax", "purpose": "The main loop pays off.", "share": 0.12 },
+    { "id": "resolution", "purpose": "Meaning, aftermath, one reflection line, one-line tease of the next video.", "share": 0.08 }
+  ],
+  "style": {
+    "artDirection": "painterly cinematic realism, historical atmosphere",
+    "promptPrefix": "painterly cinematic illustration, muted earthy palette, dramatic chiaroscuro lighting, fine film grain",
+    "negativePrompt": "text, letters, watermark, logo, modern objects, photorealistic faces of real people, deformed hands",
+    "palette": ["#1f2a36", "#7a5c3e", "#c9a46b", "#e8dcc4"],
+    "fonts": ["Cinzel", "Inter"],
+    "realistic": false
+  }
+}
