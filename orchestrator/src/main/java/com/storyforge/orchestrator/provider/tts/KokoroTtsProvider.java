@@ -31,13 +31,13 @@ public class KokoroTtsProvider implements TtsProvider {
 
     @Override
     public double synthesize(Scene scene, Path outputWav) {
-        return synthesize(scene, outputWav, 1.0);
+        return synthesize(scene, outputWav, 1.0, null);
     }
 
     @Override
-    public double synthesize(Scene scene, Path outputWav, double speedFactor) {
+    public double synthesize(Scene scene, Path outputWav, double speedFactor, String voice) {
         double sceneSpeed = scene.speed() > 0 ? scene.speed() : 1.0;
-        return media.tts(scene.segments(), narration.voice(), narration.speed() * sceneSpeed * speedFactor,
-                narration.lang(), outputWav);
+        return media.tts(scene.segments(), voice != null ? voice : narration.voice(),
+                narration.speed() * sceneSpeed * speedFactor, narration.lang(), outputWav);
     }
 }

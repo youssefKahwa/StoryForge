@@ -1,0 +1,14 @@
+{
+  "topic": "{{topic}}",
+  "story": "Mock story summary written in our own words. A routine journey goes wrong, a record changes hands, and a letter found years later reframes what happened.",
+  "leads": ["Mock lead: the signal stopped in the early morning", "Mock lead: later log entries are in a different hand"],
+  "whatWorked": ["Opens on the moment of loss before any context", "Withholds the key document until the final third"],
+  "angles": [
+    { "title": "The Missing Hours", "angle": "Reconstruct the hours nobody can account for", "whyOriginal": "Focuses on the gap, not the legend" },
+    { "title": "Two Hands, One Logbook", "angle": "Follow the handwriting evidence", "whyOriginal": "Evidence-led instead of rumour-led" },
+    { "title": "How the Legend Grew", "angle": "Separate the myth from the record", "whyOriginal": "Myth-busting frame" }
+  ],
+  "suggestedFormat": "GREAT_STORIES",
+  "suggestedMinutes": 12,
+  "cautions": ["Mock caution: treat family accounts as contested"]
+}

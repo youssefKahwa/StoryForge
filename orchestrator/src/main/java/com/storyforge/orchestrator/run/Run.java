@@ -57,6 +57,13 @@ public class Run {
     @Column(name = "cache_salt", nullable = false)
     private int cacheSalt;
 
+    @Column(name = "inspiration_id")
+    private Long inspirationId;
+
+    private String angle;
+
+    private String voice;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -151,6 +158,30 @@ public class Run {
 
     public void setCacheSalt(int cacheSalt) {
         this.cacheSalt = cacheSalt;
+    }
+
+    public Long getInspirationId() {
+        return inspirationId;
+    }
+
+    public void setInspirationId(Long inspirationId) {
+        this.inspirationId = inspirationId;
+    }
+
+    public String getAngle() {
+        return angle;
+    }
+
+    public void setAngle(String angle) {
+        this.angle = angle;
+    }
+
+    public String getVoice() {
+        return voice;
+    }
+
+    public void setVoice(String voice) {
+        this.voice = voice;
     }
 
     public Instant getCreatedAt() {

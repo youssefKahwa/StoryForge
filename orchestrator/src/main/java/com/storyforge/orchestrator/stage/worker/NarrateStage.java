@@ -81,7 +81,8 @@ public class NarrateStage implements StageWorker {
         if (take.alignments().size() == scenes.size()) {
             context.files().write(Stage.NARRATE, CLIP_ALIGNMENTS, take.alignments());
         }
-        context.files().write(Stage.NARRATE, "narration.json", new NarrationManifest(tts.name(), tts.voice(),
+        context.files().write(Stage.NARRATE, "narration.json", new NarrationManifest(tts.name(),
+                context.run().voice() != null ? context.run().voice() : tts.voice(),
                 round(take.audio().durationSec()), context.files().relative(output), take.clips(),
                 Math.round(speedFactor * 1000) / 1000.0));
     }
@@ -108,7 +109,7 @@ public class NarrateStage implements StageWorker {
     private Optional<ClipAlignment> synthesizeVerified(StageContext context, Scene scene, Path clip,
                                                        double speedFactor) {
         String text = String.join(" ", scene.words());
-        tts.synthesize(scene, clip, speedFactor);
+        tts.synthesize(scene, clip, speedFactor, context.run().voice());
         Optional<ClipAlignment> first = aligner.alignClip(clip, text);
         if (first.isEmpty() || first.get().wer() <= narration.maxWer()) {
             return first;
@@ -117,7 +118,7 @@ public class NarrateStage implements StageWorker {
         log.info("Run {} scene {}: WER {} above {}, re-synthesizing slower", context.run().id(), scene.id(),
                 first.get().wer(), narration.maxWer());
         Path retry = clip.resolveSibling("retry_" + clip.getFileName());
-        tts.synthesize(scene, retry, speedFactor * narration.retrySpeedFactor());
+        tts.synthesize(scene, retry, speedFactor * narration.retrySpeedFactor(), context.run().voice());
         Optional<ClipAlignment> second = aligner.alignClip(retry, text);
         try {
             if (second.isPresent() && second.get().wer() < first.get().wer()) {

@@ -63,8 +63,11 @@ const RunsPage = ({ location }) => {
           <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
             <FormattedMessage id="common.refresh" />
           </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            <FormattedMessage id="runs.new" />
+          <Button onClick={() => setModalOpen(true)}>
+            <FormattedMessage id="runs.quick" />
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/new')}>
+            <FormattedMessage id="nav.new" />
           </Button>
         </Space>
       </div>

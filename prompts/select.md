@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.2.0
 tier: fast
 ---
 ## system
@@ -8,7 +8,9 @@ Reply with one JSON object only. No prose, no markdown fences.
 
 ## user
 The owner picked this topic: "{{topic}}" (format: {{format}}, language: {{language}}, about {{target_minutes}} minutes).
-Other backlog candidates (signals only): {{candidates}}
+Other candidates (signals only): {{candidates}}
+Owner's chosen angle (keep it if given, sharpen the wording only): {{owner_angle}}
+Notes from videos the owner watched (ideas only; our video must take its own angle and never copy them): {{inspiration}}
 
 Score the owner's topic 0-10 on: demand, english_gap, story_strength, visualizability, research_availability,
 legal_safety, channel_fit, freshness. Then return:

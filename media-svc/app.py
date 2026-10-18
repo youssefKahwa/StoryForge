@@ -68,6 +68,94 @@ class AlignRequest(BaseModel):
     text: str
 
 
+class TranscriptRequest(BaseModel):
+    url: str
+
+
+YOUTUBE_URL = re.compile(r"^https?://(www\.|m\.)?(youtube\.com/(watch\?|shorts/|live/)|youtu\.be/)")
+_whisper_multi = None
+
+
+def whisper_multi():
+    global _whisper_multi
+    with _lock:
+        if _whisper_multi is None:
+            from faster_whisper import WhisperModel
+            _whisper_multi = WhisperModel(os.environ.get("WHISPER_MULTI_MODEL", "small"), device="cpu",
+                                          compute_type=WHISPER_COMPUTE, download_root=str(MODELS_DIR / "whisper"))
+        return _whisper_multi
+
+
+def caption_track(info: dict):
+    """Prefer captions in the video's own language: manual first, then YouTube's original-language ASR."""
+    manual, auto = info.get("subtitles") or {}, info.get("automatic_captions") or {}
+    lang = (info.get("language") or "").split("-")[0]
+    candidates = []
+    if lang:
+        candidates += [("manual", manual.get(k)) for k in manual if k.split("-")[0] == lang]
+        candidates += [("auto", auto.get(f"{lang}-orig")), ("auto", auto.get(lang))]
+    candidates += [("manual", v) for v in manual.values()]
+    candidates += [("auto", v) for k, v in auto.items() if k.endswith("-orig")]
+    for source, tracks in candidates:
+        json3 = next((t for t in tracks or [] if t.get("ext") == "json3"), None)
+        if json3:
+            return source, json3["url"]
+    return None, None
+
+
+def json3_text(url: str) -> str:
+    import json
+    import urllib.request
+    with urllib.request.urlopen(url, timeout=60) as response:
+        data = json.load(response)
+    text = " ".join(seg.get("utf8", "") for event in data.get("events", []) for seg in (event.get("segs") or []))
+    return " ".join(text.split())
+
+
+def whisper_transcript(info: dict, url: str) -> tuple[str, str]:
+    import subprocess
+    import tempfile
+    import yt_dlp
+    work = Path(tempfile.mkdtemp(prefix="sf-insp-", dir=DATA_DIR))
+    try:
+        opts = {"format": "bestaudio/best", "quiet": True, "no_warnings": True,
+                "outtmpl": str(work / "audio.%(ext)s")}
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+        audio = next(work.glob("audio.*"))
+        wav = work / "audio16k.wav"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(audio), "-ac", "1", "-ar", "16000", str(wav)],
+                       check=True)
+        samples, _ = sf.read(str(wav), dtype="float32")
+        segments, detected = whisper_multi().transcribe(samples, beam_size=1, vad_filter=True)
+        return " ".join(s.text.strip() for s in segments), detected.language
+    finally:
+        for f in work.glob("*"):
+            f.unlink(missing_ok=True)
+        work.rmdir()
+
+
+@app.post("/transcript")
+def transcript(request: TranscriptRequest):
+    if not YOUTUBE_URL.match(request.url):
+        raise HTTPException(status_code=400, detail="only YouTube video URLs are supported")
+    import yt_dlp
+    try:
+        with yt_dlp.YoutubeDL({"skip_download": True, "quiet": True, "no_warnings": True}) as ydl:
+            info = ydl.extract_info(request.url, download=False)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"YouTube refused the request: {e}") from e
+    source, track = caption_track(info)
+    language = info.get("language")
+    if track:
+        text = json3_text(track)
+    else:
+        text, language = whisper_transcript(info, request.url)
+        source = "whisper"
+    return {"video_id": info.get("id"), "title": info.get("title"), "channel": info.get("channel"),
+            "duration_sec": info.get("duration"), "language": language, "source": source, "transcript": text}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "whisper_model": WHISPER_MODEL, "models_dir": str(MODELS_DIR)}

@@ -126,3 +126,25 @@ and the `local` profile pins `llm.only: claude-code`). NVIDIA stays out of the r
   spelling and the timing comes from Whisper. The word error rate per scene drives the mispronunciation check: above
   `narration.max-wer` (0.15), the scene is re-synthesized at 0.92x speed and the better take is kept. Measured WER
   0.04-0.08 on a test sentence (proper nouns are the usual misses).
+
+## ADR-014 Inspiration videos: read transcripts, firewall the wording (2026-10-18, owner request)
+The owner gives 1-3 YouTube links (often Darija/Arabic). Titles alone miss the details, so the app reads transcripts.
+- `media-svc /transcript` uses yt-dlp (2026.08.19) metadata + caption tracks only (no video download). It prefers
+  manual captions in the video's language, then YouTube's original-language ASR (`<lang>-orig`). Without captions it
+  downloads the audio only, transcribes it with multilingual faster-whisper `small`, and deletes the audio. Pasting a
+  transcript is always possible. YouTube's ToS restrict automated access; this is personal research use and the owner
+  was told.
+- Firewall: the `inspire` prompt turns transcripts into English ideas + leads (own words). Discover keeps only the
+  ideas file in the run; research must confirm leads in independent sources and never cite the video; the script
+  writer never sees transcripts. QA `legal.originality` (critical) compares the script with the transcripts: the
+  longest shared word run must be < 12 words and the share of shared 6-word phrases must be ≤ 5%.
+
+## ADR-015 Images: Cloudflare Workers AI FLUX.1-schnell (2026-10-18)
+- Pollinations (tested): anonymous output has a watermark, the API now needs a key, and credits and image license are
+  not documented (https://raw.githubusercontent.com/pollinations/pollinations/refs/heads/main/APIDOCS.md, 2026-10-18).
+  Rejected.
+- Cloudflare: `POST https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+  `{prompt, steps<=8, seed}` → base64 `image` (https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/).
+  Free 10,000 neurons/day; schnell = 4.80 per 512² tile + 9.60 per step, about 58 neurons per 1024² image at 4 steps,
+  so about 170 images/day (https://developers.cloudflare.com/workers-ai/platform/pricing/, 2026-10-18).
+  FLUX.1-schnell is Apache-2.0. Needs a free Cloudflare account ID + API token (owner input).

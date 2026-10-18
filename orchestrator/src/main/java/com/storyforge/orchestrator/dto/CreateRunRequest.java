@@ -10,5 +10,8 @@ public record CreateRunRequest(
         @Size(max = 300) String topicTitle,
         VideoFormat format,
         @Size(max = 10) String language,
-        @DecimalMin("0.5") @DecimalMax("60") Double targetMinutes) {
+        @DecimalMin("0.5") @DecimalMax("60") Double targetMinutes,
+        Long inspirationId,
+        @Size(max = 2000) String angle,
+        @Size(max = 60) String voice) {
 }

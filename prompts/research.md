@@ -1,5 +1,5 @@
 ---
-version: 0.2.0
+version: 0.3.0
 tier: high
 ---
 ## system
@@ -12,6 +12,9 @@ Build a research dossier for a documentary-style video.
 Topic: {{topic}}
 Angle: {{angle}}
 Promise to the viewer: {{core_promise}}
+Leads to check (facts mentioned in a video the owner watched; that video is NOT a source and must never be cited;
+confirm each lead in independent sources, mark it contested if sources disagree, and drop it if you cannot confirm it):
+{{leads}}
 Use at least {{min_sources}} distinct sources from independent publishers (primary, academic, reputable press,
 encyclopedic). Every claim lists its source ids; key claims need 2+ sources from different publishers (different
 website domains).

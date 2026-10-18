@@ -5,6 +5,7 @@ import com.storyforge.orchestrator.media.MediaException;
 import com.storyforge.orchestrator.model.ClipAlignment;
 import com.storyforge.orchestrator.model.ClipAlignment.ClipWord;
 import com.storyforge.orchestrator.model.Scene;
+import com.storyforge.orchestrator.model.VideoTranscript;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -50,6 +51,15 @@ public class MediaSvcClient {
         }
         return new ClipAlignment(words, response.path("transcript").asString(""), response.path("wer").asDouble(1),
                 response.path("duration_sec").asDouble(0));
+    }
+
+    public VideoTranscript transcript(String videoUrl) {
+        JsonNode response = post("/transcript", Map.of("url", videoUrl));
+        JsonNode duration = response.path("duration_sec");
+        return new VideoTranscript(videoUrl, response.path("video_id").asString(null),
+                response.path("title").asString(null), response.path("channel").asString(null),
+                duration.isNumber() ? duration.asInt() : null, response.path("language").asString(null),
+                response.path("source").asString(null), response.path("transcript").asString(""));
     }
 
     private JsonNode post(String path, Map<String, Object> body) {

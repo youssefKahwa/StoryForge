@@ -22,6 +22,9 @@ public record RunDto(
         RunStatus status,
         String statusReason,
         int targetSeconds,
+        Long inspirationId,
+        String angle,
+        String voice,
         Instant createdAt,
         Instant updatedAt,
         Instant startedAt,
@@ -34,7 +37,8 @@ public record RunDto(
                 .toList();
         return new RunDto(run.getId(), run.getSeedTopicId(), run.getTopicTitle(), run.getFormat(), run.getLanguage(),
                 run.getProfile(), run.getState(), run.getStatus(), run.getStatusReason(), run.getTargetSeconds(),
-                run.getCreatedAt(), run.getUpdatedAt(), run.getStartedAt(), run.getFinishedAt(), chips);
+                run.getInspirationId(), run.getAngle(), run.getVoice(), run.getCreatedAt(), run.getUpdatedAt(),
+                run.getStartedAt(), run.getFinishedAt(), chips);
     }
 
     private static Optional<StageExecution> latest(List<StageExecution> executions, Stage stage) {

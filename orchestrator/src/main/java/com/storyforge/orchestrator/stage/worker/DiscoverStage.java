@@ -1,5 +1,7 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.inspiration.InspirationFiles;
+import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.TopicCandidate;
 import com.storyforge.orchestrator.run.RunInfo;
 import com.storyforge.orchestrator.stage.Stage;
@@ -15,10 +17,14 @@ public class DiscoverStage implements StageWorker {
 
     private static final int MAX_BACKLOG = 10;
 
-    private final SeedTopicService seedTopics;
+    public static final String INSPIRATION = "inspiration.json";
 
-    public DiscoverStage(SeedTopicService seedTopics) {
+    private final SeedTopicService seedTopics;
+    private final InspirationFiles inspirations;
+
+    public DiscoverStage(SeedTopicService seedTopics, InspirationFiles inspirations) {
         this.seedTopics = seedTopics;
+        this.inspirations = inspirations;
     }
 
     @Override
@@ -35,7 +41,15 @@ public class DiscoverStage implements StageWorker {
     public void execute(StageContext context) {
         RunInfo run = context.run();
         List<TopicCandidate> candidates = new ArrayList<>();
-        candidates.add(new TopicCandidate(run.topicTitle(), "owner", run.format(), run.language(), null, 1.0, true));
+        candidates.add(new TopicCandidate(run.topicTitle(), "owner", run.format(), run.language(), run.angle(), 1.0,
+                true));
+        if (run.inspirationId() != null) {
+            InspirationIdeas ideas = inspirations.ideas(run.inspirationId()).orElseThrow(
+                    () -> new IllegalStateException("Inspiration " + run.inspirationId() + " has no analysed ideas"));
+            context.files().write(Stage.DISCOVER, INSPIRATION, ideas);
+            ideas.angles().forEach(angle -> candidates.add(new TopicCandidate(angle.title(), "inspiration",
+                    run.format(), run.language(), angle.angle(), 0.8, false)));
+        }
         seedTopics.backlog().stream()
                 .filter(seed -> !seed.getTitle().equalsIgnoreCase(run.topicTitle()))
                 .limit(MAX_BACKLOG)

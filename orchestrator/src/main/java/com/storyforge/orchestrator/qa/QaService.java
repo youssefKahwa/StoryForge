@@ -6,6 +6,7 @@ import static com.storyforge.orchestrator.model.QaReport.Severity.WARNING;
 
 import com.storyforge.orchestrator.artifact.RunFiles;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
+import com.storyforge.orchestrator.inspiration.InspirationFiles;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.LoudnessStats;
 import com.storyforge.orchestrator.media.MediaInfo;
@@ -19,6 +20,7 @@ import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.model.QaReport.Check;
 import com.storyforge.orchestrator.model.QaReport.Severity;
 import com.storyforge.orchestrator.model.Scene;
+import com.storyforge.orchestrator.model.VideoTranscript;
 import com.storyforge.orchestrator.run.RunInfo;
 import com.storyforge.orchestrator.stage.Stage;
 import java.nio.file.Files;
@@ -39,12 +41,17 @@ public class QaService {
     private static final double SYNC_TOLERANCE = 0.25;
     private static final double BLACK_MIN_SECONDS = 0.5;
 
+    private static final int MAX_SHARED_RUN = 12;
+    private static final double MAX_SHARED_SHARE = 0.05;
+
     private final FfmpegService ffmpeg;
     private final StoryForgeProperties properties;
+    private final InspirationFiles inspirations;
 
-    public QaService(FfmpegService ffmpeg, StoryForgeProperties properties) {
+    public QaService(FfmpegService ffmpeg, StoryForgeProperties properties, InspirationFiles inspirations) {
         this.ffmpeg = ffmpeg;
         this.properties = properties;
+        this.inspirations = inspirations;
     }
 
     public QaReport evaluate(RunInfo run, RunFiles files) {
@@ -104,12 +111,28 @@ public class QaService {
 
         checks.addAll(factual(scenes, dossier, critique));
         checks.addAll(legal(assets, audio, edl));
+        checks.add(originality(run, scenes));
 
         boolean disclosure = assets.realisticImagery();
         checks.add(check("legal.disclosure", "legal", INFO, true,
                 disclosure ? "realistic synthetic imagery: set altered-content disclosure"
                         : "no realistic synthetic imagery"));
         return QaReport.of(checks, disclosure);
+    }
+
+    private Check originality(RunInfo run, List<Scene> scenes) {
+        if (run.inspirationId() == null) {
+            return check("legal.originality", "legal", INFO, true, "no inspiration videos");
+        }
+        List<String> sources = inspirations.transcripts(run.inspirationId()).stream()
+                .map(VideoTranscript::transcript).toList();
+        String script = scenes.stream().map(Scene::narration).collect(Collectors.joining(" "));
+        OriginalityChecker.Result result = OriginalityChecker.compare(script, sources);
+        boolean original = result.original(MAX_SHARED_RUN, MAX_SHARED_SHARE);
+        return check("legal.originality", "legal", CRITICAL, original,
+                "longest shared run " + result.longestSharedRun() + " words (max " + (MAX_SHARED_RUN - 1) + "), "
+                        + fmt(result.sharedNgramShare() * 100) + "% shared " + OriginalityChecker.NGRAM + "-word phrases"
+                        + (original || result.example() == null ? "" : "; e.g. \"" + result.example() + "\""));
     }
 
     private Check coverage(Edl edl, RunFiles files) {

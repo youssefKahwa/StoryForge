@@ -4,9 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.storyforge.orchestrator.artifact.ArtifactStore;
 import com.storyforge.orchestrator.artifact.RunFiles;
+import com.storyforge.orchestrator.dto.CreateInspirationRequest;
 import com.storyforge.orchestrator.dto.CreateRunRequest;
+import com.storyforge.orchestrator.inspiration.Inspiration;
+import com.storyforge.orchestrator.inspiration.InspirationService;
+import com.storyforge.orchestrator.inspiration.InspirationStatus;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.MediaInfo;
+import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.qa.QaService;
 import com.storyforge.orchestrator.run.PipelineEngine;
@@ -48,6 +53,9 @@ class MockPipelineE2ETest {
 
     @Autowired
     private FfmpegService ffmpeg;
+
+    @Autowired
+    private InspirationService inspirations;
 
     @BeforeAll
     static void cleanDataDir() throws IOException {
@@ -111,8 +119,35 @@ class MockPipelineE2ETest {
         assertThat(scriptRuns.get(1).getInputTokens()).isZero();
     }
 
+    @Test
+    void inspirationTranscriptBecomesIdeasAndPassesTheOriginalityGate() throws InterruptedException {
+        Inspiration inspiration = inspirations.create(new CreateInspirationRequest(List.of(),
+                "Hadi qissa dyal wahed lmarkab li tlef f lbhar. Kolchi ghber, w hta wahed ma 3ref chno wqe3."));
+        for (int i = 0; i < 100 && inspirations.get(inspiration.getId()).getStatus() == InspirationStatus.PENDING; i++) {
+            Thread.sleep(100);
+        }
+        assertThat(inspirations.get(inspiration.getId()).getStatus()).isEqualTo(InspirationStatus.READY);
+        InspirationIdeas ideas = inspirations.ideas(inspiration.getId()).orElseThrow();
+        assertThat(ideas.angles()).hasSize(3);
+
+        long id = runs.create(new CreateRunRequest(null, ideas.topic(), null, null, null, inspiration.getId(),
+                ideas.angles().get(1).angle(), "am_michael")).getId();
+        assertThat(runs.claimNextQueued()).contains(id);
+        engine.execute(id);
+
+        assertThat(runs.get(id).getStatus()).as(runs.get(id).getStatusReason()).isEqualTo(RunStatus.COMPLETED);
+        RunFiles files = artifacts.forRun(id);
+        assertThat(files.exists(Stage.DISCOVER, "inspiration.json")).isTrue();
+        QaReport report = files.read(Stage.QA, "qa_report.json", QaReport.class);
+        assertThat(report.checks()).filteredOn(check -> check.id().equals("legal.originality"))
+                .singleElement().satisfies(check -> {
+                    assertThat(check.severity()).isEqualTo(QaReport.Severity.CRITICAL);
+                    assertThat(check.passed()).isTrue();
+                });
+    }
+
     private long runFresh(String topic) {
-        long id = runs.create(new CreateRunRequest(null, topic, null, null, null)).getId();
+        long id = runs.create(new CreateRunRequest(null, topic, null, null, null, null, null, null)).getId();
         assertThat(runs.claimNextQueued()).contains(id);
         engine.execute(id);
         return id;

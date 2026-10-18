@@ -4,6 +4,7 @@ import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.provider.llm.PromptLibrary.RenderedPrompt;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
+import com.storyforge.orchestrator.stage.StageUsage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,14 +39,23 @@ public class LlmRouter {
     }
 
     public String text(StageContext context, Stage stage, String promptName, Map<String, String> vars) {
+        return text(context.usage(), context.run().cacheSalt(), stage, promptName, vars);
+    }
+
+    public String text(StageUsage usage, int salt, Stage stage, String promptName, Map<String, String> vars) {
         RenderedPrompt prompt = prompts.render(promptName, vars);
-        return complete(context, request(stage, prompt, vars)).text();
+        return complete(usage, salt, request(stage, prompt, vars)).text();
     }
 
     public <T> T json(StageContext context, Stage stage, String promptName, Map<String, String> vars,
                       Class<T> type) {
+        return json(context.usage(), context.run().cacheSalt(), stage, promptName, vars, type);
+    }
+
+    public <T> T json(StageUsage usage, int salt, Stage stage, String promptName, Map<String, String> vars,
+                      Class<T> type) {
         RenderedPrompt prompt = prompts.render(promptName, vars);
-        String text = complete(context, request(stage, prompt, vars)).text();
+        String text = complete(usage, salt, request(stage, prompt, vars)).text();
         for (int attempt = 0; ; attempt++) {
             try {
                 return json.readValue(extractJson(text), type);
@@ -57,7 +67,7 @@ public class LlmRouter {
                 log.warn("Repairing JSON for {} (attempt {}): {}", promptName, attempt + 1, e.getOriginalMessage());
                 LlmRequest repair = new LlmRequest(stage, prompt.version() + "+repair", REPAIR_SYSTEM,
                         "Parser error: " + e.getOriginalMessage() + "\n\nJSON to fix:\n" + text, prompt.tier(), vars);
-                text = complete(context, repair).text();
+                text = complete(usage, salt, repair).text();
             }
         }
     }
@@ -66,13 +76,13 @@ public class LlmRouter {
         return new LlmRequest(stage, prompt.version(), prompt.system(), prompt.user(), prompt.tier(), vars);
     }
 
-    private LlmResponse complete(StageContext context, LlmRequest request) {
+    private LlmResponse complete(StageUsage usage, int salt, LlmRequest request) {
         List<String> route = config.routeFor(request.stage().folder());
-        String key = cache.key(request, context.run().cacheSalt(), route);
-        context.usage().promptVersion(request.promptVersion());
+        String key = cache.key(request, salt, route);
+        usage.promptVersion(request.promptVersion());
         Optional<LlmResponse> cached = cache.get(key);
         if (cached.isPresent()) {
-            context.usage().provider(cached.get().provider() + ":cache");
+            usage.provider(cached.get().provider() + ":cache");
             return cached.get();
         }
         List<String> errors = new ArrayList<>();
@@ -84,7 +94,7 @@ public class LlmRouter {
             }
             try {
                 LlmResponse response = provider.complete(request);
-                context.usage().call(response.provider(), response.inputTokens(), response.outputTokens(),
+                usage.call(response.provider(), response.inputTokens(), response.outputTokens(),
                         response.costUsd());
                 cache.put(key, response);
                 return response;

@@ -1,7 +1,9 @@
 import React, { useCallback } from 'react';
 import { Link } from 'gatsby';
 import { Badge, Layout, Menu, Typography } from 'antd';
-import { BulbOutlined, PlayCircleOutlined, SettingOutlined } from '@ant-design/icons';
+import {
+  BulbOutlined, PlayCircleOutlined, PlusCircleOutlined, SettingOutlined,
+} from '@ant-design/icons';
 import { FormattedMessage } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import usePolling from '../hooks/usePolling';
@@ -10,12 +12,14 @@ import { fetchSettings, selectSettings } from '../store/settings/settingsSlice';
 const { Header, Sider, Content } = Layout;
 
 const NAV = [
+  { key: '/new', icon: <PlusCircleOutlined />, label: 'nav.new' },
   { key: '/', icon: <PlayCircleOutlined />, label: 'nav.runs' },
   { key: '/topics', icon: <BulbOutlined />, label: 'nav.topics' },
   { key: '/settings', icon: <SettingOutlined />, label: 'nav.settings' },
 ];
 
 const selectedKey = (pathname) => {
+  if (pathname.startsWith('/new')) return '/new';
   if (pathname.startsWith('/topics')) return '/topics';
   if (pathname.startsWith('/settings')) return '/settings';
   return '/';

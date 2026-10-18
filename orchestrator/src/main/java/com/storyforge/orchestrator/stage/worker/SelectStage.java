@@ -1,5 +1,6 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.TopicBrief;
 import com.storyforge.orchestrator.model.TopicCandidate;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
@@ -24,6 +25,16 @@ public class SelectStage implements StageWorker {
         this.json = json;
     }
 
+    private String inspirationNotes(StageContext context) {
+        if (!context.files().exists(Stage.DISCOVER, DiscoverStage.INSPIRATION)) {
+            return "none";
+        }
+        InspirationIdeas ideas = context.files().read(Stage.DISCOVER, DiscoverStage.INSPIRATION, InspirationIdeas.class);
+        return json.writeValueAsString(Map.of("story", ideas.story(),
+                "whatWorked", ideas.whatWorked() == null ? List.of() : ideas.whatWorked(),
+                "cautions", ideas.cautions() == null ? List.of() : ideas.cautions()));
+    }
+
     @Override
     public Stage stage() {
         return Stage.SELECT;
@@ -44,7 +55,9 @@ public class SelectStage implements StageWorker {
                 "format", run.format().id(),
                 "language", run.language(),
                 "target_minutes", String.valueOf(Math.round(run.targetSeconds() / 60.0)),
-                "candidates", json.writeValueAsString(candidates.stream().map(TopicCandidate::title).toList()));
+                "candidates", json.writeValueAsString(candidates.stream().map(TopicCandidate::title).toList()),
+                "owner_angle", run.angle() != null ? run.angle() : "none, choose the strongest",
+                "inspiration", inspirationNotes(context));
         TopicBrief brief = llm.json(context, stage(), "select", vars, TopicBrief.class);
         if (brief.angle() == null || brief.corePromise() == null) {
             throw new IllegalStateException("Topic brief is missing angle or corePromise");

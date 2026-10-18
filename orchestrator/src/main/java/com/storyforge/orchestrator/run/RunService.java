@@ -62,6 +62,9 @@ public class RunService {
         } else {
             throw new IllegalArgumentException("Either seedTopicId or topicTitle is required");
         }
+        run.setInspirationId(request.inspirationId());
+        run.setAngle(blankToNull(request.angle()));
+        run.setVoice(blankToNull(request.voice()));
         Instant now = Instant.now();
         run.setTargetSeconds(request.targetMinutes() != null
                 ? (int) Math.round(request.targetMinutes() * 60)
@@ -179,6 +182,10 @@ public class RunService {
         run.setStatusReason(truncate(reason));
         run.setUpdatedAt(now);
         run.setFinishedAt(now);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 
     private static String truncate(String reason) {

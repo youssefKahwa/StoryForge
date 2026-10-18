@@ -14,6 +14,12 @@ const ApiRoutes = {
   seedTopics: () => `${API_BASE}/api/seed-topics`,
   seedTopic: (id) => `${API_BASE}/api/seed-topics/${id}`,
 
+  inspirations: () => `${API_BASE}/api/inspirations`,
+  inspiration: (id) => `${API_BASE}/api/inspirations/${id}`,
+
+  voices: () => `${API_BASE}/api/voices`,
+  voiceSample: (id) => `${API_BASE}/api/voices/${id}/sample`,
+
   settings: () => `${API_BASE}/api/settings`,
   killSwitch: () => `${API_BASE}/api/settings/kill-switch`,
 };

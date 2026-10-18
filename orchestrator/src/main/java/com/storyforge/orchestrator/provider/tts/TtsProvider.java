@@ -11,7 +11,7 @@ public interface TtsProvider {
 
     double synthesize(Scene scene, Path outputWav);
 
-    default double synthesize(Scene scene, Path outputWav, double speedFactor) {
+    default double synthesize(Scene scene, Path outputWav, double speedFactor, String voice) {
         return synthesize(scene, outputWav);
     }
 }

@@ -3,3 +3,4 @@ soundfile
 faster-whisper
 fastapi
 uvicorn[standard]
+yt-dlp

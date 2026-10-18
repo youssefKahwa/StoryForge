@@ -1,0 +1,137 @@
+package com.storyforge.orchestrator.inspiration;
+
+import com.storyforge.orchestrator.api.NotFoundException;
+import com.storyforge.orchestrator.dto.CreateInspirationRequest;
+import com.storyforge.orchestrator.model.InspirationIdeas;
+import com.storyforge.orchestrator.model.VideoTranscript;
+import com.storyforge.orchestrator.provider.llm.LlmRouter;
+import com.storyforge.orchestrator.provider.media.MediaSvcClient;
+import com.storyforge.orchestrator.stage.Stage;
+import com.storyforge.orchestrator.stage.StageUsage;
+import jakarta.annotation.PreDestroy;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+
+@Service
+public class InspirationService {
+
+    public static final int MAX_VIDEOS = 3;
+    private static final int MAX_TRANSCRIPT_CHARS = 30_000;
+    private static final int MAX_ERROR = 4000;
+    private static final Logger log = LoggerFactory.getLogger(InspirationService.class);
+
+    private final InspirationRepository repository;
+    private final InspirationFiles files;
+    private final MediaSvcClient media;
+    private final LlmRouter llm;
+    private final JsonMapper json;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> new Thread(task, "inspiration"));
+
+    public InspirationService(InspirationRepository repository, InspirationFiles files, MediaSvcClient media,
+                              LlmRouter llm, JsonMapper json) {
+        this.repository = repository;
+        this.files = files;
+        this.media = media;
+        this.llm = llm;
+        this.json = json;
+    }
+
+    @Transactional(readOnly = true)
+    public Inspiration get(long id) {
+        return repository.findById(id).orElseThrow(() -> new NotFoundException("Inspiration " + id + " not found"));
+    }
+
+    @Transactional
+    public Inspiration create(CreateInspirationRequest request) {
+        List<String> urls = request.urls() == null ? List.of()
+                : request.urls().stream().filter(url -> url != null && !url.isBlank()).map(String::strip).toList();
+        boolean pasted = request.pastedText() != null && !request.pastedText().isBlank();
+        if (urls.size() > MAX_VIDEOS) {
+            throw new IllegalArgumentException("At most " + MAX_VIDEOS + " videos");
+        }
+        if (urls.isEmpty() && !pasted) {
+            throw new IllegalArgumentException("Give at least one YouTube link or paste a transcript");
+        }
+        Inspiration inspiration = new Inspiration();
+        inspiration.setUrlList(urls);
+        inspiration.setPastedText(pasted ? request.pastedText().strip() : null);
+        inspiration.setStatus(InspirationStatus.PENDING);
+        inspiration.setCreatedAt(Instant.now());
+        Inspiration saved = repository.save(inspiration);
+        executor.submit(() -> process(saved.getId()));
+        return saved;
+    }
+
+    public List<VideoTranscript> transcripts(long id) {
+        return files.transcripts(id);
+    }
+
+    public Optional<InspirationIdeas> ideas(long id) {
+        return files.ideas(id);
+    }
+
+    void process(long id) {
+        try {
+            Inspiration inspiration = get(id);
+            List<VideoTranscript> transcripts = new ArrayList<>();
+            List<String> errors = new ArrayList<>();
+            for (String url : inspiration.getUrlList()) {
+                try {
+                    transcripts.add(media.transcript(url));
+                } catch (RuntimeException e) {
+                    log.warn("Transcript failed for {}: {}", url, e.getMessage());
+                    errors.add(url + ": " + e.getMessage());
+                }
+            }
+            if (inspiration.getPastedText() != null) {
+                transcripts.add(new VideoTranscript(null, null, "Pasted by owner", null, null, null, "pasted",
+                        inspiration.getPastedText()));
+            }
+            if (transcripts.isEmpty()) {
+                throw new IllegalStateException("No transcript could be read. Paste one instead. " + errors);
+            }
+            files.saveTranscripts(id, transcripts);
+            InspirationIdeas ideas = llm.json(new StageUsage(), (int) id, Stage.DISCOVER, "inspire",
+                    Map.of("transcripts", json.writeValueAsString(transcripts.stream().map(t -> Map.of(
+                            "title", String.valueOf(t.title()),
+                            "language", String.valueOf(t.language()),
+                            "transcript", truncate(t.transcript(), MAX_TRANSCRIPT_CHARS))).toList())),
+                    InspirationIdeas.class);
+            if (ideas.angles() == null || ideas.angles().isEmpty() || ideas.story() == null) {
+                throw new IllegalStateException("Inspiration analysis returned no story or angles");
+            }
+            files.saveIdeas(id, ideas);
+            finish(id, InspirationStatus.READY, errors.isEmpty() ? null : String.join("; ", errors));
+        } catch (RuntimeException e) {
+            log.error("Inspiration {} failed", id, e);
+            finish(id, InspirationStatus.FAILED, e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void finish(long id, InspirationStatus status, String error) {
+        Inspiration inspiration = repository.findById(id).orElseThrow();
+        inspiration.setStatus(status);
+        inspiration.setError(error == null ? null : error.substring(0, Math.min(error.length(), MAX_ERROR)));
+        repository.save(inspiration);
+    }
+
+    private static String truncate(String text, int max) {
+        return text == null ? "" : text.length() <= max ? text : text.substring(0, max);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
+    }
+}

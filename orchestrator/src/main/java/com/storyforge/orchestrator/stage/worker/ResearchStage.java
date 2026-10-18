@@ -4,6 +4,7 @@ import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Dossier.Claim;
 import com.storyforge.orchestrator.model.Dossier.Source;
+import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.TopicBrief;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
 import com.storyforge.orchestrator.stage.Stage;
@@ -61,7 +62,8 @@ public class ResearchStage implements StageWorker {
                 "topic", brief.title(),
                 "angle", brief.angle(),
                 "core_promise", brief.corePromise(),
-                "min_sources", String.valueOf(minSources)), Dossier.class);
+                "min_sources", String.valueOf(minSources),
+                "leads", leads(context)), Dossier.class);
         if (dossier.claims() == null || dossier.claims().isEmpty() || dossier.sources() == null) {
             throw new StageBlockedException("Research gate: dossier has no claims or sources");
         }
@@ -84,6 +86,14 @@ public class ResearchStage implements StageWorker {
             throw new StageBlockedException("Research gate: " + dossier.sources().size() + " sources, needs at least "
                     + minSources);
         }
+    }
+
+    private String leads(StageContext context) {
+        if (!context.files().exists(Stage.DISCOVER, DiscoverStage.INSPIRATION)) {
+            return "none";
+        }
+        InspirationIdeas ideas = context.files().read(Stage.DISCOVER, DiscoverStage.INSPIRATION, InspirationIdeas.class);
+        return json.writeValueAsString(ideas.leads() == null ? List.of() : ideas.leads());
     }
 
     static List<Claim> weakKeyClaims(Dossier dossier) {
