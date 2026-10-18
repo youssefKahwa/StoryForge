@@ -10,7 +10,7 @@ storyforge:
     image: cloudflare
     alignment: whisper
     render: remotion
-    publish: mock
+    publish: ${STORYFORGE_PUBLISH:mock}
   video:
     width: 1920
     height: 1080
