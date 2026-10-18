@@ -3,9 +3,6 @@ package com.storyforge.orchestrator.provider.image;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.media.MediaException;
 import com.storyforge.orchestrator.model.LicenseRecord;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -18,7 +15,6 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Map;
-import javax.imageio.ImageIO;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -31,15 +27,18 @@ import tools.jackson.databind.JsonNode;
 @ConditionalOnProperty(prefix = "storyforge.providers", name = "image", havingValue = "cloudflare")
 public class CloudflareImageProvider implements ImageProvider {
 
+    private static final String COMPOSITION_SUFFIX = ", wide cinematic composition, main subject in the center";
     private static final String SAFETY_SUFFIX = ", no text, no letters, no watermark, no logo";
     private static final String LICENSE_URL = "https://huggingface.co/black-forest-labs/FLUX.1-schnell";
 
     private final StoryForgeProperties.Cloudflare config;
     private final RestClient client;
     private final Path cacheDir;
+    private final ImageFinisher finisher;
 
-    public CloudflareImageProvider(StoryForgeProperties properties) {
+    public CloudflareImageProvider(StoryForgeProperties properties, ImageFinisher finisher) {
         this.config = properties.cloudflare();
+        this.finisher = finisher;
         if (config.accountId() == null || config.accountId().isBlank()
                 || config.apiToken() == null || config.apiToken().isBlank()) {
             throw new IllegalStateException("Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in .env");
@@ -62,19 +61,20 @@ public class CloudflareImageProvider implements ImageProvider {
 
     @Override
     public ImageResult generate(ImageRequest request, Path outputImage) {
-        String prompt = request.prompt() + SAFETY_SUFFIX;
-        Path cached = cacheDir.resolve(hash(config.imageModel() + "\u0000" + prompt + "\u0000" + request.seed())
-                + ".jpg");
+        String prompt = request.prompt() + COMPOSITION_SUFFIX + SAFETY_SUFFIX;
+        String key = hash(config.imageModel() + "\u0000" + request.prompt() + SAFETY_SUFFIX + "\u0000"
+                + request.seed());
+        Path raw = cacheDir.resolve(key + ".jpg");
+        Path finished = cacheDir.resolve(key + "_" + request.width() + "x" + request.height() + ".png");
         try {
-            if (!Files.isRegularFile(cached)) {
+            if (!Files.isRegularFile(finished)) {
                 Files.createDirectories(cacheDir);
-                Files.write(cached, fetch(prompt));
+                if (!Files.isRegularFile(raw)) {
+                    Files.write(raw, fetch(prompt));
+                }
+                finisher.finish(raw, finished, request.width(), request.height());
             }
-            BufferedImage decoded = ImageIO.read(cached.toFile());
-            if (decoded == null
-                    || !ImageIO.write(cover(decoded, request.width(), request.height()), "png", outputImage.toFile())) {
-                throw new MediaException("Cannot convert Cloudflare image to PNG: " + cached);
-            }
+            finisher.copyCached(finished, outputImage);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -98,19 +98,6 @@ public class CloudflareImageProvider implements ImageProvider {
             throw new MediaException("Cloudflare image failed (" + e.getStatusCode().value() + "): "
                     + e.getResponseBodyAsString(StandardCharsets.UTF_8), e);
         }
-    }
-
-    static BufferedImage cover(BufferedImage source, int width, int height) {
-        double scale = Math.max((double) width / source.getWidth(), (double) height / source.getHeight());
-        int scaledWidth = (int) Math.ceil(source.getWidth() * scale);
-        int scaledHeight = (int) Math.ceil(source.getHeight() * scale);
-        BufferedImage target = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = target.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-        g.drawImage(source, (width - scaledWidth) / 2, (height - scaledHeight) / 2, scaledWidth, scaledHeight, null);
-        g.dispose();
-        return target;
     }
 
     private static String hash(String text) {

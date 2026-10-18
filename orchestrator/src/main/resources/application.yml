@@ -124,6 +124,30 @@ storyforge:
       source: YouTube Audio Library
       url: https://studio.youtube.com/
       evidence: Downloaded by the owner from YouTube Studio Audio Library with "Attribution not required"
+  dashboard-url: http://localhost:8000
+  youtube:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: http://127.0.0.1:8080/api/youtube/oauth/callback
+    category-id: "27"
+    language: en
+    notify-subscribers: true
+  telegram:
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+  autopilot:
+    enabled: false
+    cron: "0 0 6 * * MON"
+  upscaler:
+    enabled: true
+    executable: ${user.home}/.storyforge/realesrgan/realesrgan-ncnn-vulkan.exe
+    model: realesr-animevideov3
+    scale: 2
+  keep-awake: true
+  shorts:
+    enabled: false
+    count: 3
+    max-seconds: 55
   publish:
     day: SATURDAY
     time: "14:00"

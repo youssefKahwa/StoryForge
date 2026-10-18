@@ -12,13 +12,23 @@ public final class DescriptionBuilder {
     private DescriptionBuilder() {
     }
 
+    public static final int MAX_CHARS = 5000;
+    private static final int MIN_CHAPTERS = 3;
+    private static final double MIN_CHAPTER_SECONDS = 10;
+
     public static String build(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources,
                                List<String> musicCredits) {
+        return build(hookLine, chapters, sources, musicCredits, List.of());
+    }
+
+    public static String build(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources,
+                               List<String> musicCredits, List<String> hashtags) {
         StringBuilder out = new StringBuilder();
         out.append(hookLine.strip()).append("\n\n");
-        if (!chapters.isEmpty()) {
+        List<EdlChapter> valid = youtubeChapters(chapters);
+        if (!valid.isEmpty()) {
             out.append("Chapters\n");
-            chapters.forEach(chapter -> out.append(timestamp(chapter.start())).append(' ')
+            valid.forEach(chapter -> out.append(timestamp(chapter.start())).append(' ')
                     .append(chapter.title()).append('\n'));
             out.append('\n');
         }
@@ -35,7 +45,28 @@ public final class DescriptionBuilder {
             out.append('\n');
         }
         out.append(AI_DISCLOSURE).append('\n');
-        return out.toString();
+        if (!hashtags.isEmpty()) {
+            out.append('\n').append(String.join(" ", hashtags.stream().limit(3).map(DescriptionBuilder::hashtag)
+                    .toList())).append('\n');
+        }
+        return out.length() <= MAX_CHARS ? out.toString() : out.substring(0, MAX_CHARS);
+    }
+
+    public static List<EdlChapter> youtubeChapters(List<EdlChapter> chapters) {
+        java.util.ArrayList<EdlChapter> valid = new java.util.ArrayList<>();
+        for (EdlChapter chapter : chapters) {
+            double start = valid.isEmpty() ? 0 : chapter.start();
+            if (!valid.isEmpty() && start - valid.get(valid.size() - 1).start() < MIN_CHAPTER_SECONDS) {
+                continue;
+            }
+            valid.add(new EdlChapter(start, chapter.title()));
+        }
+        return valid.size() >= MIN_CHAPTERS ? valid : List.of();
+    }
+
+    private static String hashtag(String tag) {
+        String clean = tag.replaceAll("[^\\p{L}\\p{N}]", "");
+        return "#" + clean;
     }
 
     public static String timestamp(double seconds) {

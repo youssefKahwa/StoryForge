@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Link } from 'gatsby';
 import {
-  Button, Card, Checkbox, Col, Descriptions, Empty, List, Row, Select, Space, Spin, Statistic, Tabs, Typography, message,
+  Alert, Button, Card, Checkbox, Col, Descriptions, Empty, List, Row, Select, Space, Spin, Statistic, Tabs, Tag, Typography, message,
 } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { FormattedMessage, useIntl } from 'react-intl';
@@ -9,13 +9,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import ApiRoutes from '../api/ApiRoutes';
 import AppLayout from '../components/AppLayout';
 import ExecutionTable from '../components/ExecutionTable';
+import PublishKitView from '../components/PublishKitView';
 import QaReportView from '../components/QaReportView';
 import RunStatusTag from '../components/RunStatusTag';
 import StageChips from '../components/StageChips';
 import usePolling from '../hooks/usePolling';
 import useRunFile from '../hooks/useRunFile';
 import {
-  cancelRun, fetchRun, rerunStage, resumeRun, selectRunDetail,
+  cancelRun, fetchRun, rerunStage, resumeRun, selectRunDetail, vetoRun,
 } from '../store/runs/runsSlice';
 
 const ACTIVE = ['QUEUED', 'RUNNING'];
@@ -42,6 +43,8 @@ const RunPage = ({ location }) => {
   const qaReport = useRunFile(detail, 'qa', 'qa_report.json');
   const pkg = useRunFile(detail, 'package', 'package.json');
   const script = useRunFile(detail, 'critique', 'script.sfm.md');
+  const publication = useRunFile(detail, 'publish', 'publication.json');
+  const kit = useRunFile(detail, 'publish', 'kit.json');
 
   const onFail = (error) => message.error(intl.formatMessage({ id: 'error.request' }, { message: error.message }));
 
@@ -157,13 +160,36 @@ const RunPage = ({ location }) => {
           </Button>
         </Space>
       </div>
+      {publication && (
+        <Alert
+          className="run-meta"
+          type={publication.privacy === 'private-vetoed' ? 'warning' : 'info'}
+          showIcon
+          message={publication.privacy === 'private-vetoed'
+            ? intl.formatMessage({ id: 'publish.vetoed' })
+            : intl.formatMessage({ id: 'publish.scheduled' }, { when: publication.publishAt ? new Date(publication.publishAt).toLocaleString() : '–' })}
+          description={(
+            <Space wrap>
+              <a href={publication.url} target="_blank" rel="noreferrer">{publication.url}</a>
+              {(publication.warnings || []).map((w) => <Tag color="orange" key={w}>{w}</Tag>)}
+              {publication.privacy !== 'private-vetoed' && (
+                <Button danger size="small" onClick={() => dispatch(vetoRun({ id, onFail }))}>
+                  <FormattedMessage id="publish.veto" />
+                </Button>
+              )}
+            </Space>
+          )}
+        />
+      )}
       <Descriptions size="small" column={3} className="run-meta">
         <Descriptions.Item label="Format">{run.format}</Descriptions.Item>
         <Descriptions.Item label="Language">{run.language}</Descriptions.Item>
         <Descriptions.Item label="Created">{new Date(run.createdAt).toLocaleString()}</Descriptions.Item>
       </Descriptions>
       <Tabs
+        defaultActiveKey={kit ? 'kit' : 'overview'}
         items={[
+          { key: 'kit', label: intl.formatMessage({ id: 'run.tab.kit' }), children: <PublishKitView kit={kit} runId={run.id} /> },
           { key: 'overview', label: intl.formatMessage({ id: 'run.tab.overview' }), children: overview },
           { key: 'video', label: intl.formatMessage({ id: 'run.tab.video' }), children: videoTab },
           { key: 'qa', label: intl.formatMessage({ id: 'run.tab.qa' }), children: <QaReportView report={qaReport} /> },

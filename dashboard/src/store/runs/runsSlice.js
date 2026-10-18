@@ -6,6 +6,7 @@ export const createRun = createAction('runs/create');
 export const cancelRun = createAction('runs/cancel');
 export const resumeRun = createAction('runs/resume');
 export const rerunStage = createAction('runs/rerunStage');
+export const vetoRun = createAction('runs/veto');
 
 const runsSlice = createSlice({
   name: 'runs',

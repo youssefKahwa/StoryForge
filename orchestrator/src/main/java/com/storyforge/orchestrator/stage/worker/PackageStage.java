@@ -1,18 +1,22 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
+import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Edl;
 import com.storyforge.orchestrator.model.PackageDraft;
 import com.storyforge.orchestrator.model.PackageDraft.ThumbnailConcept;
+import com.storyforge.orchestrator.model.PublishKit;
 import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.TopicBrief;
 import com.storyforge.orchestrator.model.VideoPackage;
 import com.storyforge.orchestrator.model.VideoPackage.ScoredTitle;
 import com.storyforge.orchestrator.packaging.DescriptionBuilder;
+import com.storyforge.orchestrator.packaging.ShortsPlanner;
 import com.storyforge.orchestrator.packaging.TitleScorer;
 import com.storyforge.orchestrator.provider.image.ImageProvider;
 import com.storyforge.orchestrator.provider.image.ImageRequest;
@@ -50,9 +54,11 @@ public class PackageStage implements StageWorker {
     private final ImageProvider images;
     private final RenderProvider renderer;
     private final FormatRegistry formats;
+    private final StoryForgeProperties.Shorts shortsConfig;
 
     public PackageStage(LlmRouter llm, JsonMapper json, ImageProvider images, RenderProvider renderer,
-                        FormatRegistry formats) {
+                        FormatRegistry formats, StoryForgeProperties properties) {
+        this.shortsConfig = properties.shorts();
         this.llm = llm;
         this.json = json;
         this.images = images;
@@ -89,6 +95,35 @@ public class PackageStage implements StageWorker {
         Path out = files.path(Stage.PACKAGE, "thumbnail_" + n + ".png");
         renderer.renderThumbnail(background, concept.text(), style.palette(), out);
         return files.relative(out);
+    }
+
+    private List<PublishKit.ShortClip> shorts(StageContext context, Edl edl, PackageDraft draft, TopicBrief brief,
+                                              String longTitle) {
+        if (!shortsConfig.enabled() || !renderer.supportsShorts()) {
+            return List.of();
+        }
+        var files = context.files();
+        List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
+        Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
+        String audio = files.relative(files.path(Stage.AUDIO_MIX, AudioMixStage.MIX));
+        List<ShortsPlanner.Moment> moments = ShortsPlanner.pick(scenes, alignment, shortsConfig.count(),
+                shortsConfig.maxSeconds());
+        List<PublishKit.ShortClip> clips = new ArrayList<>();
+        for (int i = 0; i < moments.size(); i++) {
+            ShortsPlanner.Moment moment = moments.get(i);
+            String title = draft.shortTitles() != null && draft.shortTitles().size() > i
+                    ? draft.shortTitles().get(i) : brief.title();
+            Path out = files.path(Stage.PACKAGE, "short_" + (i + 1) + ".mp4");
+            try {
+                renderer.renderShort(ShortsPlanner.spec(moment, edl, alignment, title, audio), files.root(), out);
+                clips.add(new PublishKit.ShortClip(files.relative(out), title + " #shorts",
+                        title + "\n\nFull story: \"" + longTitle + "\" on the channel.\n#shorts",
+                        moment.length() + ShortsPlanner.END_CARD_SECONDS));
+            } catch (RuntimeException e) {
+                log.warn("Run {} short {} failed: {}", context.run().id(), i + 1, e.getMessage());
+            }
+        }
+        return clips;
     }
 
     private static List<String> musicCredits(AudioQa audio) {
@@ -143,11 +178,15 @@ public class PackageStage implements StageWorker {
                 StandardCopyOption.REPLACE_EXISTING);
         List<String> credits = files.exists(Stage.AUDIO_MIX, "audio_qa.json")
                 ? musicCredits(files.read(Stage.AUDIO_MIX, "audio_qa.json", AudioQa.class)) : List.of();
-        String description = DescriptionBuilder.build(draft.hookLine(), edl.chapters(), dossier.sources(), credits);
+        List<String> hashtags = draft.hashtags() == null ? List.of() : draft.hashtags();
+        String description = DescriptionBuilder.build(draft.hookLine(), edl.chapters(), dossier.sources(), credits,
+                hashtags);
         files.writeText(Stage.PACKAGE, "description.txt", description);
+        List<PublishKit.ShortClip> shorts = shorts(context, edl, draft, brief, titles.get(0).title());
         files.write(Stage.PACKAGE, "package.json", new VideoPackage(titles.get(0).title(), titles, description,
                 draft.tags() == null ? List.of() : draft.tags(), draft.pinnedComment(),
                 Stage.PACKAGE.folder() + "/thumbnail.png", concepts.get(0).text(),
-                rendered.subList(1, rendered.size()), edl.chapters(), qa.disclosureRequired()));
+                rendered.subList(1, rendered.size()), DescriptionBuilder.youtubeChapters(edl.chapters()),
+                qa.disclosureRequired(), hashtags, draft.communityPost(), shorts));
     }
 }

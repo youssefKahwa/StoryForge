@@ -29,7 +29,30 @@ public record StoryForgeProperties(
         Narration narration,
         Cloudflare cloudflare,
         RenderSvc renderSvc,
-        Sound sound) {
+        Sound sound,
+        String dashboardUrl,
+        YouTube youtube,
+        Telegram telegram,
+        Autopilot autopilot,
+        Upscaler upscaler,
+        boolean keepAwake,
+        Shorts shorts) {
+
+    public record Upscaler(boolean enabled, String executable, String model, int scale) {
+    }
+
+    public record Shorts(boolean enabled, int count, double maxSeconds) {
+    }
+
+    public record YouTube(String clientId, String clientSecret, String redirectUri, String categoryId,
+                          String language, boolean notifySubscribers) {
+    }
+
+    public record Telegram(String botToken, String chatId) {
+    }
+
+    public record Autopilot(boolean enabled, String cron) {
+    }
 
     public record Sound(boolean enabled, String libraryDir, LicenseRecord defaultMusicLicense) {
     }

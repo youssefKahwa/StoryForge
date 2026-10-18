@@ -1,4 +1,4 @@
-// Usage: node render.mjs <edl.json> <runDir> <out.mp4>
+// Usage: node render.mjs <edl.json> <runDir> <out.mp4> [compositionId]
 import { bundle } from '@remotion/bundler';
 import { ensureBrowser, renderMedia, selectComposition } from '@remotion/renderer';
 import fs from 'node:fs';
@@ -6,7 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [edlPath, runDir, outPath] = process.argv.slice(2);
+const [edlPath, runDir, outPath, compositionId = 'LongForm'] = process.argv.slice(2);
 if (!edlPath || !runDir || !outPath) {
   console.error('Usage: node render.mjs <edl.json> <runDir> <out.mp4>');
   process.exit(2);
@@ -57,14 +57,14 @@ try {
   console.log('Bundling...');
   const serveUrl = await bundle({ entryPoint: path.join(here, 'src', 'index.jsx') });
   const inputProps = { edl, assetBase };
-  const composition = await selectComposition({ serveUrl, id: 'LongForm', inputProps });
+  const composition = await selectComposition({ serveUrl, id: compositionId, inputProps });
   console.log(`Rendering ${composition.durationInFrames} frames at ${composition.fps} fps`);
   let lastReported = -1;
   await renderMedia({
     composition,
     serveUrl,
     codec: 'h264',
-    crf: 20,
+    crf: 18,
     outputLocation: outPath,
     inputProps,
     concurrency,

@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.provider.llm;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.storyforge.orchestrator.TestProperties;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -61,8 +62,7 @@ class ClaudeCodeLlmProviderTest {
                 "target/claude-test", 60, subscription, Map.of("fast", "haiku", "high", "sonnet"), Map.of(), Map.of());
         StoryForgeProperties.Llm llm = new StoryForgeProperties.Llm(true, "", List.of("claude-code"), Map.of(), 2, 2,
                 claude);
-        StoryForgeProperties properties = new StoryForgeProperties("target", "../prompts", "../config", List.of(),
-                null, null, null, null, null, null, null, llm, null, null, null, null, null, null, null);
+        StoryForgeProperties properties = TestProperties.withLlm(llm);
         return new ClaudeCodeLlmProvider(properties, JsonMapper.builder().build());
     }
 }

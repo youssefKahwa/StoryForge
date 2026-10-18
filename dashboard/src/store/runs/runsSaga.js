@@ -8,6 +8,7 @@ import {
   fetchRun,
   fetchRuns,
   rerunStage,
+  vetoRun,
   resumeRun,
   setRunDetail,
   setRuns,
@@ -64,6 +65,10 @@ function* handleRerunStage({ payload }) {
   yield* runCommand(payload, ApiRoutes.rerunStage(payload.id, payload.stage, Boolean(payload.fresh)));
 }
 
+function* handleVetoRun({ payload }) {
+  yield* runCommand(payload, ApiRoutes.vetoRun(payload.id));
+}
+
 export default function* runsSaga() {
   yield all([
     takeLatest(fetchRuns.type, handleFetchRuns),
@@ -72,5 +77,6 @@ export default function* runsSaga() {
     takeEvery(cancelRun.type, handleCancelRun),
     takeEvery(resumeRun.type, handleResumeRun),
     takeEvery(rerunStage.type, handleRerunStage),
+    takeEvery(vetoRun.type, handleVetoRun),
   ]);
 }

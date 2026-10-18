@@ -1,4 +1,6 @@
 storyforge:
+  shorts:
+    enabled: true
   sound:
     enabled: true
   llm:

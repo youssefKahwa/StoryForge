@@ -22,15 +22,17 @@ public class RunWorker {
     private final RunService runs;
     private final PipelineEngine engine;
     private final SettingsService settings;
+    private final KeepAwake keepAwake;
     private final boolean enabled;
     private final AtomicBoolean busy = new AtomicBoolean();
     private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> new Thread(task, "run-worker"));
 
-    public RunWorker(RunService runs, PipelineEngine engine, SettingsService settings,
+    public RunWorker(RunService runs, PipelineEngine engine, SettingsService settings, KeepAwake keepAwake,
                      StoryForgeProperties properties) {
         this.runs = runs;
         this.engine = engine;
         this.settings = settings;
+        this.keepAwake = keepAwake;
         this.enabled = properties.worker().enabled();
     }
 
@@ -54,11 +56,13 @@ public class RunWorker {
                 return;
             }
             executor.submit(() -> {
+                keepAwake.acquire();
                 try {
                     engine.execute(runId.get());
                 } catch (Exception e) {
                     log.error("Run {} crashed", runId.get(), e);
                 } finally {
+                    keepAwake.release();
                     busy.set(false);
                 }
             });
@@ -74,6 +78,7 @@ public class RunWorker {
 
     @PreDestroy
     public void shutdown() {
+        keepAwake.release();
         executor.shutdownNow();
     }
 }

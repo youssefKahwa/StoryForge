@@ -2,10 +2,10 @@ import React from 'react';
 import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame } from 'remotion';
 
 const MOTIONS = {
-  push_in: { scale: [1.0, 1.14], x: [0, 0], y: [0, -1] },
-  pull_out: { scale: [1.14, 1.0], x: [0, 0], y: [-1, 0] },
-  pan_left: { scale: [1.12, 1.12], x: [3, -3], y: [0, 0] },
-  pan_right: { scale: [1.12, 1.12], x: [-3, 3], y: [0, 0] },
+  push_in: { scale: [1.0, 1.09], x: [0, 0], y: [0, -0.8] },
+  pull_out: { scale: [1.09, 1.0], x: [0, 0], y: [-0.8, 0] },
+  pan_left: { scale: [1.08, 1.08], x: [2.5, -2.5], y: [0, 0] },
+  pan_right: { scale: [1.08, 1.08], x: [-2.5, 2.5], y: [0, 0] },
   none: { scale: [1.04, 1.04], x: [0, 0], y: [0, 0] },
 };
 

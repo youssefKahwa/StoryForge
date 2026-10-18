@@ -83,6 +83,41 @@ public class RemotionRenderer implements RenderProvider {
     }
 
     @Override
+    public boolean supportsShorts() {
+        return true;
+    }
+
+    @Override
+    public void renderShort(Map<String, Object> spec, Path runRoot, Path outputMp4) {
+        syncSources();
+        Path specFile = outputMp4.resolveSibling(outputMp4.getFileName() + ".json");
+        Path logFile = outputMp4.resolveSibling(outputMp4.getFileName() + ".log");
+        try {
+            Files.writeString(specFile, json.writeValueAsString(spec), StandardCharsets.UTF_8);
+            ProcessBuilder builder = new ProcessBuilder(config.node(), installDir.resolve("render.mjs").toString(),
+                    specFile.toString(), runRoot.toAbsolutePath().toString(), outputMp4.toAbsolutePath().toString(),
+                    "Short").directory(installDir.toFile()).redirectErrorStream(true).redirectOutput(logFile.toFile());
+            if (config.concurrency() > 0) {
+                builder.environment().put("RENDER_CONCURRENCY", String.valueOf(config.concurrency()));
+            }
+            Process process = builder.start();
+            if (!process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new MediaException("Short render timed out");
+            }
+            if (process.exitValue() != 0 || !Files.isRegularFile(outputMp4)) {
+                String output = Files.readString(logFile, StandardCharsets.UTF_8);
+                throw new MediaException("Short render failed: " + output.substring(Math.max(0, output.length() - TAIL)));
+            }
+        } catch (IOException e) {
+            throw new MediaException("Cannot render Short with Remotion", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new MediaException("Interrupted during Short render", e);
+        }
+    }
+
+    @Override
     public void renderThumbnail(Path background, String text, List<String> palette, Path outputPng) {
         syncSources();
         Path props = outputPng.resolveSibling(outputPng.getFileName() + ".props.json");

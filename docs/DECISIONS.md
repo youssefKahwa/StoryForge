@@ -181,3 +181,34 @@ The owner gives 1-3 YouTube links (often Darija/Arabic). Titles alone miss the d
 - Thumbnails: Claude proposes 3 concepts (≤ 4 words + scene), Cloudflare paints each background (1280×720), and the
   Remotion `Thumbnail` still (Anton font, accent last word, dark gradient) renders them. #1 is the thumbnail and #2-#3
   are kept as alternates.
+
+## ADR-018 Sharper images, gentler motion, better encode (2026-10-18)
+- Cloudflare FLUX.1-schnell only returns 1024×1024: `width`/`height` are rejected (error 5006, verified).
+  `ImageFinisher` crops 16:9 → AI-upscales 2× with Real-ESRGAN ncnn-vulkan (`realesr-animevideov3`, v0.2.5.0
+  release, BSD-3; runs on the Iris Xe iGPU, ~2.6 s per image) → Lanczos to 1920×1080. If the upscaler is missing or
+  fails, it falls back to Lanczos + unsharp. Finished images are cached. The x4plus model was rejected: 125 s/image.
+- Prompts ask for a "wide cinematic composition, main subject in the center" so the 16:9 crop keeps the subject.
+- Ken Burns zoom reduced to ~1.08–1.09 (less visible softness); Remotion crf 20 → 18.
+
+## ADR-019 Narration timing: cache, time-stretch, calibration, keep-awake (2026-10-18)
+Found by the first 12-minute run (#65): Kokoro read 596 s for a 720 s target, and the old fix re-synthesized every
+scene at 0.88× (30+ min), still missing QA's ±10%.
+- Every Kokoro clip is cached by (voice, speed, lang, segments); re-runs never re-synthesize.
+- Length fit = pitch-preserving FFmpeg `atempo` on each clip (0.85–1.15×) + word timings scaled by 1/tempo:
+  seconds instead of half an hour.
+- `VoiceCalibration` learns each voice's real pace (EMA of measured words per minute, stored in
+  `storyforge-data/calibration/voices.json`), and the critique/trim length check uses it, so scripts get sized right.
+- `KeepAwake`: while a run is active, a PowerShell helper calls `SetThreadExecutionState(ES_CONTINUOUS |
+  ES_SYSTEM_REQUIRED)`. Run #65 lost 4 hours to sleep and ran ~10× slower on battery.
+
+## ADR-020 Publish Kit and Shorts (2026-10-18, owner request)
+- The owner posts manually; every run ends with a kit in `storyforge-data/exports/<date>-<slug>/`: video.mp4,
+  thumbnail_1..3.png, captions.srt, description.txt, tags.txt, publish_kit.md, short_N.mp4 (hard links when
+  possible). `kit.json` drives the dashboard "Publish kit" tab, with copy buttons.
+- YouTube limits enforced in code: tags ≤ 500 chars (deduplicated, no commas or angle brackets); chapters only if ≥ 3,
+  first at 0:00, each ≥ 10 s; description ≤ 5000 chars; three hashtags at the end of the description.
+- The kit includes a Studio checklist: not made for kids, altered-content answer derived from the QA disclosure flag,
+  Education category, captions upload, end screen, pinned comment, community post one day later, Shorts schedule.
+- Shorts: up to 3 moments from strong beats (cold open, midpoint twist, climax…), at most 52.5 s + a 2.5 s end card
+  ("Full story on the channel"), rendered by the Remotion `Short` composition (1080×1920, hook title, 3-word kinetic
+  captions with the active word highlighted). The audio is a slice of the final mix (`trimBefore`).

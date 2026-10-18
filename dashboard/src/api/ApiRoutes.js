@@ -20,6 +20,12 @@ const ApiRoutes = {
   voices: () => `${API_BASE}/api/voices`,
   voiceSample: (id) => `${API_BASE}/api/voices/${id}/sample`,
 
+  youtubeStatus: () => `${API_BASE}/api/youtube/status`,
+  youtubeConnect: () => `${API_BASE}/api/youtube/oauth/start`,
+  youtubeDisconnect: () => `${API_BASE}/api/youtube/disconnect`,
+  testNotification: () => `${API_BASE}/api/youtube/test-notification`,
+  vetoRun: (id) => `${API_BASE}/api/runs/${id}/veto`,
+
   settings: () => `${API_BASE}/api/settings`,
   killSwitch: () => `${API_BASE}/api/settings/kill-switch`,
 };

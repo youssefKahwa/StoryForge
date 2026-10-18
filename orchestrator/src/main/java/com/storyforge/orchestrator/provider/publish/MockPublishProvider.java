@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.provider.publish;
 import com.storyforge.orchestrator.model.Publication;
 import java.nio.file.Files;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +24,6 @@ public class MockPublishProvider implements PublishProvider {
         }
         String videoId = "mock-" + request.runId();
         return new Publication(name(), videoId, "https://youtube.example/watch?v=" + videoId, "private",
-                Instant.now(), request.publishAt(), request.disclosure());
+                Instant.now(), request.publishAt(), request.disclosure(), List.of());
     }
 }

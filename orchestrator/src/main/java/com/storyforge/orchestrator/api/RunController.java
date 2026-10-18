@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.api;
 import com.storyforge.orchestrator.dto.CreateRunRequest;
 import com.storyforge.orchestrator.dto.RunDetailDto;
 import com.storyforge.orchestrator.dto.RunDto;
+import com.storyforge.orchestrator.run.PublicationService;
 import com.storyforge.orchestrator.run.RunQueryService;
 import com.storyforge.orchestrator.run.RunService;
 import com.storyforge.orchestrator.stage.Stage;
@@ -24,10 +25,12 @@ public class RunController {
 
     private final RunService runs;
     private final RunQueryService queries;
+    private final PublicationService publications;
 
-    public RunController(RunService runs, RunQueryService queries) {
+    public RunController(RunService runs, RunQueryService queries, PublicationService publications) {
         this.runs = runs;
         this.queries = queries;
+        this.publications = publications;
     }
 
     @GetMapping
@@ -55,6 +58,12 @@ public class RunController {
     @PostMapping("/{id}/resume")
     public RunDto resume(@PathVariable long id) {
         runs.resume(id);
+        return queries.summary(id);
+    }
+
+    @PostMapping("/{id}/veto")
+    public RunDto veto(@PathVariable long id) {
+        publications.veto(id);
         return queries.summary(id);
     }
 

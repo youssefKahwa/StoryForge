@@ -1,6 +1,7 @@
 import React from 'react';
 import { Composition, Still } from 'remotion';
 import { LongForm } from './LongForm';
+import { Short } from './Short';
 import { Thumbnail } from './Thumbnail';
 
 const SAMPLE_EDL = {
@@ -33,6 +34,19 @@ export const Root = () => (
         fps: props.edl.fps,
         width: props.edl.width,
         height: props.edl.height,
+      })}
+    />
+    <Composition
+      id="Short"
+      component={Short}
+      width={1080}
+      height={1920}
+      fps={30}
+      durationInFrames={300}
+      defaultProps={{ edl: { ...SAMPLE_EDL, width: 1080, height: 1920, title: 'Preview', words: [] }, assetBase: '' }}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: Math.max(1, Math.round(props.edl.durationSec * props.edl.fps)),
+        fps: props.edl.fps,
       })}
     />
     <Still

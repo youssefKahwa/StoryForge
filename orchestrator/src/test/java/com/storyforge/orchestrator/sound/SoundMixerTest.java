@@ -2,6 +2,7 @@ package com.storyforge.orchestrator.sound;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.storyforge.orchestrator.TestProperties;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.MediaInfo;
@@ -13,9 +14,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 class SoundMixerTest {
 
-    private final FfmpegService ffmpeg = new FfmpegService(new StoryForgeProperties(null, null, null, null, null,
-            null, null, new StoryForgeProperties.Media("ffmpeg", "ffprobe", 120), null, null, null, null, null, null,
-            null, null, null, null, null), JsonMapper.builder().build());
+    private final FfmpegService ffmpeg = new FfmpegService(TestProperties.withMedia(
+            new StoryForgeProperties.Media("ffmpeg", "ffprobe", 120)), JsonMapper.builder().build());
 
     @Test
     void mixesVoiceMusicAndSfxIntoAFileAsLongAsTheVoice() throws Exception {

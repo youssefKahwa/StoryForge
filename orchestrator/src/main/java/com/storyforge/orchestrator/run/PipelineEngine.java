@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.run;
 import com.storyforge.orchestrator.artifact.ArtifactStore;
 import com.storyforge.orchestrator.artifact.RunFiles;
 import com.storyforge.orchestrator.cost.CostGuard;
+import com.storyforge.orchestrator.notify.NotificationService;
 import com.storyforge.orchestrator.settings.SettingsService;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageBlockedException;
@@ -30,10 +31,13 @@ public class PipelineEngine {
     private final ArtifactStore artifacts;
     private final SettingsService settings;
     private final CostGuard costGuard;
+    private final NotificationService notifications;
     private final Map<Stage, StageWorker> workers = new EnumMap<>(Stage.class);
 
     public PipelineEngine(RunService runs, StageExecutionService executions, ArtifactStore artifacts,
-                          SettingsService settings, CostGuard costGuard, List<StageWorker> workers) {
+                          SettingsService settings, CostGuard costGuard, NotificationService notifications,
+                          List<StageWorker> workers) {
+        this.notifications = notifications;
         this.runs = runs;
         this.executions = executions;
         this.artifacts = artifacts;
@@ -60,6 +64,9 @@ public class PipelineEngine {
             Optional<Stage> next = Stage.after(run.getState());
             if (next.isEmpty()) {
                 runs.complete(runId);
+                notifications.send("StoryForge: run #" + runId + " is ready (" + run.getTopicTitle() + "). "
+                        + "Uploaded as private; review it and veto before the publish time if needed.\n"
+                        + notifications.runLink(runId));
                 return;
             }
             if (!runStage(RunInfo.from(run), next.get())) {
@@ -93,12 +100,16 @@ public class PipelineEngine {
             costGuard.record(run.id(), stage, usage);
             executions.finish(executionId, StageStatus.BLOCKED, usage, e.getMessage());
             runs.block(run.id(), stage, e.getMessage());
+            notifications.send("StoryForge: run #" + run.id() + " is blocked at " + stage.folder() + ": "
+                    + e.getMessage() + "\n" + notifications.runLink(run.id()));
             log.warn("Run {} stage {} blocked: {}", run.id(), stage, e.getMessage());
         } catch (Exception e) {
             costGuard.record(run.id(), stage, usage);
             String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             executions.finish(executionId, StageStatus.FAILED, usage, reason);
             runs.fail(run.id(), stage, reason);
+            notifications.send("StoryForge: run #" + run.id() + " failed at " + stage.folder() + ": " + reason
+                    + "\n" + notifications.runLink(run.id()));
             log.error("Run {} stage {} failed", run.id(), stage, e);
         }
         return false;

@@ -11,6 +11,7 @@ import com.storyforge.orchestrator.script.SfmParser;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
+import com.storyforge.orchestrator.voice.VoiceCalibration;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -32,8 +33,11 @@ public class CritiqueStage implements StageWorker {
     private final LlmRouter llm;
     private final JsonMapper json;
     private final StoryForgeProperties properties;
+    private final VoiceCalibration calibration;
 
-    public CritiqueStage(LlmRouter llm, JsonMapper json, StoryForgeProperties properties) {
+    public CritiqueStage(LlmRouter llm, JsonMapper json, StoryForgeProperties properties,
+                         VoiceCalibration calibration) {
+        this.calibration = calibration;
         this.llm = llm;
         this.json = json;
         this.properties = properties;
@@ -57,7 +61,8 @@ public class CritiqueStage implements StageWorker {
         String claimsJson = json.writeValueAsString(dossier.claims());
         String markup = context.files().readText(Stage.SCRIPT, "script.sfm.md");
 
-        int wordsPerMinute = properties.video().wordsPerMinute();
+        String voice = context.run().voice() != null ? context.run().voice() : properties.narration().voice();
+        int wordsPerMinute = calibration.wordsPerMinute(voice);
         int targetSeconds = context.run().targetSeconds();
         double tolerance = properties.qa().durationTolerance() * LENGTH_MARGIN;
         int targetWords = (int) Math.round(targetSeconds * wordsPerMinute / 60.0 * SPEECH_SHARE);

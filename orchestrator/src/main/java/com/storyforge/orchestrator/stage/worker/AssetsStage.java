@@ -16,7 +16,11 @@ import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
 import com.storyforge.orchestrator.visual.CardRenderer;
 import java.math.BigDecimal;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -37,6 +41,32 @@ public class AssetsStage implements StageWorker {
         this.images = images;
         this.formats = formats;
         this.video = properties.video();
+    }
+
+    private ImageResult fallback(StageContext context, Shot shot, Path file, List<Asset> assets,
+                                 RuntimeException cause) {
+        Asset donor = null;
+        for (int i = assets.size() - 1; i >= 0 && donor == null; i--) {
+            if (assets.get(i).provider().equals(images.name())) {
+                donor = assets.get(i);
+            }
+        }
+        if (donor != null) {
+            log.warn("Run {} {}: image provider failed ({}), reusing {}", context.run().id(), shot.id(),
+                    cause.getMessage(), donor.shotId());
+            try {
+                Files.copy(context.files().root().resolve(donor.file()), file, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            return new ImageResult("reused-fallback", donor.model(), BigDecimal.ZERO, donor.realistic(),
+                    donor.license());
+        }
+        log.warn("Run {} {}: image provider failed, using a placeholder: {}", context.run().id(), shot.id(),
+                cause.getMessage());
+        CardRenderer.placeholder(file, video.width(), video.height(), shot.seed(), shot.type(), shot.prompt());
+        return new ImageResult("placeholder-fallback", "java2d", BigDecimal.ZERO, false,
+                LicenseRecord.generated("storyforge-placeholder"));
     }
 
     @Override
@@ -71,11 +101,7 @@ public class AssetsStage implements StageWorker {
                 result = images.generate(new ImageRequest(shot.prompt(), style.negativePrompt(), shot.seed(),
                         video.width(), video.height(), shot.type(), shot.type() + " / scene " + shot.sceneId()), file);
             } catch (RuntimeException e) {
-                log.warn("Run {} {}: image provider failed, using a placeholder: {}", context.run().id(), shot.id(),
-                        e.getMessage());
-                CardRenderer.placeholder(file, video.width(), video.height(), shot.seed(), shot.type(), shot.prompt());
-                result = new ImageResult("placeholder-fallback", "java2d", BigDecimal.ZERO, false,
-                        LicenseRecord.generated("storyforge-placeholder"));
+                result = fallback(context, shot, file, assets, e);
                 fallbacks++;
             }
             if (result.costUsd().signum() > 0) {

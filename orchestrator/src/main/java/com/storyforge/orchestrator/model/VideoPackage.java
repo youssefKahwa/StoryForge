@@ -12,7 +12,10 @@ public record VideoPackage(
         String thumbnailText,
         List<String> thumbnailAlternates,
         List<Edl.EdlChapter> chapters,
-        boolean disclosureRequired) {
+        boolean disclosureRequired,
+        List<String> hashtags,
+        String communityPost,
+        List<PublishKit.ShortClip> shorts) {
 
     public record ScoredTitle(String title, double score, List<String> reasons) {
     }

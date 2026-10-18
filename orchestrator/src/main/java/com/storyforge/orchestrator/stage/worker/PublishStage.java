@@ -1,8 +1,10 @@
 package com.storyforge.orchestrator.stage.worker;
 
 import com.storyforge.orchestrator.model.Publication;
+import com.storyforge.orchestrator.model.PublishKit;
 import com.storyforge.orchestrator.model.ScheduleSlot;
 import com.storyforge.orchestrator.model.VideoPackage;
+import com.storyforge.orchestrator.packaging.PublishKitBuilder;
 import com.storyforge.orchestrator.provider.publish.PublishProvider;
 import com.storyforge.orchestrator.provider.publish.PublishRequest;
 import com.storyforge.orchestrator.qa.QaService;
@@ -16,9 +18,11 @@ import org.springframework.stereotype.Component;
 public class PublishStage implements StageWorker {
 
     private final PublishProvider publisher;
+    private final PublishKitBuilder kits;
 
-    public PublishStage(PublishProvider publisher) {
+    public PublishStage(PublishProvider publisher, PublishKitBuilder kits) {
         this.publisher = publisher;
+        this.kits = kits;
     }
 
     @Override
@@ -28,7 +32,7 @@ public class PublishStage implements StageWorker {
 
     @Override
     public List<String> outputs() {
-        return List.of("publication.json");
+        return List.of("publication.json", "kit.json");
     }
 
     @Override
@@ -36,8 +40,10 @@ public class PublishStage implements StageWorker {
         var files = context.files();
         VideoPackage pkg = files.read(Stage.PACKAGE, "package.json", VideoPackage.class);
         ScheduleSlot slot = files.read(Stage.SCHEDULE, "schedule.json", ScheduleSlot.class);
+        PublishKit kit = kits.build(files, pkg, slot, pkg.shorts() == null ? List.of() : pkg.shorts());
+        files.write(Stage.PUBLISH, "kit.json", kit);
         Publication publication = publisher.publish(new PublishRequest(context.run().id(), pkg.title(),
-                pkg.description(), pkg.tags(), files.path(Stage.ASSEMBLE, QaService.VIDEO),
+                pkg.description(), kit.tags(), files.path(Stage.ASSEMBLE, QaService.VIDEO),
                 files.path(Stage.PACKAGE, "thumbnail.png"), files.path(Stage.ASSEMBLE, "captions.srt"),
                 slot.publishAt(), pkg.disclosureRequired()));
         context.usage().provider(publisher.name());

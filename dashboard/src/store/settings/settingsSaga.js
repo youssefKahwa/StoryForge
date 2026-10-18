@@ -2,7 +2,9 @@ import { all, call, put, takeEvery, takeLatest } from 'redux-saga/effects';
 import ApiRoutes from '../../api/ApiRoutes';
 import http from '../../api/http';
 import { withCallbacks } from '../sagaHelpers';
-import { fetchSettings, setKillSwitch, setSettings } from './settingsSlice';
+import {
+  disconnectYouTube, fetchSettings, fetchYouTube, setKillSwitch, setSettings, setYouTube, testNotification,
+} from './settingsSlice';
 
 function* handleFetchSettings({ payload }) {
   yield* withCallbacks(payload, call(function* load() {
@@ -20,9 +22,33 @@ function* handleKillSwitch({ payload }) {
   }));
 }
 
+function* loadYouTube() {
+  const status = yield call(http.get, ApiRoutes.youtubeStatus());
+  yield put(setYouTube(status));
+  return status;
+}
+
+function* handleFetchYouTube({ payload }) {
+  yield* withCallbacks(payload, call(loadYouTube));
+}
+
+function* handleDisconnectYouTube({ payload }) {
+  yield* withCallbacks(payload, call(function* disconnect() {
+    yield call(http.post, ApiRoutes.youtubeDisconnect());
+    return yield call(loadYouTube);
+  }));
+}
+
+function* handleTestNotification({ payload }) {
+  yield* withCallbacks(payload, call(http.post, ApiRoutes.testNotification()));
+}
+
 export default function* settingsSaga() {
   yield all([
     takeLatest(fetchSettings.type, handleFetchSettings),
     takeEvery(setKillSwitch.type, handleKillSwitch),
+    takeLatest(fetchYouTube.type, handleFetchYouTube),
+    takeEvery(disconnectYouTube.type, handleDisconnectYouTube),
+    takeEvery(testNotification.type, handleTestNotification),
   ]);
 }

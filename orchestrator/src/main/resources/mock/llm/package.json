@@ -15,6 +15,9 @@
   "tags": ["{{topic}}", "mystery", "history", "unsolved", "documentary", "storytelling", "true story", "mock"],
   "pinnedComment": "Who do you think wrote the entries after Tuesday?",
   "thumbnailText": "A Different Hand",
+  "hashtags": ["#mystery", "#history", "#unsolved"],
+  "communityPost": "A logbook where every entry after Tuesday is in someone else's handwriting. Who wrote them? New video this weekend.",
+  "shortTitles": ["The signal stopped at 3 a.m.", "Two hands, one logbook", "The letter in the attic"],
   "thumbnails": [
     { "text": "A Different Hand", "scene": "an old logbook under a lamp, two handwriting styles" },
     { "text": "Nobody Came Back", "scene": "an empty pier in thick fog at dawn" },
