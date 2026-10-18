@@ -44,8 +44,8 @@ public class AudioMixStage implements StageWorker {
         NarrationManifest narration = context.files().read(Stage.NARRATE, "narration.json", NarrationManifest.class);
         Path input = context.files().path(Stage.NARRATE, NarrateStage.NARRATION);
         Path mix = context.files().path(Stage.AUDIO_MIX, MIX);
-        ffmpeg.normalizeLoudness(input, mix, qa.loudnessTarget(), qa.truePeakMax() - PEAK_MARGIN_DB, SAMPLE_RATE);
-        LoudnessStats stats = ffmpeg.measureLoudness(mix);
+        LoudnessStats stats = ffmpeg.normalizeLoudness(input, mix, qa.loudnessTarget(),
+                qa.truePeakMax() - PEAK_MARGIN_DB, SAMPLE_RATE);
         boolean passed = Math.abs(stats.integratedLufs() - qa.loudnessTarget()) <= qa.loudnessTolerance()
                 && stats.truePeakDb() <= qa.truePeakMax();
         List<AudioQa.Track> tracks = List.of(new AudioQa.Track("narration", narration.file(), "Narration",

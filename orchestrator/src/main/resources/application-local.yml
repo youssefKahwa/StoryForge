@@ -2,8 +2,13 @@ storyforge:
   llm:
     only: claude-code
   providers:
-    tts: mock
+    tts: kokoro
     image: mock
-    alignment: mock
+    alignment: whisper
     render: ffmpeg
     publish: mock
+  video:
+    width: 1920
+    height: 1080
+    fps: 30
+    words-per-minute: 135

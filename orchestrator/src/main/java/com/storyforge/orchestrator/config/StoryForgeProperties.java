@@ -23,7 +23,15 @@ public record StoryForgeProperties(
         Providers providers,
         Llm llm,
         Qa qa,
-        Publish publish) {
+        Publish publish,
+        MediaSvc mediaSvc,
+        Narration narration) {
+
+    public record MediaSvc(String url, long timeoutSeconds) {
+    }
+
+    public record Narration(String voice, double speed, String lang, double maxWer, double retrySpeedFactor) {
+    }
 
     public record Defaults(int targetSeconds, VideoFormat format, String language) {
     }

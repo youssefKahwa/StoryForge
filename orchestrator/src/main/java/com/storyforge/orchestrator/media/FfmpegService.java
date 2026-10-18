@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,6 +23,10 @@ public class FfmpegService {
     private static final Pattern FREEZE_START = Pattern.compile("freeze_start:\\s*([0-9.]+)");
     private static final Pattern FREEZE_END = Pattern.compile("freeze_end:\\s*([0-9.]+)");
     private static final int TAIL = 3000;
+    private static final int MAX_LOUDNESS_PASSES = 4;
+    private static final double LOUDNESS_TOLERANCE = 0.3;
+    private static final double LIMIT_MARGIN_DB = 0.5;
+    private static final double LIMITER_COMPENSATION = 1.3;
 
     private final String ffmpeg;
     private final String ffprobe;
@@ -75,6 +80,31 @@ public class FfmpegService {
     public LoudnessStats measureLoudness(Path file) {
         String output = ffmpeg(List.of("-i", file.toString(), "-vn",
                 "-af", "loudnorm=I=-14:TP=-1:LRA=11:print_format=json", "-f", "null", "-"));
+        JsonNode node = loudnormJson(output, file);
+        return new LoudnessStats(number(node, "input_i"), number(node, "input_tp"), number(node, "input_lra"));
+    }
+
+    public LoudnessStats normalizeLoudness(Path input, Path output, double targetLufs, double truePeakDb,
+                                           int sampleRate) {
+        double limit = Math.pow(10, (truePeakDb - LIMIT_MARGIN_DB) / 20);
+        double gain = targetLufs - measureLoudness(input).integratedLufs();
+        LoudnessStats result = null;
+        for (int pass = 0; pass < MAX_LOUDNESS_PASSES; pass++) {
+            ffmpeg(List.of("-y", "-i", input.toString(),
+                    "-af", String.format(Locale.ROOT, "volume=%.2fdB,alimiter=limit=%.3f:attack=1:release=50:level=false",
+                            gain, limit),
+                    "-ar", String.valueOf(sampleRate), "-ac", "2", output.toString()));
+            result = measureLoudness(output);
+            double error = targetLufs - result.integratedLufs();
+            if (Math.abs(error) <= LOUDNESS_TOLERANCE) {
+                break;
+            }
+            gain += error * LIMITER_COMPENSATION;
+        }
+        return result;
+    }
+
+    private JsonNode loudnormJson(String output, Path file) {
         Matcher matcher = LOUDNORM_JSON.matcher(output);
         String block = null;
         while (matcher.find()) {
@@ -83,14 +113,7 @@ public class FfmpegService {
         if (block == null) {
             throw new MediaException("loudnorm produced no measurement for " + file);
         }
-        JsonNode node = json.readTree(block);
-        return new LoudnessStats(number(node, "input_i"), number(node, "input_tp"), number(node, "input_lra"));
-    }
-
-    public void normalizeLoudness(Path input, Path output, double targetLufs, double truePeakDb, int sampleRate) {
-        ffmpeg(List.of("-y", "-i", input.toString(),
-                "-af", "loudnorm=I=%s:TP=%s:LRA=11".formatted(targetLufs, truePeakDb),
-                "-ar", String.valueOf(sampleRate), "-ac", "2", output.toString()));
+        return json.readTree(block);
     }
 
     public List<double[]> detectBlack(Path video, double minSeconds) {

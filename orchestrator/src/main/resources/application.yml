@@ -94,6 +94,15 @@ storyforge:
     min-sources: 8
     critic-average: 8
     critic-hook: 9
+  media-svc:
+    url: http://127.0.0.1:8090
+    timeout-seconds: 900
+  narration:
+    voice: af_heart
+    speed: 1.0
+    lang: en-us
+    max-wer: 0.15
+    retry-speed-factor: 0.92
   publish:
     day: SATURDAY
     time: "14:00"

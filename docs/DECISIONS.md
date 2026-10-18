@@ -110,3 +110,19 @@ and the `local` profile pins `llm.only: claude-code`). NVIDIA stays out of the r
   issues) and the user prompt on stdin (no command-line length limit).
 - Measured 2026-10-17 (v2.1.287, Pro login): a minimal haiku call costs ~600 input tokens and ~1.7 s. On a
   subscription the cost is recorded as $0; the notional API price is ignored by the cost guard.
+
+## ADR-013 Local voice: Kokoro (kokoro-onnx) + faster-whisper in media-svc (2026-10-18)
+- `media-svc/` (FastAPI, Python 3.12) runs natively on 127.0.0.1:8090. Its venv lives in
+  `%USERPROFILE%\.storyforge\media-venv` and its models in `%USERPROFILE%\storyforge-data\models`, both outside OneDrive.
+  Start it with `scripts/media-svc.ps1` (`-Install` the first time).
+- TTS: `kokoro-onnx` (MIT) with the Kokoro-82M v1.0 model (Apache-2.0), CPU, 24 kHz mono.
+  Docs: https://github.com/thewh1teagle/kokoro-onnx (examples/save.py), voices graded at
+  https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md (read 2026-10-18). Default voice `af_heart` (grade A);
+  `am_michael` is the best-graded male option (C+). Measured: ~133 wpm at speed 1.0, ~1.5-2x real time on this CPU,
+  so `local` sets `video.words-per-minute: 135`.
+- Alignment: `faster-whisper` 1.2.1 `base.en`, int8 on CPU (https://github.com/SYSTRAN/faster-whisper, 2026-10-18).
+  Audio is decoded with soundfile and resampled to 16 kHz in numpy, because the current PyAV rejects faster-whisper's
+  `metadata_errors` argument. Script words are matched to heard words with difflib, so captions keep the script's
+  spelling and the timing comes from Whisper. The word error rate per scene drives the mispronunciation check: above
+  `narration.max-wer` (0.15), the scene is re-synthesized at 0.92x speed and the better take is kept. Measured WER
+  0.04-0.08 on a test sentence (proper nouns are the usual misses).

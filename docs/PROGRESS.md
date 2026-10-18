@@ -25,13 +25,19 @@
 - First real run (#33, Mary Celeste, 90 s target): 10 real sources, QA passed, ~51k input / ~52k output tokens,
   most of it in critique + one sonnet rewrite.
 
-## Next: finish M1
-- Real 12–16 min run on the `local` profile and check Pro usage per video.
-- Trim outline output (9k tokens for a short video), consider `--json-schema` per stage.
-- Optional: research fetchers (Wikipedia/MediaWiki, Wikidata, Internet Archive, LoC, Chronicling America) + LLM extraction.
-   Gate: ≥ 8 sources.
-4. JSON Schemas in `schemas/` + validation for the NVIDIA path; repair loop already exists.
-5. `local` profile: real LLMs, mock media.
+### M2: Voice (2026-10-18)
+- `media-svc` (FastAPI): Kokoro TTS + faster-whisper alignment on CPU, venv and models outside OneDrive (ADR-013).
+- `KokoroTtsProvider`, `WhisperAlignmentProvider`, `AlignmentAssembler`; `local` profile uses them.
+- Mispronunciation check: per-scene WER after synthesis; above 0.15 the scene is re-synthesized at 0.92x and the
+  better take is kept. Word timings reuse the verification pass (no second transcription).
+- Length fit: critique trims via a cheap haiku pass when still off; narration re-synthesizes at up to ±12% speed.
+- Loudness: gain + peak limiter loop (2-pass loudnorm could not lift peaky TTS speech without falling back to dynamic).
+- Run #33 (Mary Celeste, 90 s target) completed with real voice: 97.3 s, −14.22 LUFS, −3.3 dBTP, QA passed.
+
+## Next
+- M3 picture: pick a free image source (NVIDIA FLUX did not respond), Remotion assembly with camera motion.
+- One full-length (12–16 min) `local` run to measure Pro usage and CPU time per video.
+- Trim outline output tokens; consider `--json-schema` per stage.
 
 ## Blocked / needs owner
 - ~~NVIDIA API key~~ done (in `.env`). Images: NVIDIA FLUX not reachable, so pick another free image source before M3.

@@ -48,7 +48,8 @@ class ClaudeCodeLlmProviderTest {
     @Test
     void buildsALeastPrivilegeCommand() {
         List<String> pure = provider.command("haiku", "low", "", Path.of("sys.md"));
-        assertThat(pure).containsSequence("--tools", "").containsSequence("--effort", "low").contains("--safe-mode", "--strict-mcp-config")
+        assertThat(pure).containsSequence("--tools", "").containsSequence("--effort", "low")
+                .contains("--safe-mode", "--strict-mcp-config")
                 .doesNotContain("--allowedTools", "--dangerously-skip-permissions");
 
         List<String> research = provider.command("sonnet", null, "WebSearch,WebFetch", Path.of("sys.md"));
@@ -61,7 +62,7 @@ class ClaudeCodeLlmProviderTest {
         StoryForgeProperties.Llm llm = new StoryForgeProperties.Llm(true, "", List.of("claude-code"), Map.of(), 2, 2,
                 claude);
         StoryForgeProperties properties = new StoryForgeProperties("target", "../prompts", "../config", List.of(),
-                null, null, null, null, null, null, null, llm, null, null);
+                null, null, null, null, null, null, null, llm, null, null, null, null);
         return new ClaudeCodeLlmProvider(properties, JsonMapper.builder().build());
     }
 }

@@ -92,9 +92,38 @@ public class CritiqueStage implements StageWorker {
                 log.warn("Rewrite produced invalid markup, keeping previous version: {}", e.getMessage());
             }
         }
+        if (!best.critique().lengthOk()) {
+            best = trimmed(context, best, targetSeconds, tolerance, wordsPerMinute);
+        }
         context.files().write(Stage.CRITIQUE, "critique.json", best.critique());
         context.files().writeText(Stage.CRITIQUE, "script.sfm.md", best.markup());
         context.files().write(Stage.CRITIQUE, "scenes.json", best.scenes());
+    }
+
+    private Version trimmed(StageContext context, Version best, int targetSeconds, double tolerance,
+                            int wordsPerMinute) {
+        int words = wordCount(best.scenes());
+        int goal = (int) Math.round(words * targetSeconds / Math.max(1.0, best.critique().estimatedSeconds()));
+        String markup = llm.text(context, Stage.CRITIQUE, "trim", Map.of(
+                "script", best.markup(),
+                "words", String.valueOf(words),
+                "target_words", String.valueOf(goal),
+                "direction", goal < words ? "cut" : "add",
+                "delta", String.valueOf(Math.abs(words - goal))));
+        try {
+            List<Scene> scenes = SfmParser.parse(markup);
+            Critique critique = best.critique().withLength(wordCount(scenes), estimatedSeconds(scenes, wordsPerMinute),
+                    targetSeconds, tolerance, wordsPerMinute);
+            double before = Math.abs(best.critique().estimatedSeconds() - targetSeconds);
+            double after = Math.abs(critique.estimatedSeconds() - targetSeconds);
+            if (after < before) {
+                log.info("Run {} trimmed script from {} to {} words", context.run().id(), words, critique.words());
+                return new Version(markup, scenes, critique);
+            }
+        } catch (SfmParseException e) {
+            log.warn("Trim produced invalid markup, keeping previous version: {}", e.getMessage());
+        }
+        return best;
     }
 
     static double estimatedSeconds(List<Scene> scenes, int wordsPerMinute) {

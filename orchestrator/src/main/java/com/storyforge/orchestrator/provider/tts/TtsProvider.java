@@ -10,4 +10,8 @@ public interface TtsProvider {
     String voice();
 
     double synthesize(Scene scene, Path outputWav);
+
+    default double synthesize(Scene scene, Path outputWav, double speedFactor) {
+        return synthesize(scene, outputWav);
+    }
 }

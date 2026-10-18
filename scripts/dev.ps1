@@ -11,6 +11,9 @@ if (-not $NoDocker) {
     if ($LASTEXITCODE -ne 0) { throw 'docker compose failed: start Docker Desktop or use -NoDocker' }
 }
 
+if ($Mode -eq 'local') {
+    Start-Process powershell -ArgumentList '-NoExit', '-File', "$root\scripts\media-svc.ps1"
+}
 Start-Process powershell -ArgumentList '-NoExit', '-Command', "cd '$root\dashboard'; npm run develop"
 Push-Location (Join-Path $root 'orchestrator')
 try {
