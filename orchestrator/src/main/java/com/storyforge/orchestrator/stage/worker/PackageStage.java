@@ -4,6 +4,7 @@ import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
+import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Edl;
@@ -31,6 +32,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -89,8 +91,9 @@ public class PackageStage implements StageWorker {
                     style.negativePrompt(), context.run().id() * 100 + n, RenderProvider.THUMB_WIDTH,
                     RenderProvider.THUMB_HEIGHT, "thumbnail", "thumbnail " + n), background);
         } catch (RuntimeException e) {
-            log.warn("Run {} thumbnail {} background failed: {}", context.run().id(), n, e.getMessage());
-            background = null;
+            log.warn("Run {} thumbnail {} background failed, using a frame from the video: {}", context.run().id(),
+                    n, e.getMessage());
+            background = videoStill(context, n);
         }
         Path out = files.path(Stage.PACKAGE, "thumbnail_" + n + ".png");
         renderer.renderThumbnail(background, concept.text(), style.palette(), out);
@@ -124,6 +127,22 @@ public class PackageStage implements StageWorker {
             }
         }
         return clips;
+    }
+
+    private Path videoStill(StageContext context, int n) {
+        var files = context.files();
+        if (!files.exists(Stage.ASSETS, "assets.json")) {
+            return null;
+        }
+        List<AssetManifest.Asset> candidates = files.read(Stage.ASSETS, "assets.json", AssetManifest.class).assets()
+                .stream()
+                .filter(asset -> asset.provider().equals(images.name()))
+                .sorted(Comparator.comparing(asset -> "establishing".equals(asset.kind()) ? 0 : 1))
+                .toList();
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        return files.root().resolve(candidates.get(Math.min(candidates.size() - 1, (n - 1) * 3)).file());
     }
 
     private static List<String> musicCredits(AudioQa audio) {

@@ -35,8 +35,10 @@ public class CloudflareImageProvider implements ImageProvider {
     private final RestClient client;
     private final Path cacheDir;
     private final ImageFinisher finisher;
+    private final ImageQuota quota;
 
-    public CloudflareImageProvider(StoryForgeProperties properties, ImageFinisher finisher) {
+    public CloudflareImageProvider(StoryForgeProperties properties, ImageFinisher finisher, ImageQuota quota) {
+        this.quota = quota;
         this.config = properties.cloudflare();
         this.finisher = finisher;
         if (config.accountId() == null || config.accountId().isBlank()
@@ -60,17 +62,34 @@ public class CloudflareImageProvider implements ImageProvider {
     }
 
     @Override
+    public boolean isCached(ImageRequest request) {
+        return Files.isRegularFile(cacheDir.resolve(cacheKey(request) + ".jpg"));
+    }
+
+    @Override
+    public int remainingToday() {
+        return quota.remaining();
+    }
+
+    private String cacheKey(ImageRequest request) {
+        return hash(config.imageModel() + "\u0000" + request.prompt() + SAFETY_SUFFIX + "\u0000" + request.seed());
+    }
+
+    @Override
     public ImageResult generate(ImageRequest request, Path outputImage) {
         String prompt = request.prompt() + COMPOSITION_SUFFIX + SAFETY_SUFFIX;
-        String key = hash(config.imageModel() + "\u0000" + request.prompt() + SAFETY_SUFFIX + "\u0000"
-                + request.seed());
+        String key = cacheKey(request);
         Path raw = cacheDir.resolve(key + ".jpg");
         Path finished = cacheDir.resolve(key + "_" + request.width() + "x" + request.height() + ".png");
         try {
             if (!Files.isRegularFile(finished)) {
                 Files.createDirectories(cacheDir);
                 if (!Files.isRegularFile(raw)) {
+                    if (quota.remaining() == 0) {
+                        throw new MediaException("Cloudflare daily free image quota used up (resets 00:00 UTC)");
+                    }
                     Files.write(raw, fetch(prompt));
+                    quota.recordCall();
                 }
                 finisher.finish(raw, finished, request.width(), request.height());
             }
@@ -95,6 +114,9 @@ public class CloudflareImageProvider implements ImageProvider {
             }
             return Base64.getDecoder().decode(image);
         } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 429) {
+                quota.markExhausted();
+            }
             throw new MediaException("Cloudflare image failed (" + e.getStatusCode().value() + "): "
                     + e.getResponseBodyAsString(StandardCharsets.UTF_8), e);
         }

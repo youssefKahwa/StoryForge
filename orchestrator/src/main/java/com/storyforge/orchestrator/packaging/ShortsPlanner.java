@@ -82,6 +82,9 @@ public final class ShortsPlanner {
             clipped.put("end", round(Math.min(length, shot.end() - moment.start())));
             shots.add(clipped);
         }
+        for (int i = 0; i + 1 < shots.size(); i++) {
+            shots.get(i).put("end", shots.get(i + 1).get("start"));
+        }
         if (!shots.isEmpty()) {
             shots.get(0).put("start", 0.0);
             shots.get(shots.size() - 1).put("end", round(length + END_CARD_SECONDS));

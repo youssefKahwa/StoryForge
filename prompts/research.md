@@ -1,5 +1,5 @@
 ---
-version: 0.3.0
+version: 0.4.0
 tier: high
 ---
 ## system
@@ -19,6 +19,8 @@ Use at least {{min_sources}} distinct sources from independent publishers (prima
 encyclopedic). Every claim lists its source ids; key claims need 2+ sources from different publishers (different
 website domains).
 
+Source titles are published in the video description: use the page's real title only, never notes or comments.
+Do not list a source whose page you could not open.
 Return:
 {"topic": "...",
  "sources": [{"id": "s1", "title": "...", "url": "https://...", "publisher": "...",

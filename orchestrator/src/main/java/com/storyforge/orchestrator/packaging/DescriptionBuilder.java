@@ -34,7 +34,7 @@ public final class DescriptionBuilder {
         }
         if (!sources.isEmpty()) {
             out.append("Sources\n");
-            sources.forEach(source -> out.append("- ").append(source.title())
+            sources.forEach(source -> out.append("- ").append(cleanTitle(source.title()))
                     .append(source.publisher() == null ? "" : " (" + source.publisher() + ")")
                     .append(": ").append(source.url()).append('\n'));
             out.append('\n');
@@ -50,6 +50,24 @@ public final class DescriptionBuilder {
                     .toList())).append('\n');
         }
         return out.length() <= MAX_CHARS ? out.toString() : out.substring(0, MAX_CHARS);
+    }
+
+    private static final java.util.regex.Pattern NOTE = java.util.regex.Pattern.compile(
+            "\\s*\\((?=[^()]*\\b(?:(?-i:I)|despite|didn't|did not|load|loaded|search results|unverified|URL)\\b)[^()]*\\)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final int MAX_TITLE = 110;
+
+    static String cleanTitle(String title) {
+        if (title == null) {
+            return "Source";
+        }
+        String clean = NOTE.matcher(title).replaceAll("");
+        int sentence = clean.indexOf(". ");
+        if (sentence > 20) {
+            clean = clean.substring(0, sentence);
+        }
+        clean = clean.strip();
+        return clean.length() <= MAX_TITLE ? clean : clean.substring(0, MAX_TITLE - 1).strip() + "\u2026";
     }
 
     public static List<EdlChapter> youtubeChapters(List<EdlChapter> chapters) {

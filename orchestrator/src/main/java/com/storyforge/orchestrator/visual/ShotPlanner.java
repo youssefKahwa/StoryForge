@@ -15,6 +15,7 @@ import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.ShotList.Shot;
 import com.storyforge.orchestrator.model.ShotType;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -29,6 +30,8 @@ public final class ShotPlanner {
     }
 
     private static final List<String> ROTATION = List.of(CHARACTER, DETAIL, SYMBOLIC);
+    private static final List<String> TYPE_ORDER = List.of(ESTABLISHING, CHARACTER, DETAIL, SYMBOLIC, KINETIC_TEXT,
+            ShotType.MAP, ShotType.TIMELINE, ShotType.CHART, ShotType.MOTION_HERO, ShotType.ARCHIVAL_PD);
     private static final List<String> MOTIONS = List.of("push_in", "pan_right", "pull_out", "pan_left");
     private static final Map<String, String> MODIFIERS = Map.of(
             ESTABLISHING, "wide establishing shot, sense of place and time",
@@ -63,6 +66,8 @@ public final class ShotPlanner {
             boolean onscreenPending = scene.onscreen() != null && !scene.onscreen().isBlank();
             boolean newBeat = !scene.beat().equals(previousBeat);
             int onscreenSlot = Math.min(1, pieces.size() - 1);
+            Map<String, Integer> occurrences = new HashMap<>();
+            rotation = scene.index();
 
             for (int p = 0; p < pieces.size(); p++) {
                 Piece piece = pieces.get(p);
@@ -99,7 +104,8 @@ public final class ShotPlanner {
                         graphic ? null : prompt(style, type, scene),
                         graphic ? "none" : MOTIONS.get(motion++ % MOTIONS.size()),
                         text,
-                        baseSeed + scene.index() * 100L + p));
+                        baseSeed + scene.index() * 1000L + TYPE_ORDER.indexOf(type) * 50L
+                                + occurrences.merge(type, 1, Integer::sum)));
             }
             previousBeat = scene.beat();
         }

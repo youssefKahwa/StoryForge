@@ -22,7 +22,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -41,6 +43,28 @@ public class AssetsStage implements StageWorker {
         this.images = images;
         this.formats = formats;
         this.video = properties.video();
+    }
+
+    private ImageRequest request(Shot shot, FormatDefinition.Style style) {
+        return new ImageRequest(shot.prompt(), style.negativePrompt(), shot.seed(), video.width(), video.height(),
+                shot.type(), shot.type() + " / scene " + shot.sceneId());
+    }
+
+    private Set<String> budget(StageContext context, ShotList shots, FormatDefinition.Style style) {
+        List<Shot> misses = shots.shots().stream().filter(shot -> !shot.graphic())
+                .filter(shot -> !images.isCached(request(shot, style))).toList();
+        int remaining = images.remainingToday();
+        Set<String> allowed = new HashSet<>();
+        if (misses.size() <= remaining) {
+            misses.forEach(shot -> allowed.add(shot.id()));
+            return allowed;
+        }
+        for (int i = 0; i < remaining; i++) {
+            allowed.add(misses.get((int) ((long) i * misses.size() / remaining)).id());
+        }
+        log.warn("Run {}: {} new images needed but only {} left in today's free quota; spreading them and reusing "
+                + "the rest", context.run().id(), misses.size(), remaining);
+        return allowed;
     }
 
     private ImageResult fallback(StageContext context, Shot shot, Path file, List<Asset> assets,
@@ -85,6 +109,7 @@ public class AssetsStage implements StageWorker {
         FormatDefinition.Style style = formats.get(context.run().format()).style();
         List<Asset> assets = new ArrayList<>();
         int fallbacks = 0;
+        Set<String> allowedNew = budget(context, shots, style);
         for (Shot shot : shots.shots()) {
             String name = shot.id() + ".png";
             Path file = context.files().path(Stage.ASSETS, name);
@@ -97,9 +122,12 @@ public class AssetsStage implements StageWorker {
                 continue;
             }
             ImageResult result;
+            ImageRequest request = request(shot, style);
             try {
-                result = images.generate(new ImageRequest(shot.prompt(), style.negativePrompt(), shot.seed(),
-                        video.width(), video.height(), shot.type(), shot.type() + " / scene " + shot.sceneId()), file);
+                if (!allowedNew.contains(shot.id()) && !images.isCached(request)) {
+                    throw new IllegalStateException("over today's free image budget, reusing on purpose");
+                }
+                result = images.generate(request, file);
             } catch (RuntimeException e) {
                 result = fallback(context, shot, file, assets, e);
                 fallbacks++;

@@ -61,7 +61,8 @@ public record StoryForgeProperties(
                             boolean burnCaptions) {
     }
 
-    public record Cloudflare(String accountId, String apiToken, String imageModel, int steps, long timeoutSeconds) {
+    public record Cloudflare(String accountId, String apiToken, String imageModel, int steps, long timeoutSeconds,
+                             int dailyImageLimit) {
     }
 
     public record MediaSvc(String url, long timeoutSeconds) {
