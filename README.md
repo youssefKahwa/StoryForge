@@ -18,6 +18,13 @@ Run artifacts go to `%USERPROFILE%\storyforge-data\runs\{runId}\{stage}\` (outsi
 ## Prerequisites
 JDK 17, Node 22, FFmpeg on PATH, Docker Desktop (optional: the `h2` profile works without it).
 
+## Weekly use
+1. `.\scripts\dev.ps1 -Mode local -NoDocker`, then open http://localhost:8000 (charger plugged in).
+2. **New video**: paste 1–3 YouTube links → pick an angle and a voice → Start.
+3. After 1–2 hours, open the run → **Publish kit** tab (or the folder in `%USERPROFILE%\storyforge-data\exports`).
+
+One-time setup: `docs/OWNER_SETUP.md`.
+
 ## Commands
 | What | Command |
 |---|---|

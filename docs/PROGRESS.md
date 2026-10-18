@@ -34,11 +34,21 @@
 - Loudness: gain + peak limiter loop (2-pass loudnorm could not lift peaky TTS speech without falling back to dynamic).
 - Run #33 (Mary Celeste, 90 s target) completed with real voice: 97.3 s, −14.22 LUFS, −3.3 dBTP, QA passed.
 
+### M3–M5 + Publish Kit (2026-10-18)
+- Images: Cloudflare FLUX + Real-ESRGAN 2× upscale; daily quota budget; stable cache keys; reuse fallback.
+- Remotion editing: camera motion, crossfades, kinetic text, chapter cards, film look; Shorts (9:16) and thumbnails.
+- Sound: synthesized SFX, mood music library with ducking, −14 LUFS.
+- Narration: TTS cache, instant atempo length fit, voice pace calibration (af_heart ≈ 151 wpm), keep-awake.
+- Publish Kit per run in `storyforge-data/exports/…` + dashboard tab; YouTube upload/veto/Telegram/autopilot (M5)
+  built and unit-tested, but not yet exercised against a real channel (needs the owner's Google client).
+- Full-length proof: run #65 "Dyatlov Pass", 11.5 min, QA passed, 8 sources, critic 9.0, 3 Shorts, 3 thumbnails.
+  Timings plugged in: AI ~10 min, narration 12 min, images ~6 min, render ~40 min, Shorts ~10 min.
+
 ## Next
-- ~~M3 picture~~ done: Cloudflare images (ADR-015) + Remotion editing (ADR-016).
-- One full-length (12–16 min) `local` run to measure Pro usage and CPU time per video.
-- Trim outline output tokens; consider `--json-schema` per stage.
+- Owner steps in `docs/OWNER_SETUP.md` (music, YouTube client, Telegram, power settings).
+- First real YouTube upload test once the Google client exists.
+- M6: analytics pulls + retention-based learning; M7: Film-analysis format.
 
 ## Blocked / needs owner
 - ~~NVIDIA API key~~ done (in `.env`). Images: NVIDIA FLUX not reachable, so pick another free image source before M3.
-- Docker Desktop must be started for the Postgres profile (the `h2` profile works without it).
+- See docs/OWNER_SETUP.md. Docker Desktop is optional (the `h2` profile works without it).
