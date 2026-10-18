@@ -36,7 +36,7 @@ public class FfmpegSlideshowRenderer implements RenderProvider {
         writeConcatList(edl, runRoot, list);
         EdlAudio mix = edl.audio().stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("EDL has no audio track"));
-        String filter = "fps=%d,scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
+        String filter = "fps=%d,scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1,format=yuv420p"
                 .formatted(edl.fps(), edl.width(), edl.height(), edl.width(), edl.height());
         ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error",
                 "-f", "concat", "-safe", "0", "-i", list.toString(),

@@ -6,5 +6,5 @@ public interface ImageProvider {
 
     String name();
 
-    ImageResult generate(ImageRequest request, Path outputPng);
+    ImageResult generate(ImageRequest request, Path outputImage);
 }

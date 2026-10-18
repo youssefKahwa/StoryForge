@@ -25,7 +25,11 @@ public record StoryForgeProperties(
         Qa qa,
         Publish publish,
         MediaSvc mediaSvc,
-        Narration narration) {
+        Narration narration,
+        Cloudflare cloudflare) {
+
+    public record Cloudflare(String accountId, String apiToken, String imageModel, int steps, long timeoutSeconds) {
+    }
 
     public record MediaSvc(String url, long timeoutSeconds) {
     }

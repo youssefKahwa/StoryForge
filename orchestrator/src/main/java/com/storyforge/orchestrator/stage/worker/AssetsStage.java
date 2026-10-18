@@ -19,12 +19,15 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AssetsStage implements StageWorker {
 
     private static final String GRAPHICS = "storyforge-graphics";
+    private static final Logger log = LoggerFactory.getLogger(AssetsStage.class);
 
     private final ImageProvider images;
     private final FormatRegistry formats;
@@ -51,6 +54,7 @@ public class AssetsStage implements StageWorker {
         ShotList shots = context.files().read(Stage.VISUAL_PLAN, "shotlist.json", ShotList.class);
         FormatDefinition.Style style = formats.get(context.run().format()).style();
         List<Asset> assets = new ArrayList<>();
+        int fallbacks = 0;
         for (Shot shot : shots.shots()) {
             String name = shot.id() + ".png";
             Path file = context.files().path(Stage.ASSETS, name);
@@ -62,8 +66,18 @@ public class AssetsStage implements StageWorker {
                         BigDecimal.ZERO, false, LicenseRecord.generated(GRAPHICS)));
                 continue;
             }
-            ImageResult result = images.generate(new ImageRequest(shot.prompt(), style.negativePrompt(), shot.seed(),
-                    video.width(), video.height(), shot.type(), shot.type() + " / scene " + shot.sceneId()), file);
+            ImageResult result;
+            try {
+                result = images.generate(new ImageRequest(shot.prompt(), style.negativePrompt(), shot.seed(),
+                        video.width(), video.height(), shot.type(), shot.type() + " / scene " + shot.sceneId()), file);
+            } catch (RuntimeException e) {
+                log.warn("Run {} {}: image provider failed, using a placeholder: {}", context.run().id(), shot.id(),
+                        e.getMessage());
+                CardRenderer.placeholder(file, video.width(), video.height(), shot.seed(), shot.type(), shot.prompt());
+                result = new ImageResult("placeholder-fallback", "java2d", BigDecimal.ZERO, false,
+                        LicenseRecord.generated("storyforge-placeholder"));
+                fallbacks++;
+            }
             if (result.costUsd().signum() > 0) {
                 context.usage().call(result.provider(), 0, 0, result.costUsd());
             } else {
@@ -71,6 +85,9 @@ public class AssetsStage implements StageWorker {
             }
             assets.add(new Asset(shot.id(), relative, shot.type(), result.provider(), result.model(), shot.prompt(),
                     shot.seed(), result.costUsd(), result.realistic(), result.license()));
+        }
+        if (fallbacks > 0) {
+            log.warn("Run {}: {} of {} images are placeholders", context.run().id(), fallbacks, shots.shots().size());
         }
         boolean realistic = assets.stream().anyMatch(Asset::realistic);
         context.files().write(Stage.ASSETS, "assets.json", new AssetManifest(realistic, assets));

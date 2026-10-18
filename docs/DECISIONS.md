@@ -148,3 +148,8 @@ The owner gives 1-3 YouTube links (often Darija/Arabic). Titles alone miss the d
   Free 10,000 neurons/day; schnell = 4.80 per 512² tile + 9.60 per step, about 58 neurons per 1024² image at 4 steps,
   so about 170 images/day (https://developers.cloudflare.com/workers-ai/platform/pricing/, 2026-10-18).
   FLUX.1-schnell is Apache-2.0. Needs a free Cloudflare account ID + API token (owner input).
+- Verified 2026-10-18 with the owner's token: 1024×1024 JPEG in ~1.4 s, no watermark. The model **rejects a `seed`
+  field** (error 5006), despite the docs example, so consistency relies on the Style Bible prompt plus a content-hash
+  image cache (`storyforge-data/cache/images`); re-runs cost no quota. Images are cover-cropped to 1920×1080 PNG on
+  save, because FFmpeg's concat input cannot mix codecs or frame sizes. A failed image falls back to a placeholder card
+  and QA raises the `content.real_images` warning.

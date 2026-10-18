@@ -108,6 +108,10 @@ public class QaService {
         checks.add(check("content.scenes_rendered", "content", CRITICAL, missingScenes.isEmpty(),
                 missingScenes.isEmpty() ? scenes.size() + " scene(s) rendered" : "missing " + missingScenes));
         checks.add(coverage(edl, files));
+        long placeholders = assets.assets().stream()
+                .filter(asset -> "placeholder-fallback".equals(asset.provider())).count();
+        checks.add(check("content.real_images", "content", WARNING, placeholders == 0,
+                placeholders == 0 ? "all images generated" : placeholders + " image(s) fell back to placeholders"));
 
         checks.addAll(factual(scenes, dossier, critique));
         checks.addAll(legal(assets, audio, edl));

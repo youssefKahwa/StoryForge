@@ -3,7 +3,7 @@ storyforge:
     only: claude-code
   providers:
     tts: kokoro
-    image: mock
+    image: cloudflare
     alignment: whisper
     render: ffmpeg
     publish: mock

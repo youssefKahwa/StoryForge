@@ -103,6 +103,12 @@ storyforge:
     lang: en-us
     max-wer: 0.15
     retry-speed-factor: 0.92
+  cloudflare:
+    account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+    api-token: ${CLOUDFLARE_API_TOKEN:}
+    image-model: "@cf/black-forest-labs/flux-1-schnell"
+    steps: 4
+    timeout-seconds: 120
   publish:
     day: SATURDAY
     time: "14:00"
