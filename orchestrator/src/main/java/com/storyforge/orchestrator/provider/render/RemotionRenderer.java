@@ -11,26 +11,31 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
 
 @Component
 @ConditionalOnProperty(prefix = "storyforge.providers", name = "render", havingValue = "remotion")
 public class RemotionRenderer implements RenderProvider {
 
     private static final Logger log = LoggerFactory.getLogger(RemotionRenderer.class);
-    private static final List<String> SYNCED = List.of("package.json", "render.mjs", "src");
+    private static final List<String> SYNCED = List.of("package.json", "render.mjs", "still.mjs", "src");
     private static final int TAIL = 3000;
+    private static final long STILL_TIMEOUT_SECONDS = 300;
 
     private final StoryForgeProperties.RenderSvc config;
     private final Path installDir;
     private final Path sourceDir;
+    private final JsonMapper json;
 
-    public RemotionRenderer(StoryForgeProperties properties) {
+    public RemotionRenderer(StoryForgeProperties properties, JsonMapper json) {
+        this.json = json;
         this.config = properties.renderSvc();
         this.installDir = Path.of(config.dir()).toAbsolutePath();
         this.sourceDir = Path.of(config.source()).toAbsolutePath();
@@ -74,6 +79,35 @@ public class RemotionRenderer implements RenderProvider {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new MediaException("Interrupted during Remotion render", e);
+        }
+    }
+
+    @Override
+    public void renderThumbnail(Path background, String text, List<String> palette, Path outputPng) {
+        syncSources();
+        Path props = outputPng.resolveSibling(outputPng.getFileName() + ".props.json");
+        Path logFile = outputPng.resolveSibling(outputPng.getFileName() + ".log");
+        try {
+            Files.writeString(props, json.writeValueAsString(Map.of(
+                    "background", background == null ? "" : background.toAbsolutePath().toString(),
+                    "text", text, "palette", palette == null ? List.of() : palette)), StandardCharsets.UTF_8);
+            Process process = new ProcessBuilder(config.node(), installDir.resolve("still.mjs").toString(),
+                    props.toString(), outputPng.toAbsolutePath().toString())
+                    .directory(installDir.toFile()).redirectErrorStream(true).redirectOutput(logFile.toFile()).start();
+            if (!process.waitFor(STILL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new MediaException("Thumbnail render timed out");
+            }
+            if (process.exitValue() != 0 || !Files.isRegularFile(outputPng)) {
+                throw new MediaException("Thumbnail render failed: " + Files.readString(logFile, StandardCharsets.UTF_8));
+            }
+            Files.deleteIfExists(props);
+            Files.deleteIfExists(logFile);
+        } catch (IOException e) {
+            throw new MediaException("Cannot render thumbnail with Remotion", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new MediaException("Interrupted during thumbnail render", e);
         }
     }
 

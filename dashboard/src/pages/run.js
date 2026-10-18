@@ -80,6 +80,15 @@ const RunPage = ({ location }) => {
         {thumbnail && (
           <Card size="small" title={<FormattedMessage id="run.thumbnail" />}>
             <img className="thumbnail" alt="thumbnail" src={`${ApiRoutes.runFile(run.id, 'package', thumbnail.name)}?v=${thumbnail.sizeBytes}`} />
+            {pkg && (pkg.thumbnailAlternates || []).length > 0 && (
+              <Row gutter={8} className="thumb-alternates">
+                {pkg.thumbnailAlternates.map((path) => (
+                  <Col span={12} key={path}>
+                    <img className="thumbnail" alt="alternate thumbnail" src={ApiRoutes.absolute(`/api/runs/${run.id}/files/${path}`)} />
+                  </Col>
+                ))}
+              </Row>
+            )}
           </Card>
         )}
         {pkg && (

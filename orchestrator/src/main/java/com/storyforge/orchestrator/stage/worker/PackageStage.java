@@ -1,8 +1,12 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.format.FormatDefinition;
+import com.storyforge.orchestrator.format.FormatRegistry;
+import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Edl;
 import com.storyforge.orchestrator.model.PackageDraft;
+import com.storyforge.orchestrator.model.PackageDraft.ThumbnailConcept;
 import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.TopicBrief;
@@ -10,15 +14,24 @@ import com.storyforge.orchestrator.model.VideoPackage;
 import com.storyforge.orchestrator.model.VideoPackage.ScoredTitle;
 import com.storyforge.orchestrator.packaging.DescriptionBuilder;
 import com.storyforge.orchestrator.packaging.TitleScorer;
+import com.storyforge.orchestrator.provider.image.ImageProvider;
+import com.storyforge.orchestrator.provider.image.ImageRequest;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
+import com.storyforge.orchestrator.provider.render.RenderProvider;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
-import com.storyforge.orchestrator.visual.CardRenderer;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -28,15 +41,67 @@ public class PackageStage implements StageWorker {
 
     private static final int TOP_TITLES = 3;
     private static final int MAX_THUMBNAIL_WORDS = 4;
-    private static final int THUMB_WIDTH = 1280;
-    private static final int THUMB_HEIGHT = 720;
+
+    private static final int MAX_THUMBNAILS = 3;
+    private static final Logger log = LoggerFactory.getLogger(PackageStage.class);
 
     private final LlmRouter llm;
     private final JsonMapper json;
+    private final ImageProvider images;
+    private final RenderProvider renderer;
+    private final FormatRegistry formats;
 
-    public PackageStage(LlmRouter llm, JsonMapper json) {
+    public PackageStage(LlmRouter llm, JsonMapper json, ImageProvider images, RenderProvider renderer,
+                        FormatRegistry formats) {
         this.llm = llm;
         this.json = json;
+        this.images = images;
+        this.renderer = renderer;
+        this.formats = formats;
+    }
+
+    private static List<ThumbnailConcept> concepts(PackageDraft draft, TopicBrief brief) {
+        List<ThumbnailConcept> concepts = new ArrayList<>();
+        if (draft.thumbnails() != null) {
+            draft.thumbnails().stream().filter(c -> c != null && c.text() != null && !c.text().isBlank())
+                    .limit(MAX_THUMBNAILS).forEach(c -> concepts.add(new ThumbnailConcept(shorten(c.text()),
+                            c.scene() == null ? brief.angle() : c.scene())));
+        }
+        if (concepts.isEmpty()) {
+            String text = draft.thumbnailText() != null ? draft.thumbnailText() : brief.title();
+            concepts.add(new ThumbnailConcept(shorten(text), brief.angle()));
+        }
+        return concepts;
+    }
+
+    private String thumbnail(StageContext context, ThumbnailConcept concept, FormatDefinition.Style style, int n) {
+        var files = context.files();
+        Path background = files.path(Stage.PACKAGE, "thumb_bg_" + n + ".png");
+        try {
+            images.generate(new ImageRequest(style.promptPrefix() + ", " + concept.scene()
+                    + ", one dramatic focal subject on the right, strong contrast, empty dark area on the left",
+                    style.negativePrompt(), context.run().id() * 100 + n, RenderProvider.THUMB_WIDTH,
+                    RenderProvider.THUMB_HEIGHT, "thumbnail", "thumbnail " + n), background);
+        } catch (RuntimeException e) {
+            log.warn("Run {} thumbnail {} background failed: {}", context.run().id(), n, e.getMessage());
+            background = null;
+        }
+        Path out = files.path(Stage.PACKAGE, "thumbnail_" + n + ".png");
+        renderer.renderThumbnail(background, concept.text(), style.palette(), out);
+        return files.relative(out);
+    }
+
+    private static List<String> musicCredits(AudioQa audio) {
+        return audio.tracks().stream()
+                .filter(track -> "music".equals(track.kind()) && track.license() != null)
+                .filter(track -> track.license().type() != null && track.license().type().startsWith("cc"))
+                .map(track -> track.license().evidence() != null ? track.license().evidence() : track.title())
+                .distinct().toList();
+    }
+
+    private static String shorten(String text) {
+        return Arrays.stream(text.strip().split("\\s+")).limit(MAX_THUMBNAIL_WORDS)
+                .collect(Collectors.joining(" "));
     }
 
     @Override
@@ -50,7 +115,7 @@ public class PackageStage implements StageWorker {
     }
 
     @Override
-    public void execute(StageContext context) {
+    public void execute(StageContext context) throws IOException {
         var files = context.files();
         TopicBrief brief = files.read(Stage.SELECT, "topic_brief.json", TopicBrief.class);
         Edl edl = files.read(Stage.ASSEMBLE, "edl.json", Edl.class);
@@ -68,15 +133,21 @@ public class PackageStage implements StageWorker {
         if (titles.isEmpty()) {
             throw new IllegalStateException("Packaging produced no usable titles");
         }
-        String rawThumbnail = draft.thumbnailText() != null ? draft.thumbnailText() : brief.title();
-        String thumbnailText = Arrays.stream(rawThumbnail.strip().split("\\s+"))
-                .limit(MAX_THUMBNAIL_WORDS).collect(Collectors.joining(" "));
-        CardRenderer.thumbnail(files.path(Stage.PACKAGE, "thumbnail.png"), THUMB_WIDTH, THUMB_HEIGHT,
-                context.run().id(), thumbnailText);
-        String description = DescriptionBuilder.build(draft.hookLine(), edl.chapters(), dossier.sources());
+        List<ThumbnailConcept> concepts = concepts(draft, brief);
+        FormatDefinition.Style style = formats.get(context.run().format()).style();
+        List<String> rendered = new ArrayList<>();
+        for (int i = 0; i < concepts.size(); i++) {
+            rendered.add(thumbnail(context, concepts.get(i), style, i + 1));
+        }
+        Files.copy(files.root().resolve(rendered.get(0)), files.path(Stage.PACKAGE, "thumbnail.png"),
+                StandardCopyOption.REPLACE_EXISTING);
+        List<String> credits = files.exists(Stage.AUDIO_MIX, "audio_qa.json")
+                ? musicCredits(files.read(Stage.AUDIO_MIX, "audio_qa.json", AudioQa.class)) : List.of();
+        String description = DescriptionBuilder.build(draft.hookLine(), edl.chapters(), dossier.sources(), credits);
         files.writeText(Stage.PACKAGE, "description.txt", description);
         files.write(Stage.PACKAGE, "package.json", new VideoPackage(titles.get(0).title(), titles, description,
                 draft.tags() == null ? List.of() : draft.tags(), draft.pinnedComment(),
-                Stage.PACKAGE.folder() + "/thumbnail.png", thumbnailText, edl.chapters(), qa.disclosureRequired()));
+                Stage.PACKAGE.folder() + "/thumbnail.png", concepts.get(0).text(),
+                rendered.subList(1, rendered.size()), edl.chapters(), qa.disclosureRequired()));
     }
 }

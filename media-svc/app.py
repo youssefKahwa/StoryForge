@@ -4,6 +4,7 @@ import difflib
 import os
 import re
 import threading
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -154,6 +155,83 @@ def transcript(request: TranscriptRequest):
         source = "whisper"
     return {"video_id": info.get("id"), "title": info.get("title"), "channel": info.get("channel"),
             "duration_sec": info.get("duration"), "language": language, "source": source, "transcript": text}
+
+
+SFX_RATE = 48_000
+
+
+class SfxRequest(BaseModel):
+    name: str
+    out_path: str
+
+
+def _envelope(n: int, attack: float, release: float) -> np.ndarray:
+    env = np.ones(n, dtype=np.float32)
+    a, r = max(1, int(n * attack)), max(1, int(n * release))
+    env[:a] = np.linspace(0, 1, a)
+    env[-r:] = np.linspace(1, 0, r) ** 2
+    return env
+
+
+def _lowpass(signal: np.ndarray, alpha: np.ndarray | float) -> np.ndarray:
+    out = np.empty_like(signal)
+    acc = 0.0
+    alphas = np.broadcast_to(alpha, signal.shape)
+    for i in range(len(signal)):
+        acc += alphas[i] * (signal[i] - acc)
+        out[i] = acc
+    return out
+
+
+def synth(name: str) -> np.ndarray:
+    rng = np.random.default_rng(zlib.crc32(name.encode()))
+    if name == "whoosh":
+        n = int(SFX_RATE * 0.9)
+        sweep = np.linspace(0.02, 0.35, n) ** 1.5
+        sweep = np.concatenate([sweep[: n // 2], sweep[: n // 2][::-1], sweep[-1:]])[:n]
+        sig = _lowpass(rng.standard_normal(n).astype(np.float32), sweep) * _envelope(n, 0.45, 0.5)
+    elif name == "low_hit":
+        n = int(SFX_RATE * 2.2)
+        t = np.arange(n) / SFX_RATE
+        freq = 55 * np.exp(-t * 1.2) + 30
+        tone = np.sin(2 * np.pi * np.cumsum(freq) / SFX_RATE)
+        thump = _lowpass(rng.standard_normal(n).astype(np.float32), 0.02) * np.exp(-t * 18) * 6
+        sig = (tone * np.exp(-t * 2.2) + thump).astype(np.float32)
+    elif name == "riser":
+        n = int(SFX_RATE * 3.0)
+        t = np.arange(n) / SFX_RATE
+        tone = np.sin(2 * np.pi * np.cumsum(np.linspace(110, 440, n)) / SFX_RATE) * 0.4
+        noise = _lowpass(rng.standard_normal(n).astype(np.float32), np.linspace(0.01, 0.3, n))
+        sig = ((tone + noise) * (t / t[-1]) ** 2 * _envelope(n, 0.02, 0.04)).astype(np.float32)
+    elif name == "wind":
+        n = int(SFX_RATE * 8.0)
+        brown = np.cumsum(rng.standard_normal(n)).astype(np.float32)
+        brown -= _lowpass(brown, 0.0005)
+        gust = 0.6 + 0.4 * np.sin(2 * np.pi * np.arange(n) / SFX_RATE * 0.23)
+        sig = brown * gust.astype(np.float32) * _envelope(n, 0.2, 0.25)
+    elif name == "tick":
+        n = int(SFX_RATE * 0.12)
+        t = np.arange(n) / SFX_RATE
+        sig = (np.sin(2 * np.pi * 2400 * t) * np.exp(-t * 120)).astype(np.float32)
+    elif name == "paper":
+        n = int(SFX_RATE * 0.7)
+        crackle = rng.standard_normal(n).astype(np.float32) * (rng.random(n) > 0.82)
+        sig = _lowpass(crackle, 0.45) * _envelope(n, 0.1, 0.5)
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown sfx {name}")
+    peak = float(np.max(np.abs(sig))) or 1.0
+    mono = sig / peak * 0.7
+    return np.stack([mono, mono], axis=1)
+
+
+@app.post("/sfx")
+def sfx(request: SfxRequest):
+    out = inside_data_dir(request.out_path)
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(out), synth(request.name), SFX_RATE, subtype="PCM_16")
+    info = sf.info(str(out))
+    return {"duration_sec": info.duration, "sample_rate": info.samplerate}
 
 
 @app.get("/health")

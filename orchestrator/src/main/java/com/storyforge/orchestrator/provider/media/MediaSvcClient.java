@@ -53,6 +53,11 @@ public class MediaSvcClient {
                 response.path("duration_sec").asDouble(0));
     }
 
+    public double sfx(String name, Path out) {
+        return post("/sfx", Map.of("name", name, "out_path", out.toAbsolutePath().toString()))
+                .path("duration_sec").asDouble(0);
+    }
+
     public VideoTranscript transcript(String videoUrl) {
         JsonNode response = post("/transcript", Map.of("url", videoUrl));
         JsonNode duration = response.path("duration_sec");

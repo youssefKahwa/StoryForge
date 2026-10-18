@@ -116,6 +116,14 @@ storyforge:
     timeout-seconds: 10800
     concurrency: 8
     burn-captions: false
+  sound:
+    enabled: false
+    library-dir: ${storyforge.data-dir}/library
+    default-music-license:
+      type: licensed
+      source: YouTube Audio Library
+      url: https://studio.youtube.com/
+      evidence: Downloaded by the owner from YouTube Studio Audio Library with "Attribution not required"
   publish:
     day: SATURDAY
     time: "14:00"

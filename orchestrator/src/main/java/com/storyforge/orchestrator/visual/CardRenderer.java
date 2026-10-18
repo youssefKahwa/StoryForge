@@ -62,9 +62,24 @@ public final class CardRenderer {
         write(image, out);
     }
 
-    public static void thumbnail(Path out, int width, int height, long seed, String text) {
+    public static void thumbnail(Path out, int width, int height, long seed, String text, Path background) {
         BufferedImage image = canvas(width, height, seed);
         Graphics2D g = graphics(image);
+        if (background != null) {
+            try {
+                BufferedImage source = ImageIO.read(background.toFile());
+                if (source != null) {
+                    double scale = Math.max((double) width / source.getWidth(), (double) height / source.getHeight());
+                    int w = (int) Math.ceil(source.getWidth() * scale);
+                    int h = (int) Math.ceil(source.getHeight() * scale);
+                    g.drawImage(source, (width - w) / 2, (height - h) / 2, w, h, null);
+                    g.setColor(new Color(0, 0, 0, 110));
+                    g.fillRect(0, 0, width, height);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, height / 5));
         FontMetrics metrics = g.getFontMetrics();
         List<String> lines = wrap(metrics, text.toUpperCase(Locale.ROOT), width * 9 / 10);

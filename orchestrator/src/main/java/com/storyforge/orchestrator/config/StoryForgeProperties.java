@@ -1,6 +1,7 @@
 package com.storyforge.orchestrator.config;
 
 import com.storyforge.orchestrator.format.VideoFormat;
+import com.storyforge.orchestrator.model.LicenseRecord;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -27,7 +28,11 @@ public record StoryForgeProperties(
         MediaSvc mediaSvc,
         Narration narration,
         Cloudflare cloudflare,
-        RenderSvc renderSvc) {
+        RenderSvc renderSvc,
+        Sound sound) {
+
+    public record Sound(boolean enabled, String libraryDir, LicenseRecord defaultMusicLicense) {
+    }
 
     public record RenderSvc(String dir, String source, String node, long timeoutSeconds, int concurrency,
                             boolean burnCaptions) {

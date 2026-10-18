@@ -62,7 +62,7 @@ class ClaudeCodeLlmProviderTest {
         StoryForgeProperties.Llm llm = new StoryForgeProperties.Llm(true, "", List.of("claude-code"), Map.of(), 2, 2,
                 claude);
         StoryForgeProperties properties = new StoryForgeProperties("target", "../prompts", "../config", List.of(),
-                null, null, null, null, null, null, null, llm, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, llm, null, null, null, null, null, null, null);
         return new ClaudeCodeLlmProvider(properties, JsonMapper.builder().build());
     }
 }

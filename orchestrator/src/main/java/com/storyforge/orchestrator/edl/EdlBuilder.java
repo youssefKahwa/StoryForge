@@ -37,7 +37,7 @@ public final class EdlBuilder {
                 shots, audio, captions, chapters(scenes, alignment, outline), style);
     }
 
-    static List<EdlChapter> chapters(List<Scene> scenes, Alignment alignment, Outline outline) {
+    public static List<EdlChapter> chapters(List<Scene> scenes, Alignment alignment, Outline outline) {
         Map<String, String> titles = new HashMap<>();
         outline.beats().forEach(beat -> {
             if (beat.chapterTitle() != null && !beat.chapterTitle().isBlank()) {

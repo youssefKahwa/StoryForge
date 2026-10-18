@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.2.0
 tier: fast
 ---
 ## system
@@ -17,4 +17,7 @@ Return:
  "hookLine": "first line of the description, one sentence",
  "tags": ["8-15 tags"],
  "pinnedComment": "one engagement question for viewers",
- "thumbnailText": "<= 4 words"}
+ "thumbnailText": "<= 4 words",
+ "thumbnails": [{"text": "<= 4 punchy words, different from the title", "scene": "one paintable scene with a single
+                 dramatic focal subject, no real people's faces, no text"}]}
+Give exactly 3 thumbnail concepts, each with a different emotional hook (mystery, danger, revelation).

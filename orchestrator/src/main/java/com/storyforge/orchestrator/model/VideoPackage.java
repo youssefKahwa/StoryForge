@@ -10,6 +10,7 @@ public record VideoPackage(
         String pinnedComment,
         String thumbnail,
         String thumbnailText,
+        List<String> thumbnailAlternates,
         List<Edl.EdlChapter> chapters,
         boolean disclosureRequired) {
 

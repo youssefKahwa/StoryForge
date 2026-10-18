@@ -12,7 +12,8 @@ public final class DescriptionBuilder {
     private DescriptionBuilder() {
     }
 
-    public static String build(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources) {
+    public static String build(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources,
+                               List<String> musicCredits) {
         StringBuilder out = new StringBuilder();
         out.append(hookLine.strip()).append("\n\n");
         if (!chapters.isEmpty()) {
@@ -26,6 +27,11 @@ public final class DescriptionBuilder {
             sources.forEach(source -> out.append("- ").append(source.title())
                     .append(source.publisher() == null ? "" : " (" + source.publisher() + ")")
                     .append(": ").append(source.url()).append('\n'));
+            out.append('\n');
+        }
+        if (!musicCredits.isEmpty()) {
+            out.append("Music\n");
+            musicCredits.forEach(credit -> out.append("- ").append(credit).append('\n'));
             out.append('\n');
         }
         out.append(AI_DISCLOSURE).append('\n');

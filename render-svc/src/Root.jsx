@@ -1,6 +1,7 @@
 import React from 'react';
-import { Composition } from 'remotion';
+import { Composition, Still } from 'remotion';
 import { LongForm } from './LongForm';
+import { Thumbnail } from './Thumbnail';
 
 const SAMPLE_EDL = {
   version: 2,
@@ -18,19 +19,28 @@ const SAMPLE_EDL = {
 };
 
 export const Root = () => (
-  <Composition
-    id="LongForm"
-    component={LongForm}
-    width={1920}
-    height={1080}
-    fps={30}
-    durationInFrames={180}
-    defaultProps={{ edl: SAMPLE_EDL, assetBase: '' }}
-    calculateMetadata={({ props }) => ({
-      durationInFrames: Math.max(1, Math.round(props.edl.durationSec * props.edl.fps)),
-      fps: props.edl.fps,
-      width: props.edl.width,
-      height: props.edl.height,
-    })}
-  />
+  <>
+    <Composition
+      id="LongForm"
+      component={LongForm}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={180}
+      defaultProps={{ edl: SAMPLE_EDL, assetBase: '' }}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: Math.max(1, Math.round(props.edl.durationSec * props.edl.fps)),
+        fps: props.edl.fps,
+        width: props.edl.width,
+        height: props.edl.height,
+      })}
+    />
+    <Still
+      id="Thumbnail"
+      component={Thumbnail}
+      width={1280}
+      height={720}
+      defaultProps={{ background: null, text: 'Story preview', palette: SAMPLE_EDL.style.palette }}
+    />
+  </>
 );

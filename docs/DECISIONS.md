@@ -167,3 +167,17 @@ The owner gives 1-3 YouTube links (often Darija/Arabic). Titles alone miss the d
   captions (off; YouTube gets captions.srt).
 - Speed on the i7-1255U: 97 s of video renders in 401 s at concurrency 8 (≈4× real time), so about 60 minutes for a
   15-minute video. The per-frame SVG turbulence grain was the main cost (587 s before).
+
+## ADR-017 Sound design and thumbnails (2026-10-18)
+- SFX are synthesized by media-svc `/sfx` (numpy: whoosh, low_hit, riser, wind, tick, paper), so we own them and there
+  is no third-party license. They are cached in `storyforge-data/library/sfx`. `@sfx` cues map to presets by keyword
+  and are placed on the anchor word's Whisper time; every chapter change gets a whoosh; cues are at least 6 s apart.
+- Music comes only from the owner's library `storyforge-data/library/music/<mood>/` (dread, tension, mystery, calm,
+  hope, sad, epic). Free-text `@music` moods map to these folders. Consecutive scenes with the same mood form one
+  segment (merged if under 20 s), with 1.5 s fades and the bed at −20…−14 dB by intensity. The music is ducked under
+  the voice with FFmpeg `sidechaincompress`, and the final mix runs through the gain + limiter loudness loop.
+  Default license: YouTube Audio Library "attribution not required". `licenses.json` overrides it per file, and CC-BY
+  credits are added to the description automatically. An empty library mixes voice + SFX only.
+- Thumbnails: Claude proposes 3 concepts (≤ 4 words + scene), Cloudflare paints each background (1280×720), and the
+  Remotion `Thumbnail` still (Anton font, accent last word, dark gradient) renders them. #1 is the thumbnail and #2-#3
+  are kept as alternates.

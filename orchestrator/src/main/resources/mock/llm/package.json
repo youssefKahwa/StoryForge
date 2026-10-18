@@ -14,5 +14,10 @@
   "hookLine": "At three in the morning the signal stopped, and the story everyone thinks they know began.",
   "tags": ["{{topic}}", "mystery", "history", "unsolved", "documentary", "storytelling", "true story", "mock"],
   "pinnedComment": "Who do you think wrote the entries after Tuesday?",
-  "thumbnailText": "A Different Hand"
+  "thumbnailText": "A Different Hand",
+  "thumbnails": [
+    { "text": "A Different Hand", "scene": "an old logbook under a lamp, two handwriting styles" },
+    { "text": "Nobody Came Back", "scene": "an empty pier in thick fog at dawn" },
+    { "text": "The Missing Hours", "scene": "a stopped pocket watch on a wet wooden deck" }
+  ]
 }

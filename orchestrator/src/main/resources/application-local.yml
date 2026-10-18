@@ -1,4 +1,6 @@
 storyforge:
+  sound:
+    enabled: true
   llm:
     only: claude-code
   providers:
