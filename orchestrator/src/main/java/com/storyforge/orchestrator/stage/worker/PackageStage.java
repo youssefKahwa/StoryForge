@@ -23,6 +23,8 @@ import com.storyforge.orchestrator.provider.image.ImageProvider;
 import com.storyforge.orchestrator.provider.image.ImageRequest;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
 import com.storyforge.orchestrator.provider.render.RenderProvider;
+import com.storyforge.orchestrator.settings.Preferences;
+import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
@@ -57,10 +59,12 @@ public class PackageStage implements StageWorker {
     private final RenderProvider renderer;
     private final FormatRegistry formats;
     private final StoryForgeProperties.Shorts shortsConfig;
+    private final PreferencesService preferences;
 
     public PackageStage(LlmRouter llm, JsonMapper json, ImageProvider images, RenderProvider renderer,
-                        FormatRegistry formats, StoryForgeProperties properties) {
+                        FormatRegistry formats, StoryForgeProperties properties, PreferencesService preferences) {
         this.shortsConfig = properties.shorts();
+        this.preferences = preferences;
         this.llm = llm;
         this.json = json;
         this.images = images;
@@ -102,14 +106,15 @@ public class PackageStage implements StageWorker {
 
     private List<PublishKit.ShortClip> shorts(StageContext context, Edl edl, PackageDraft draft, TopicBrief brief,
                                               String longTitle) {
-        if (!shortsConfig.enabled() || !renderer.supportsShorts()) {
+        Preferences prefs = preferences.get();
+        if (!prefs.shortsEnabled() || prefs.shortsCount() == 0 || !renderer.supportsShorts()) {
             return List.of();
         }
         var files = context.files();
         List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
         Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
         String audio = files.relative(files.path(Stage.AUDIO_MIX, AudioMixStage.MIX));
-        List<ShortsPlanner.Moment> moments = ShortsPlanner.pick(scenes, alignment, shortsConfig.count(),
+        List<ShortsPlanner.Moment> moments = ShortsPlanner.pick(scenes, alignment, prefs.shortsCount(),
                 shortsConfig.maxSeconds());
         List<PublishKit.ShortClip> clips = new ArrayList<>();
         for (int i = 0; i < moments.size(); i++) {

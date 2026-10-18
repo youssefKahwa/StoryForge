@@ -3,7 +3,9 @@ import ApiRoutes from '../../api/ApiRoutes';
 import http from '../../api/http';
 import { withCallbacks } from '../sagaHelpers';
 import {
-  disconnectYouTube, fetchSettings, fetchYouTube, setKillSwitch, setSettings, setYouTube, testNotification,
+  cleanupStorage, disconnectYouTube, fetchPreferences, fetchSettings, fetchStorage, fetchSystemCheck, fetchYouTube,
+  resetPreferences, savePreferences, setKillSwitch, setPreferences, setSettings, setStorage, setSystemCheck,
+  setYouTube, testNotification,
 } from './settingsSlice';
 
 function* handleFetchSettings({ payload }) {
@@ -43,6 +45,50 @@ function* handleTestNotification({ payload }) {
   yield* withCallbacks(payload, call(http.post, ApiRoutes.testNotification()));
 }
 
+function* storePreferences(effect) {
+  const preferences = yield effect;
+  yield put(setPreferences(preferences));
+  return preferences;
+}
+
+function* handleFetchPreferences({ payload }) {
+  yield* withCallbacks(payload, call(storePreferences, call(http.get, ApiRoutes.preferences())));
+}
+
+function* handleSavePreferences({ payload }) {
+  yield* withCallbacks(payload, call(storePreferences, call(http.put, ApiRoutes.preferences(), payload.preferences)));
+}
+
+function* handleResetPreferences({ payload }) {
+  yield* withCallbacks(payload, call(storePreferences, call(http.post, ApiRoutes.resetPreferences())));
+}
+
+function* handleFetchSystemCheck({ payload }) {
+  yield* withCallbacks(payload, call(function* load() {
+    const report = yield call(http.get, ApiRoutes.systemCheck());
+    yield put(setSystemCheck(report));
+    return report;
+  }));
+}
+
+function* loadStorage(days) {
+  const storage = yield call(http.get, ApiRoutes.storage(days));
+  yield put(setStorage(storage));
+  return storage;
+}
+
+function* handleFetchStorage({ payload }) {
+  yield* withCallbacks(payload, call(loadStorage, payload.days));
+}
+
+function* handleCleanupStorage({ payload }) {
+  yield* withCallbacks(payload, call(function* clean() {
+    const result = yield call(http.post, ApiRoutes.cleanup(payload.days));
+    yield call(loadStorage, payload.days);
+    return result;
+  }));
+}
+
 export default function* settingsSaga() {
   yield all([
     takeLatest(fetchSettings.type, handleFetchSettings),
@@ -50,5 +96,11 @@ export default function* settingsSaga() {
     takeLatest(fetchYouTube.type, handleFetchYouTube),
     takeEvery(disconnectYouTube.type, handleDisconnectYouTube),
     takeEvery(testNotification.type, handleTestNotification),
+    takeLatest(fetchPreferences.type, handleFetchPreferences),
+    takeEvery(savePreferences.type, handleSavePreferences),
+    takeEvery(resetPreferences.type, handleResetPreferences),
+    takeLatest(fetchSystemCheck.type, handleFetchSystemCheck),
+    takeLatest(fetchStorage.type, handleFetchStorage),
+    takeEvery(cleanupStorage.type, handleCleanupStorage),
   ]);
 }

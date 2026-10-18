@@ -13,8 +13,8 @@ public class KeepAwake {
     private static final Logger log = LoggerFactory.getLogger(KeepAwake.class);
     private static final String SCRIPT = "Add-Type -Namespace StoryForge -Name Power -MemberDefinition "
             + "'[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; "
-            + "while ($true) { [StoryForge.Power]::SetThreadExecutionState(0x80000001) | Out-Null; "
-            + "Start-Sleep -Seconds 30 }";
+            + "while (Get-Process -Id %d -ErrorAction SilentlyContinue) { "
+            + "[StoryForge.Power]::SetThreadExecutionState(0x80000001) | Out-Null; Start-Sleep -Seconds 30 }";
 
     private final boolean enabled;
     private Process process;
@@ -29,7 +29,8 @@ public class KeepAwake {
             return;
         }
         try {
-            process = new ProcessBuilder("powershell", "-NoProfile", "-NonInteractive", "-Command", SCRIPT)
+            String script = SCRIPT.formatted(ProcessHandle.current().pid());
+            process = new ProcessBuilder("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
                     .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
             log.info("Keeping Windows awake while the run is active");
         } catch (IOException e) {

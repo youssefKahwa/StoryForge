@@ -2,6 +2,7 @@ package com.storyforge.orchestrator.provider.image;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.media.FfmpegService;
+import com.storyforge.orchestrator.settings.PreferencesService;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -22,10 +23,12 @@ public class ImageFinisher {
 
     private final FfmpegService ffmpeg;
     private final StoryForgeProperties.Upscaler config;
+    private final PreferencesService preferences;
     private volatile boolean upscalerBroken;
 
-    public ImageFinisher(FfmpegService ffmpeg, StoryForgeProperties properties) {
+    public ImageFinisher(FfmpegService ffmpeg, StoryForgeProperties properties, PreferencesService preferences) {
         this.ffmpeg = ffmpeg;
+        this.preferences = preferences;
         this.config = properties.upscaler();
     }
 
@@ -47,7 +50,7 @@ public class ImageFinisher {
     }
 
     private boolean upscale(Path input, Path output) {
-        if (!config.enabled() || upscalerBroken) {
+        if (!config.enabled() || upscalerBroken || !preferences.get().upscaleImages()) {
             return false;
         }
         Path exe = Path.of(config.executable());

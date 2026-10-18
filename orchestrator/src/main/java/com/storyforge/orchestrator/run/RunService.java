@@ -4,6 +4,8 @@ import com.storyforge.orchestrator.api.NotFoundException;
 import com.storyforge.orchestrator.artifact.ArtifactStore;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.dto.CreateRunRequest;
+import com.storyforge.orchestrator.settings.Preferences;
+import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.topic.SeedTopic;
 import com.storyforge.orchestrator.topic.SeedTopicService;
@@ -23,10 +25,12 @@ public class RunService {
     private final SeedTopicService seedTopics;
     private final ArtifactStore artifacts;
     private final StoryForgeProperties properties;
+    private final PreferencesService preferences;
     private final String profile;
 
     public RunService(RunRepository repository, SeedTopicService seedTopics, ArtifactStore artifacts,
-                      StoryForgeProperties properties, Environment environment) {
+                      StoryForgeProperties properties, PreferencesService preferences, Environment environment) {
+        this.preferences = preferences;
         this.repository = repository;
         this.seedTopics = seedTopics;
         this.artifacts = artifacts;
@@ -57,18 +61,21 @@ public class RunService {
             seedTopics.markUsed(seed.getId());
         } else if (request.topicTitle() != null && !request.topicTitle().isBlank()) {
             run.setTopicTitle(request.topicTitle().trim());
-            run.setFormat(request.format() != null ? request.format() : properties.defaults().format());
+            run.setFormat(request.format() != null ? request.format()
+                    : preferences.saved().map(Preferences::defaultFormat).orElse(properties.defaults().format()));
             run.setLanguage(request.language() != null ? request.language() : properties.defaults().language());
         } else {
             throw new IllegalArgumentException("Either seedTopicId or topicTitle is required");
         }
         run.setInspirationId(request.inspirationId());
         run.setAngle(blankToNull(request.angle()));
-        run.setVoice(blankToNull(request.voice()));
+        run.setVoice(blankToNull(request.voice()) != null ? blankToNull(request.voice())
+                : preferences.saved().map(Preferences::defaultVoice).orElse(null));
         Instant now = Instant.now();
         run.setTargetSeconds(request.targetMinutes() != null
                 ? (int) Math.round(request.targetMinutes() * 60)
-                : properties.defaults().targetSeconds());
+                : preferences.saved().map(p -> (int) Math.round(p.defaultMinutes() * 60))
+                        .orElse(properties.defaults().targetSeconds()));
         run.setProfile(profile);
         run.setState(RunState.CREATED);
         run.setStatus(RunStatus.QUEUED);

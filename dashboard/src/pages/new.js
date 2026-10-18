@@ -11,6 +11,7 @@ import ApiRoutes from '../api/ApiRoutes';
 import AppLayout from '../components/AppLayout';
 import usePolling from '../hooks/usePolling';
 import { createRun } from '../store/runs/runsSlice';
+import { fetchPreferences } from '../store/settings/settingsSlice';
 import {
   createInspiration, fetchInspiration, fetchVoices, selectInspiration, selectVoices, setInspiration,
 } from '../store/wizard/wizardSlice';
@@ -36,6 +37,11 @@ const NewVideoPage = ({ location }) => {
   useEffect(() => {
     dispatch(setInspiration(null));
     dispatch(fetchVoices({ onFail }));
+    dispatch(fetchPreferences({
+      onSuccess: (prefs) => setDraft((d) => ({
+        ...d, minutes: prefs.defaultMinutes, format: prefs.defaultFormat, voice: prefs.defaultVoice || d.voice,
+      })),
+    }));
   }, [dispatch]);
 
   useEffect(() => {
@@ -187,7 +193,7 @@ const NewVideoPage = ({ location }) => {
               <Input.TextArea rows={2} value={draft.angle} maxLength={2000} onChange={(e) => setDraft({ ...draft, angle: e.target.value })} />
             </Descriptions.Item>
             <Descriptions.Item label={intl.formatMessage({ id: 'newRun.format' })}>
-              <Select value={draft.format} onChange={(format) => setDraft({ ...draft, format })} options={FORMATS.map((f) => ({ value: f, label: f }))} />
+              <Select value={draft.format} onChange={(format) => setDraft({ ...draft, format })} options={FORMATS.map((f) => ({ value: f, label: intl.formatMessage({ id: `format.${f}` }) }))} />
             </Descriptions.Item>
             <Descriptions.Item label={intl.formatMessage({ id: 'wizard.angle.minutes' })}>
               <InputNumber min={1} max={30} value={draft.minutes} onChange={(minutes) => setDraft({ ...draft, minutes })} />

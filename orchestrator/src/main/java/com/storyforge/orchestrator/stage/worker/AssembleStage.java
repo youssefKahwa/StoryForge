@@ -15,6 +15,7 @@ import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.provider.render.RenderProvider;
 import com.storyforge.orchestrator.qa.QaService;
+import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
@@ -31,13 +32,14 @@ public class AssembleStage implements StageWorker {
     private final RenderProvider renderer;
     private final FormatRegistry formats;
     private final StoryForgeProperties.Video video;
-    private final boolean burnCaptions;
+    private final PreferencesService preferences;
 
-    public AssembleStage(RenderProvider renderer, FormatRegistry formats, StoryForgeProperties properties) {
+    public AssembleStage(RenderProvider renderer, FormatRegistry formats, StoryForgeProperties properties,
+                         PreferencesService preferences) {
         this.renderer = renderer;
         this.formats = formats;
         this.video = properties.video();
-        this.burnCaptions = properties.renderSvc() != null && properties.renderSvc().burnCaptions();
+        this.preferences = preferences;
     }
 
     @Override
@@ -65,7 +67,7 @@ public class AssembleStage implements StageWorker {
         FormatDefinition.Style style = formats.get(context.run().format()).style();
         Edl edl = EdlBuilder.build(new EdlBuilder.Frame(video.width(), video.height(), video.fps()), scenes,
                 alignment, shots, assets, outline, audio, captions,
-                new Edl.EdlStyle(style.fonts(), style.palette(), burnCaptions));
+                new Edl.EdlStyle(style.fonts(), style.palette(), preferences.get().burnCaptions()));
 
         files.write(Stage.ASSEMBLE, "edl.json", edl);
         files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions));

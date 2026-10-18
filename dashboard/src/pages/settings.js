@@ -6,6 +6,9 @@ import ApiRoutes from '../api/ApiRoutes';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import AppLayout from '../components/AppLayout';
+import PreferencesCard from '../components/PreferencesCard';
+import StorageCard from '../components/StorageCard';
+import SystemCheckCard from '../components/SystemCheckCard';
 import {
   disconnectYouTube, fetchYouTube, selectSettings, selectYouTube, setKillSwitch, testNotification,
 } from '../store/settings/settingsSlice';
@@ -35,6 +38,8 @@ const SettingsPage = ({ location }) => {
             <Alert type={result === 'connected' ? 'success' : 'warning'} showIcon
               message={intl.formatMessage({ id: `youtube.result.${result}` })} />
           )}
+          <SystemCheckCard />
+          <PreferencesCard />
           <Card size="small" title={<FormattedMessage id="youtube.title" />}>
             {!youtube ? <Spin /> : (
               <Space direction="vertical">
@@ -60,6 +65,7 @@ const SettingsPage = ({ location }) => {
               </Space>
             )}
           </Card>
+          <StorageCard />
           <Card size="small" title={<FormattedMessage id="settings.killSwitch" />}>
             <Space>
               <Switch checked={settings.paused} onChange={toggle} checkedChildren="PAUSED" unCheckedChildren="ACTIVE" />

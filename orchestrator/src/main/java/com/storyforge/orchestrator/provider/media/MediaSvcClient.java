@@ -23,8 +23,10 @@ public class MediaSvcClient {
 
     private final RestClient client;
     private final String url;
+    private final MediaSvcLauncher launcher;
 
-    public MediaSvcClient(StoryForgeProperties properties) {
+    public MediaSvcClient(StoryForgeProperties properties, MediaSvcLauncher launcher) {
+        this.launcher = launcher;
         this.url = properties.mediaSvc().url();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
@@ -68,6 +70,9 @@ public class MediaSvcClient {
     }
 
     private JsonNode post(String path, Map<String, Object> body) {
+        if (!launcher.healthy()) {
+            launcher.ensureRunning();
+        }
         try {
             JsonNode response = client.post().uri(path).contentType(MediaType.APPLICATION_JSON).body(body)
                     .retrieve().body(JsonNode.class);

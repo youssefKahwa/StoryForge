@@ -19,9 +19,13 @@ spring:
     deserialization:
       fail-on-null-for-primitives: false
       fail-on-unknown-properties: false
+    datatype:
+      enum:
+        read-unknown-enum-values-as-null: true
 
 server:
   port: 8080
+  address: 127.0.0.1
 
 management:
   endpoints:
@@ -97,6 +101,9 @@ storyforge:
   media-svc:
     url: http://127.0.0.1:8090
     timeout-seconds: 900
+    autostart: true
+    python: ${user.home}/.storyforge/media-venv/Scripts/python.exe
+    dir: ../media-svc
   narration:
     voice: af_heart
     speed: 1.0
@@ -125,7 +132,8 @@ storyforge:
       source: YouTube Audio Library
       url: https://studio.youtube.com/
       evidence: Downloaded by the owner from YouTube Studio Audio Library with "Attribution not required"
-  dashboard-url: http://localhost:8000
+  dashboard-url: ${STORYFORGE_DASHBOARD_URL:http://localhost:8080}
+  dashboard-dir: ../dashboard/public
   youtube:
     client-id: ${GOOGLE_CLIENT_ID:}
     client-secret: ${GOOGLE_CLIENT_SECRET:}

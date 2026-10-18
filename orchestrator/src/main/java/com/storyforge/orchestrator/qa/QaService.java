@@ -113,6 +113,14 @@ public class QaService {
         checks.add(check("content.real_images", "content", WARNING, placeholders == 0,
                 placeholders == 0 ? "all images generated" : placeholders + " image(s) reused or placeholder (quota?)"));
 
+        if (properties.sound() != null && properties.sound().enabled()) {
+            long musicTracks = audio.tracks() == null ? 0
+                    : audio.tracks().stream().filter(track -> "music".equals(track.kind())).count();
+            checks.add(check("audio.music", "content", WARNING, musicTracks > 0,
+                    musicTracks > 0 ? musicTracks + " music track(s)"
+                            : "no background music (library empty or music volume off): voice and SFX only"));
+        }
+
         checks.addAll(factual(scenes, dossier, critique));
         checks.addAll(legal(assets, audio, edl));
         checks.add(originality(run, scenes));

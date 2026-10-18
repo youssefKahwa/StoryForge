@@ -44,6 +44,19 @@
 - Full-length proof: run #65 "Dyatlov Pass", 11.5 min, QA passed, 8 sources, critic 9.0, 3 Shorts, 3 thumbnails.
   Timings plugged in: AI ~10 min, narration 12 min, images ~6 min, render ~40 min, Shorts ~10 min.
 
+### Recheck + quality-of-life upgrades (2026-10-18)
+- Fixes: API binds to 127.0.0.1 only; keep-awake helper exits with the API (no orphan PowerShell); unknown enum
+  values in stored JSON read as null instead of failing; media-svc starts automatically when a run needs it.
+- One command: `scripts/start.ps1` builds the dashboard when its sources changed, and Spring serves it at :8080
+  (Gatsby folder pages and `/run?id=` deep links work, so Telegram links open directly).
+- Preferences (Settings, stored in DB): default voice/length/format, Shorts on/off and count, burned captions,
+  AI upscale, music volume (off/low/normal/high), publish day/time/audience zone. Used by new runs and stages.
+- System check card: Claude Code, FFmpeg, media-svc, Remotion, Real-ESRGAN, Cloudflare quota left, music per mood,
+  free disk, YouTube, Telegram, each with a fix hint.
+- Storage card: free disk, run/export sizes, cleanup of media in completed runs older than N days (exports kept).
+- QA warning `audio.music` when a video ends up without background music.
+- Tests: 43 passing (new: preferences E2E, system check, storage cleanup).
+
 ## Next
 - Owner steps in `docs/OWNER_SETUP.md` (music, YouTube client, Telegram, power settings).
 - First real YouTube upload test once the Google client exists.

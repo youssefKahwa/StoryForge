@@ -50,7 +50,7 @@ class SoundDesignerTest {
                 "hope", List.of(new MusicLibrary.Track("hope", Path.of("h.mp3"), "hope/h.mp3", LICENSE)));
 
         SoundPlan plan = SoundDesigner.plan(scenes, alignment, List.of(new EdlChapter(0, "One"),
-                new EdlChapter(60, "Two")), library, 1, preset -> preset + ".wav");
+                new EdlChapter(60, "Two")), library, 1, preset -> preset + ".wav", 0);
 
         assertThat(plan.music()).extracting(SoundPlan.MusicSegment::mood).containsExactly("dread", "hope");
         assertThat(plan.music().get(0).end()).isEqualTo(60.75);

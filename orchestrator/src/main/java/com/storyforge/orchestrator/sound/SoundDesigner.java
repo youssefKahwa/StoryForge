@@ -32,15 +32,15 @@ public final class SoundDesigner {
 
     public static SoundPlan plan(List<Scene> scenes, Alignment alignment, List<EdlChapter> chapters,
                                  Map<String, List<Track>> library, long seed,
-                                 Function<String, String> sfxFile) {
+                                 Function<String, String> sfxFile, double musicOffsetDb) {
         Map<String, SceneSpan> spans = alignment.scenes().stream()
                 .collect(Collectors.toMap(SceneSpan::sceneId, Function.identity()));
-        return new SoundPlan(music(scenes, spans, alignment.durationSec(), library, seed),
+        return new SoundPlan(music(scenes, spans, alignment.durationSec(), library, seed, musicOffsetDb),
                 sfx(scenes, spans, alignment, chapters, sfxFile));
     }
 
     static List<MusicSegment> music(List<Scene> scenes, Map<String, SceneSpan> spans, double duration,
-                                    Map<String, List<Track>> library, long seed) {
+                                    Map<String, List<Track>> library, long seed, double musicOffsetDb) {
         List<double[]> ranges = new ArrayList<>();
         List<String> segmentMoods = new ArrayList<>();
         List<Double> intensities = new ArrayList<>();
@@ -78,7 +78,7 @@ public final class SoundDesigner {
             }
             double start = Math.max(0, ranges.get(i)[0] - (i == 0 ? 0 : CROSSFADE / 2));
             double end = Math.min(duration, ranges.get(i)[1] + (i == ranges.size() - 1 ? 0 : CROSSFADE / 2));
-            double gain = -20 + 6 * Math.max(0, Math.min(1, intensities.get(i)));
+            double gain = -20 + 6 * Math.max(0, Math.min(1, intensities.get(i))) + musicOffsetDb;
             segments.add(new MusicSegment(track.mood(), track.file().toString(), track.relativeName(),
                     round(start), round(end), round(gain)));
             previousFile = track.file().toString();

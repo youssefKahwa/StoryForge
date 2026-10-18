@@ -212,3 +212,16 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
 - Shorts: up to 3 moments from strong beats (cold open, midpoint twist, climax…), at most 52.5 s + a 2.5 s end card
   ("Full story on the channel"), rendered by the Remotion `Short` composition (1080×1920, hook title, 3-word kinetic
   captions with the active word highlighted). The audio is a slice of the final mix (`trimBefore`).
+
+## ADR-021 Preferences in the DB, one-process start, storage cleanup (2026-10-18, owner request)
+- Context: weekly use by one person; changing YAML for everyday choices and juggling three windows is friction.
+- Decision: user-facing defaults live in `app_setting` key `preferences` (JSON) and override `application.yml`
+  defaults at the point of use (run creation, Package, Assemble, ImageFinisher, AudioMix, Schedule). YAML stays the
+  source of the factory defaults (`POST /api/preferences/reset`). Spring serves the built dashboard from
+  `../dashboard/public` (custom `PathResourceResolver`: file, then `<path>/index.html`, then `404.html`); the
+  dashboard uses same-origin API calls when served on :8080 and `GATSBY_API_URL` in `gatsby develop`.
+  Cleanup deletes only media files (wav/mp3/png/jpg/webp/mp4…) of COMPLETED runs older than N days; failed and
+  cancelled runs keep everything so they stay resumable; exports are separate hard links and survive.
+- Consequences: `dashboard-url` defaults to http://localhost:8080 (`dev.ps1` sets :8000). Rebuild the dashboard
+  after dashboard changes (`start.ps1` does it automatically when sources are newer than the build).
+

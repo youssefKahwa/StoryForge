@@ -1,6 +1,7 @@
 package com.storyforge.orchestrator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.storyforge.orchestrator.artifact.ArtifactStore;
 import com.storyforge.orchestrator.artifact.RunFiles;
@@ -14,6 +15,11 @@ import com.storyforge.orchestrator.media.MediaInfo;
 import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.qa.QaService;
+import com.storyforge.orchestrator.model.ScheduleSlot;
+import com.storyforge.orchestrator.settings.Preferences;
+import com.storyforge.orchestrator.settings.PreferencesService;
+import com.storyforge.orchestrator.system.CheckResult;
+import com.storyforge.orchestrator.system.SystemCheckService;
 import com.storyforge.orchestrator.run.PipelineEngine;
 import com.storyforge.orchestrator.run.Run;
 import com.storyforge.orchestrator.run.RunService;
@@ -26,6 +32,9 @@ import com.storyforge.orchestrator.stage.StageStatus;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -56,6 +65,12 @@ class MockPipelineE2ETest {
 
     @Autowired
     private InspirationService inspirations;
+
+    @Autowired
+    private PreferencesService preferences;
+
+    @Autowired
+    private SystemCheckService systemCheck;
 
     @BeforeAll
     static void cleanDataDir() throws IOException {
@@ -144,6 +159,42 @@ class MockPipelineE2ETest {
                     assertThat(check.severity()).isEqualTo(QaReport.Severity.CRITICAL);
                     assertThat(check.passed()).isTrue();
                 });
+    }
+
+    @Test
+    void preferencesDriveNewRunDefaultsAndThePublishSlot() {
+        Preferences base = preferences.get();
+        try {
+            preferences.save(new Preferences("bm_george", 12.5, base.defaultFormat(), false, 0, false, false, "low",
+                    DayOfWeek.SUNDAY, "09:30", "Europe/London"));
+            assertThatThrownBy(() -> preferences.save(new Preferences(null, 0.2, null, false, 0, false, false,
+                    "loud", null, "9h", "Mars/Olympus"))).isInstanceOf(IllegalArgumentException.class);
+
+            long id = runFresh("Preferences check");
+            Run run = runs.get(id);
+            assertThat(run.getVoice()).isEqualTo("bm_george");
+            assertThat(run.getTargetSeconds()).isEqualTo(750);
+            RunFiles files = artifacts.forRun(id);
+            if (files.exists(Stage.SCHEDULE, "schedule.json")) {
+                ScheduleSlot slot = files.read(Stage.SCHEDULE, "schedule.json", ScheduleSlot.class);
+                ZonedDateTime at = slot.publishAt().atZone(ZoneId.of("Europe/London"));
+                assertThat(at.getDayOfWeek()).isEqualTo(DayOfWeek.SUNDAY);
+                assertThat(at.getHour()).isEqualTo(9);
+                assertThat(at.getMinute()).isEqualTo(30);
+            }
+        } finally {
+            preferences.reset();
+        }
+        assertThat(preferences.saved()).isEmpty();
+    }
+
+    @Test
+    void systemCheckReportsEveryDependencyWithoutThrowing() {
+        List<CheckResult> checks = systemCheck.run();
+        assertThat(checks).extracting(CheckResult::key)
+                .contains("claude", "ffmpeg", "media-svc", "disk", "youtube", "telegram");
+        assertThat(checks).filteredOn(c -> c.key().equals("ffmpeg"))
+                .allSatisfy(c -> assertThat(c.level()).isEqualTo(CheckResult.Level.OK));
     }
 
     private long runFresh(String topic) {

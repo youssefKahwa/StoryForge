@@ -30,11 +30,9 @@ public class PublishKitBuilder {
     private static final String CATEGORY = "Education";
 
     private final Path exportsRoot;
-    private final StoryForgeProperties.Publish publish;
 
     public PublishKitBuilder(StoryForgeProperties properties) {
         this.exportsRoot = Path.of(properties.dataDir()).toAbsolutePath().resolve("exports");
-        this.publish = properties.publish();
     }
 
     public PublishKit build(RunFiles files, VideoPackage pkg, ScheduleSlot slot, List<ShortClip> shorts) {
@@ -72,7 +70,7 @@ public class PublishKitBuilder {
                 files.relative(files.path(Stage.ASSEMBLE, "captions.srt")),
                 slot.publishAt(),
                 slot.publishAt().atZone(ZoneId.systemDefault()).format(WHEN),
-                slot.publishAt().atZone(ZoneId.of(publish.zone())).format(WHEN),
+                slot.publishAt().atZone(ZoneId.of(slot.zone())).format(WHEN),
                 CATEGORY,
                 "English",
                 false,

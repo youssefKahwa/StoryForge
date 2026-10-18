@@ -84,9 +84,13 @@ The NVIDIA key and the Cloudflare token were pasted into a chat once. To be safe
 ---
 
 ## Your weekly routine (about 15 minutes of your time)
-1. `.\scripts\dev.ps1 -Mode local -NoDocker`, then open http://localhost:8000.
+1. `.\scripts\start.ps1` (opens http://localhost:8080). Glance at **Settings → System check**: a red line tells
+   you what to fix; "Cloudflare images: 0 left" means wait for 00:00 UTC (02:00 Morocco summer time) or images get
+   reused. Your defaults (voice, length, Shorts, music volume, publish slot) are in **Settings → Preferences**.
 2. **New video** → paste 1–3 YouTube links → **Analyze** → pick an angle → pick a voice → **Start**.
 3. Come back after 1–2 hours (charger plugged in) → open the run → **Publish kit** tab.
 4. Watch the video. Then either upload it with the kit (copy buttons + checklist), or, if YouTube is connected, it's
    already uploaded as private: let it publish, or press **Veto**.
 5. Post the Shorts on the following days (titles are in the kit).
+6. Every month or so: **Settings → Storage → Free …** deletes the heavy working files of runs older than 14 days.
+   Your finished videos, thumbnails and Shorts stay in `storyforge-data\exports`.

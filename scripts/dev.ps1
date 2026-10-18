@@ -11,9 +11,8 @@ if (-not $NoDocker) {
     if ($LASTEXITCODE -ne 0) { throw 'docker compose failed: start Docker Desktop or use -NoDocker' }
 }
 
-if ($Mode -eq 'local') {
-    Start-Process powershell -ArgumentList '-NoExit', '-File', "$root\scripts\media-svc.ps1"
-}
+# media-svc starts by itself when the API needs it. Notification links point at the hot-reload dashboard.
+$env:STORYFORGE_DASHBOARD_URL = 'http://localhost:8000'
 Start-Process powershell -ArgumentList '-NoExit', '-Command', "cd '$root\dashboard'; npm run develop"
 Push-Location (Join-Path $root 'orchestrator')
 try {

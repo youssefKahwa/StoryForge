@@ -65,7 +65,7 @@ public record StoryForgeProperties(
                              int dailyImageLimit) {
     }
 
-    public record MediaSvc(String url, long timeoutSeconds) {
+    public record MediaSvc(String url, long timeoutSeconds, boolean autostart, String python, String dir) {
     }
 
     public record Narration(String voice, double speed, String lang, double maxWer, double retrySpeedFactor) {

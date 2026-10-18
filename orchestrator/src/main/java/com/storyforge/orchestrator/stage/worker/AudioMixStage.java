@@ -11,6 +11,7 @@ import com.storyforge.orchestrator.model.LicenseRecord;
 import com.storyforge.orchestrator.model.NarrationManifest;
 import com.storyforge.orchestrator.model.Outline;
 import com.storyforge.orchestrator.model.Scene;
+import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.sound.MusicLibrary;
 import com.storyforge.orchestrator.sound.SfxLibrary;
 import com.storyforge.orchestrator.sound.SoundDesigner;
@@ -44,9 +45,11 @@ public class AudioMixStage implements StageWorker {
     private final SoundMixer mixer;
     private final StoryForgeProperties.Qa qa;
     private final boolean soundEnabled;
+    private final PreferencesService preferences;
 
     public AudioMixStage(FfmpegService ffmpeg, MusicLibrary music, SfxLibrary sfx, SoundMixer mixer,
-                         StoryForgeProperties properties) {
+                         StoryForgeProperties properties, PreferencesService preferences) {
+        this.preferences = preferences;
         this.ffmpeg = ffmpeg;
         this.music = music;
         this.sfx = sfx;
@@ -78,9 +81,10 @@ public class AudioMixStage implements StageWorker {
             List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
             Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
             Outline outline = files.read(Stage.OUTLINE, "outline.json", Outline.class);
-            Map<String, List<MusicLibrary.Track>> library = music.scan();
+            double musicOffset = preferences.get().musicGainOffsetDb();
+            Map<String, List<MusicLibrary.Track>> library = Double.isInfinite(musicOffset) ? Map.of() : music.scan();
             SoundPlan plan = SoundDesigner.plan(scenes, alignment, EdlBuilder.chapters(scenes, alignment, outline),
-                    library, context.run().id(), sfx::file);
+                    library, context.run().id(), sfx::file, Double.isInfinite(musicOffset) ? 0 : musicOffset);
             if (plan.music().isEmpty()) {
                 log.warn("Run {}: no music in {}, mixing voice and SFX only", context.run().id(), music.root());
             }

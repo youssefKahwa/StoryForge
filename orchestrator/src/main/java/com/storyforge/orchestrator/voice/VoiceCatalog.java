@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.voice;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.provider.media.MediaSvcClient;
+import com.storyforge.orchestrator.settings.PreferencesService;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -29,11 +30,13 @@ public class VoiceCatalog {
 
     private final MediaSvcClient media;
     private final StoryForgeProperties properties;
+    private final PreferencesService preferences;
     private final Path samplesDir;
 
-    public VoiceCatalog(MediaSvcClient media, StoryForgeProperties properties) {
+    public VoiceCatalog(MediaSvcClient media, StoryForgeProperties properties, PreferencesService preferences) {
         this.media = media;
         this.properties = properties;
+        this.preferences = preferences;
         this.samplesDir = Path.of(properties.dataDir()).toAbsolutePath().resolve("samples");
     }
 
@@ -42,7 +45,7 @@ public class VoiceCatalog {
     }
 
     public String defaultVoice() {
-        return properties.narration().voice();
+        return preferences.get().defaultVoice();
     }
 
     public Optional<Path> sample(String id) {

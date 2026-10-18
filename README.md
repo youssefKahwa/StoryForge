@@ -19,7 +19,8 @@ Run artifacts go to `%USERPROFILE%\storyforge-data\runs\{runId}\{stage}\` (outsi
 JDK 17, Node 22, FFmpeg on PATH, Docker Desktop (optional: the `h2` profile works without it).
 
 ## Weekly use
-1. `.\scripts\dev.ps1 -Mode local -NoDocker`, then open http://localhost:8000 (charger plugged in).
+1. `.\scripts\start.ps1` (charger plugged in). It builds the dashboard if needed, starts everything and opens
+   http://localhost:8080. Check **Settings → System check** is green.
 2. **New video**: paste 1–3 YouTube links → pick an angle and a voice → Start.
 3. After 1–2 hours, open the run → **Publish kit** tab (or the folder in `%USERPROFILE%\storyforge-data\exports`).
 
@@ -28,9 +29,10 @@ One-time setup: `docs/OWNER_SETUP.md`.
 ## Commands
 | What | Command |
 |---|---|
+| Weekly use: API + dashboard + media-svc, one window (H2) | `.\scripts\start.ps1` (`-Docker` for Postgres, `-Rebuild`, `-Mode mock`) |
 | One-command mock demo (no keys, no Docker) | `.\scripts\e2e-mock.ps1` |
 | All tests | `cd orchestrator; .\mvnw.cmd test` |
-| Dev: API + dashboard, Postgres in Docker | `.\scripts\dev.ps1` |
+| Dev with hot reload: API + `gatsby develop`, Postgres in Docker | `.\scripts\dev.ps1` |
 | Dev without Docker (H2 file DB) | `.\scripts\dev.ps1 -NoDocker` |
 | Dashboard only | `cd dashboard; npm run develop` (http://localhost:8000) |
 | API only | `cd orchestrator; .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=mock,h2"` (http://localhost:8080) |
@@ -41,6 +43,8 @@ One-time setup: `docs/OWNER_SETUP.md`.
 - `h2`: add to any profile to use an H2 file DB instead of Postgres.
 
 ## API
+`GET/PUT /api/preferences` · `POST /api/preferences/reset` · `GET /api/system/check` ·
+`GET /api/system/storage?olderThanDays=14` · `POST /api/system/cleanup?olderThanDays=14` ·
 `GET/POST /api/runs` · `GET /api/runs/{id}` · `POST /api/runs/{id}/cancel|resume` ·
 `POST /api/runs/{id}/stages/{stage}/rerun?fresh=false` · `GET /api/runs/{id}/files/{stage}/{name}` ·
 `GET/POST/DELETE /api/seed-topics` · `GET /api/settings` · `PUT /api/settings/kill-switch`
