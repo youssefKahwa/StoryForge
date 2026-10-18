@@ -11,3 +11,4 @@ library/**/*.ogg
 library/**/*.flac
 .idea/
 .vscode/
+*.stackdump
