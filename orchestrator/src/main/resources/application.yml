@@ -109,6 +109,13 @@ storyforge:
     image-model: "@cf/black-forest-labs/flux-1-schnell"
     steps: 4
     timeout-seconds: 120
+  render-svc:
+    dir: ${user.home}/.storyforge/render-svc
+    source: ../render-svc
+    node: node
+    timeout-seconds: 10800
+    concurrency: 8
+    burn-captions: false
   publish:
     day: SATURDAY
     time: "14:00"

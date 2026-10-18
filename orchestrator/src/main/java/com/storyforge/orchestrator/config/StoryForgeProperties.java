@@ -26,7 +26,12 @@ public record StoryForgeProperties(
         Publish publish,
         MediaSvc mediaSvc,
         Narration narration,
-        Cloudflare cloudflare) {
+        Cloudflare cloudflare,
+        RenderSvc renderSvc) {
+
+    public record RenderSvc(String dir, String source, String node, long timeoutSeconds, int concurrency,
+                            boolean burnCaptions) {
+    }
 
     public record Cloudflare(String accountId, String apiToken, String imageModel, int steps, long timeoutSeconds) {
     }

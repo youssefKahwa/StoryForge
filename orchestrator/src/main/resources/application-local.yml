@@ -5,7 +5,7 @@ storyforge:
     tts: kokoro
     image: cloudflare
     alignment: whisper
-    render: ffmpeg
+    render: remotion
     publish: mock
   video:
     width: 1920

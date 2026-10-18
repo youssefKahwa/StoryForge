@@ -17,7 +17,7 @@ import java.util.Map;
 
 public final class EdlBuilder {
 
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     public record Frame(int width, int height, int fps) {
     }
@@ -27,14 +27,14 @@ public final class EdlBuilder {
 
     public static Edl build(Frame frame, List<Scene> scenes, Alignment alignment, ShotList shotList,
                             AssetManifest assets, Outline outline, List<EdlAudio> audio,
-                            List<EdlCaption> captions) {
+                            List<EdlCaption> captions, Edl.EdlStyle style) {
         List<EdlShot> shots = shotList.shots().stream().map(shot -> new EdlShot(
                 shot.id(), shot.sceneId(), shot.type(), shot.start(), shot.end(),
                 assets.forShot(shot.id()).map(AssetManifest.Asset::file)
                         .orElseThrow(() -> new IllegalStateException("No asset for " + shot.id())),
                 shot.motion(), shot.text(), "cut")).toList();
         return new Edl(VERSION, frame.width(), frame.height(), frame.fps(), alignment.durationSec(), null,
-                shots, audio, captions, chapters(scenes, alignment, outline));
+                shots, audio, captions, chapters(scenes, alignment, outline), style);
     }
 
     static List<EdlChapter> chapters(List<Scene> scenes, Alignment alignment, Outline outline) {

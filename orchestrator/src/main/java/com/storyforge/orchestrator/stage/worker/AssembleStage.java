@@ -3,6 +3,8 @@ package com.storyforge.orchestrator.stage.worker;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.edl.CaptionBuilder;
 import com.storyforge.orchestrator.edl.EdlBuilder;
+import com.storyforge.orchestrator.format.FormatDefinition;
+import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.Edl;
@@ -27,11 +29,15 @@ public class AssembleStage implements StageWorker {
     private static final double CAPTION_MAX_SECONDS = 3.5;
 
     private final RenderProvider renderer;
+    private final FormatRegistry formats;
     private final StoryForgeProperties.Video video;
+    private final boolean burnCaptions;
 
-    public AssembleStage(RenderProvider renderer, StoryForgeProperties properties) {
+    public AssembleStage(RenderProvider renderer, FormatRegistry formats, StoryForgeProperties properties) {
         this.renderer = renderer;
+        this.formats = formats;
         this.video = properties.video();
+        this.burnCaptions = properties.renderSvc() != null && properties.renderSvc().burnCaptions();
     }
 
     @Override
@@ -56,8 +62,10 @@ public class AssembleStage implements StageWorker {
         List<EdlCaption> captions = CaptionBuilder.build(alignment.words(), CAPTION_MAX_CHARS, CAPTION_MAX_SECONDS);
         List<EdlAudio> audio = List.of(new EdlAudio("mix",
                 files.relative(files.path(Stage.AUDIO_MIX, AudioMixStage.MIX)), 0, 0, null));
+        FormatDefinition.Style style = formats.get(context.run().format()).style();
         Edl edl = EdlBuilder.build(new EdlBuilder.Frame(video.width(), video.height(), video.fps()), scenes,
-                alignment, shots, assets, outline, audio, captions);
+                alignment, shots, assets, outline, audio, captions,
+                new Edl.EdlStyle(style.fonts(), style.palette(), burnCaptions));
 
         files.write(Stage.ASSEMBLE, "edl.json", edl);
         files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions));

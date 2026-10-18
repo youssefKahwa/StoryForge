@@ -153,3 +153,17 @@ The owner gives 1-3 YouTube links (often Darija/Arabic). Titles alone miss the d
   image cache (`storyforge-data/cache/images`); re-runs cost no quota. Images are cover-cropped to 1920×1080 PNG on
   save, because FFmpeg's concat input cannot mix codecs or frame sizes. A failed image falls back to a placeholder card
   and QA raises the `content.real_images` warning.
+
+## ADR-016 Remotion editing (render-svc) (2026-10-18)
+- Remotion 4.0.536. License (LICENSE.md, read 2026-10-18): free for "an individual", including use "commercially
+  for the purpose of creating videos and images". Docs: https://www.remotion.dev/docs/ssr-node and /docs/bundle.
+- Source lives in `render-svc/`; it is installed and run from `%USERPROFILE%\.storyforge\render-svc` (outside
+  OneDrive, 277 MB of node_modules). `RemotionRenderer` syncs changed sources before each render, then runs
+  `node render.mjs <edl> <runDir> <out>`. render.mjs serves the run folder on a private 127.0.0.1 port (Range
+  support for audio) instead of copying gigabytes into Remotion's public dir.
+- LongForm composition: Ken Burns motion on every still, 10-frame crossfades, kinetic key phrases (Cinzel) over a
+  blurred previous image, chapter cards from chapter 2 on (the opening title covers chapter 1), vignette plus a
+  shifting pre-generated grain tile, 0.4 s fade-out (below the 0.5 s black-frame QA threshold), optional burned
+  captions (off; YouTube gets captions.srt).
+- Speed on the i7-1255U: 97 s of video renders in 401 s at concurrency 8 (≈4× real time), so about 60 minutes for a
+  15-minute video. The per-frame SVG turbulence grain was the main cost (587 s before).

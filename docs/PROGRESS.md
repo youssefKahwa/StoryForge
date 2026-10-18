@@ -35,7 +35,7 @@
 - Run #33 (Mary Celeste, 90 s target) completed with real voice: 97.3 s, −14.22 LUFS, −3.3 dBTP, QA passed.
 
 ## Next
-- M3 picture: pick a free image source (NVIDIA FLUX did not respond), Remotion assembly with camera motion.
+- ~~M3 picture~~ done: Cloudflare images (ADR-015) + Remotion editing (ADR-016).
 - One full-length (12–16 min) `local` run to measure Pro usage and CPU time per video.
 - Trim outline output tokens; consider `--json-schema` per stage.
 
