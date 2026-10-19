@@ -13,7 +13,8 @@ public record Edl(
         List<EdlAudio> audio,
         List<EdlCaption> captions,
         List<EdlChapter> chapters,
-        EdlStyle style) {
+        EdlStyle style,
+        List<Overlay> overlays) {
 
     public record EdlStyle(List<String> fonts, List<String> palette, boolean burnCaptions) {
     }

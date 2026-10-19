@@ -1,5 +1,6 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.artifact.RunOverrides;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.edl.EdlBuilder;
 import com.storyforge.orchestrator.media.FfmpegService;
@@ -35,6 +36,8 @@ public class AudioMixStage implements StageWorker {
 
     public static final String MIX = "mix.wav";
     public static final String PLAN = "sound_plan.json";
+    /** Owner revision "no music at all" is stored as a music gain at or below this. */
+    public static final double MUSIC_OFF_DB = -40;
     private static final int SAMPLE_RATE = 48_000;
     private static final double PEAK_MARGIN_DB = 0.5;
     private static final Logger log = LoggerFactory.getLogger(AudioMixStage.class);
@@ -81,7 +84,15 @@ public class AudioMixStage implements StageWorker {
             List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
             Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
             Outline outline = files.read(Stage.OUTLINE, "outline.json", Outline.class);
-            double musicOffset = preferences.get().musicGainOffsetDb();
+            RunOverrides overrides = files.overrides();
+            scenes = scenes.stream().map(scene -> overrides.sceneMusic().containsKey(scene.id())
+                    ? scene.withMusic(new Scene.MusicCue(overrides.sceneMusic().get(scene.id()),
+                            scene.music() != null ? scene.music().intensity() : 0.5))
+                    : scene).toList();
+            double musicOffset = preferences.get().musicGainOffsetDb() + overrides.musicGainDb();
+            if (overrides.musicGainDb() <= MUSIC_OFF_DB) {
+                musicOffset = Double.NEGATIVE_INFINITY;
+            }
             Map<String, List<MusicLibrary.Track>> library = Double.isInfinite(musicOffset) ? Map.of() : music.scan();
             SoundPlan plan = SoundDesigner.plan(scenes, alignment, EdlBuilder.chapters(scenes, alignment, outline),
                     library, context.run().id(), sfx::file, Double.isInfinite(musicOffset) ? 0 : musicOffset);

@@ -150,6 +150,10 @@ public class PackageStage implements StageWorker {
         return files.root().resolve(candidates.get(Math.min(candidates.size() - 1, (n - 1) * 3)).file());
     }
 
+    private static String ownerNotes(List<String> notes) {
+        return notes.isEmpty() ? "none" : String.join("\n", notes.stream().map(note -> "- " + note).toList());
+    }
+
     private static List<String> musicCredits(AudioQa audio) {
         return audio.tracks().stream()
                 .filter(track -> "music".equals(track.kind()) && track.license() != null)
@@ -186,7 +190,8 @@ public class PackageStage implements StageWorker {
                 "topic", brief.title(),
                 "angle", brief.angle(),
                 "hook", scenes.get(0).narration(),
-                "chapters", json.writeValueAsString(edl.chapters().stream().map(Edl.EdlChapter::title).toList())),
+                "chapters", json.writeValueAsString(edl.chapters().stream().map(Edl.EdlChapter::title).toList()),
+                "owner_notes", ownerNotes(files.overrides().packageNotes())),
                 PackageDraft.class);
         List<ScoredTitle> titles = TitleScorer.top(draft.titles(), brief.title(), TOP_TITLES);
         if (titles.isEmpty()) {

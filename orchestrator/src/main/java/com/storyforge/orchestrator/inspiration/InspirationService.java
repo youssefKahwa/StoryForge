@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,8 +38,11 @@ public class InspirationService {
     private final JsonMapper json;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> new Thread(task, "inspiration"));
 
+    private final ApplicationEventPublisher events;
+
     public InspirationService(InspirationRepository repository, InspirationFiles files, MediaSvcClient media,
-                              LlmRouter llm, JsonMapper json) {
+                              LlmRouter llm, JsonMapper json, ApplicationEventPublisher events) {
+        this.events = events;
         this.repository = repository;
         this.files = files;
         this.media = media;
@@ -53,6 +57,12 @@ public class InspirationService {
 
     @Transactional
     public Inspiration create(CreateInspirationRequest request) {
+        return create(request, false, null);
+    }
+
+    /** With autoStart, a run starts by itself as soon as the analysis is ready (Quick start). */
+    @Transactional
+    public Inspiration create(CreateInspirationRequest request, boolean autoStart, String ownerNotes) {
         List<String> urls = request.urls() == null ? List.of()
                 : request.urls().stream().filter(url -> url != null && !url.isBlank()).map(String::strip).toList();
         boolean pasted = request.pastedText() != null && !request.pastedText().isBlank();
@@ -66,6 +76,8 @@ public class InspirationService {
         inspiration.setUrlList(urls);
         inspiration.setPastedText(pasted ? request.pastedText().strip() : null);
         inspiration.setStatus(InspirationStatus.PENDING);
+        inspiration.setAutoStart(autoStart);
+        inspiration.setOwnerNotes(ownerNotes == null || ownerNotes.isBlank() ? null : ownerNotes.strip());
         inspiration.setCreatedAt(Instant.now());
         Inspiration saved = repository.save(inspiration);
         executor.submit(() -> process(saved.getId()));
@@ -112,9 +124,11 @@ public class InspirationService {
             }
             files.saveIdeas(id, ideas);
             finish(id, InspirationStatus.READY, errors.isEmpty() ? null : String.join("; ", errors));
+            events.publishEvent(new InspirationFinished(id, InspirationStatus.READY, null));
         } catch (RuntimeException e) {
             log.error("Inspiration {} failed", id, e);
             finish(id, InspirationStatus.FAILED, e.getMessage());
+            events.publishEvent(new InspirationFinished(id, InspirationStatus.FAILED, e.getMessage()));
         }
     }
 

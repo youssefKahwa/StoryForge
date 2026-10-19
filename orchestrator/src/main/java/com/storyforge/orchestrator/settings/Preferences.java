@@ -14,7 +14,8 @@ public record Preferences(
         String musicVolume,
         DayOfWeek publishDay,
         String publishTime,
-        String publishZone) {
+        String publishZone,
+        String channelBrief) {
 
     public double musicGainOffsetDb() {
         return switch (musicVolume == null ? "normal" : musicVolume) {

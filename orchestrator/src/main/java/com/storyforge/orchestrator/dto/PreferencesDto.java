@@ -15,16 +15,17 @@ public record PreferencesDto(
         String musicVolume,
         DayOfWeek publishDay,
         String publishTime,
-        String publishZone) {
+        String publishZone,
+        String channelBrief) {
 
     public static PreferencesDto from(Preferences p) {
         return new PreferencesDto(p.defaultVoice(), p.defaultMinutes(), p.defaultFormat(), p.shortsEnabled(),
                 p.shortsCount(), p.burnCaptions(), p.upscaleImages(), p.musicVolume(), p.publishDay(),
-                p.publishTime(), p.publishZone());
+                p.publishTime(), p.publishZone(), p.channelBrief());
     }
 
     public Preferences toPreferences() {
         return new Preferences(defaultVoice, defaultMinutes, defaultFormat, shortsEnabled, shortsCount, burnCaptions,
-                upscaleImages, musicVolume, publishDay, publishTime, publishZone);
+                upscaleImages, musicVolume, publishDay, publishTime, publishZone, channelBrief);
     }
 }

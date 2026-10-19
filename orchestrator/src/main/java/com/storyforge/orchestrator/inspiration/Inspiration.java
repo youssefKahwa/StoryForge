@@ -35,6 +35,12 @@ public class Inspiration {
 
     private String error;
 
+    @Column(name = "auto_start", nullable = false)
+    private boolean autoStart;
+
+    @Column(name = "owner_notes")
+    private String ownerNotes;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -68,6 +74,22 @@ public class Inspiration {
 
     public void setPastedText(String pastedText) {
         this.pastedText = pastedText;
+    }
+
+    public boolean isAutoStart() {
+        return autoStart;
+    }
+
+    public void setAutoStart(boolean autoStart) {
+        this.autoStart = autoStart;
+    }
+
+    public String getOwnerNotes() {
+        return ownerNotes;
+    }
+
+    public void setOwnerNotes(String ownerNotes) {
+        this.ownerNotes = ownerNotes;
     }
 
     public String getError() {

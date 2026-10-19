@@ -1,26 +1,40 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.artifact.RunOverrides;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
+import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
+import com.storyforge.orchestrator.model.ShotList.Shot;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
+import com.storyforge.orchestrator.visual.ShotDirector;
 import com.storyforge.orchestrator.visual.ShotPlanner;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 
 @Component
 public class VisualPlanStage implements StageWorker {
 
+    public static final String SHOTLIST = "shotlist.json";
+    public static final String OVERLAYS = "overlays.json";
+    public static final String BIBLE = "visual_bible.json";
+    private static final long REVISION_SEED_STEP = 7919;
+
     private final FormatRegistry formats;
     private final ShotPlanner planner;
+    private final ShotDirector director;
 
-    public VisualPlanStage(FormatRegistry formats, StoryForgeProperties properties) {
+    public VisualPlanStage(FormatRegistry formats, StoryForgeProperties properties, ShotDirector director) {
         this.formats = formats;
+        this.director = director;
         StoryForgeProperties.Shots shots = properties.shots();
         this.planner = new ShotPlanner(new ShotPlanner.Rules(shots.minSeconds(), shots.maxSeconds(),
                 shots.maxSameType(), shots.interruptEverySeconds()));
@@ -33,16 +47,47 @@ public class VisualPlanStage implements StageWorker {
 
     @Override
     public List<String> outputs() {
-        return List.of("shotlist.json");
+        return List.of(SHOTLIST);
     }
 
     @Override
     public void execute(StageContext context) {
         List<Scene> scenes = context.files().read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
         Alignment alignment = context.files().read(Stage.ALIGN, "alignment.json", Alignment.class);
-        ShotList shots = planner.plan(scenes, alignment, formats.get(context.run().format()).style(),
-                context.run().id() * 10_000L);
+        FormatDefinition.Style style = formats.get(context.run().format()).style();
+        ShotList plan = planner.plan(scenes, alignment, style, context.run().id() * 10_000L);
         context.usage().provider("shot-planner");
-        context.files().write(Stage.VISUAL_PLAN, "shotlist.json", shots);
+        ShotDirector.Result directed = director.direct(context, context.run().topicTitle(), scenes, alignment, plan,
+                style);
+        ShotList shots = applyRevisions(directed.shots(), context.files().overrides(), style);
+        context.files().write(Stage.VISUAL_PLAN, BIBLE, directed.bible());
+        context.files().write(Stage.VISUAL_PLAN, OVERLAYS, directed.overlays());
+        context.files().write(Stage.VISUAL_PLAN, SHOTLIST, shots);
+    }
+
+    /** Owner image revisions: new prompt and a new seed, so only those images are generated again. */
+    static ShotList applyRevisions(ShotList shots, RunOverrides overrides, FormatDefinition.Style style) {
+        if (overrides.shots().isEmpty()) {
+            return shots;
+        }
+        Map<String, Integer> perScene = new HashMap<>();
+        List<Shot> out = new ArrayList<>();
+        for (Shot shot : shots.shots()) {
+            String key = shotKey(shot.sceneId(), perScene.merge(shot.sceneId(), 1, Integer::sum));
+            RunOverrides.ShotOverride override = overrides.shots().get(key);
+            if (override == null || shot.graphic()) {
+                out.add(shot);
+                continue;
+            }
+            String prompt = override.prompt() == null || override.prompt().isBlank() ? shot.prompt()
+                    : style.promptPrefix() + ", " + override.prompt();
+            out.add(new Shot(shot.id(), shot.sceneId(), shot.type(), shot.start(), shot.end(), prompt, shot.motion(),
+                    shot.text(), shot.seed() + REVISION_SEED_STEP * Math.max(1, override.attempt())));
+        }
+        return new ShotList(shots.durationSec(), out);
+    }
+
+    public static String shotKey(String sceneId, int indexInScene) {
+        return sceneId + "#" + indexInScene;
     }
 }

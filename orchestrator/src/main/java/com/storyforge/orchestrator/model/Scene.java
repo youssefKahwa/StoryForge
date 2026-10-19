@@ -45,6 +45,11 @@ public record Scene(
     public record MusicCue(String mood, double intensity) {
     }
 
+    public Scene withMusic(MusicCue cue) {
+        return new Scene(id, index, beat, durationTargetSec, voice, tone, pace, emotion, speed, silenceBeforeMs,
+                silenceAfterMs, segments, narration, visual, sfx, cue, onscreen, claims, warnings);
+    }
+
     public List<String> words() {
         List<String> words = new ArrayList<>();
         if (narration == null || narration.isBlank()) {

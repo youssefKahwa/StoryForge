@@ -1,12 +1,8 @@
 package com.storyforge.orchestrator.run;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
-import com.storyforge.orchestrator.dto.CreateRunRequest;
 import com.storyforge.orchestrator.notify.NotificationService;
 import com.storyforge.orchestrator.settings.SettingsService;
-import com.storyforge.orchestrator.topic.SeedTopic;
-import com.storyforge.orchestrator.topic.SeedTopicService;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,16 +13,14 @@ public class Autopilot {
 
     private static final Logger log = LoggerFactory.getLogger(Autopilot.class);
 
-    private final SeedTopicService seedTopics;
-    private final RunService runs;
+    private final QuickStartService quickStart;
     private final SettingsService settings;
     private final NotificationService notifications;
     private final boolean enabled;
 
-    public Autopilot(SeedTopicService seedTopics, RunService runs, SettingsService settings,
+    public Autopilot(QuickStartService quickStart, SettingsService settings,
                      NotificationService notifications, StoryForgeProperties properties) {
-        this.seedTopics = seedTopics;
-        this.runs = runs;
+        this.quickStart = quickStart;
         this.settings = settings;
         this.notifications = notifications;
         this.enabled = properties.autopilot().enabled();
@@ -37,15 +31,14 @@ public class Autopilot {
         if (!enabled || settings.isPaused()) {
             return;
         }
-        List<SeedTopic> backlog = seedTopics.backlog();
-        if (backlog.isEmpty()) {
-            notifications.send("StoryForge autopilot: the topic backlog is empty, add a topic or use New video.");
-            return;
+        try {
+            QuickStartService.Result result = quickStart.startNextTopic(null);
+            log.info("Autopilot: {}", result.message());
+            notifications.send("StoryForge autopilot: " + result.message() + "\n"
+                    + notifications.runLink(result.runId()));
+        } catch (RuntimeException e) {
+            log.error("Autopilot could not start a run", e);
+            notifications.send("StoryForge autopilot could not start a run: " + e.getMessage());
         }
-        SeedTopic topic = backlog.get(0);
-        Run run = runs.create(new CreateRunRequest(topic.getId(), null, null, null, null, null, null, null));
-        log.info("Autopilot started run {} for '{}'", run.getId(), topic.getTitle());
-        notifications.send("StoryForge autopilot started run #" + run.getId() + ": " + topic.getTitle() + "\n"
-                + notifications.runLink(run.getId()));
     }
 }

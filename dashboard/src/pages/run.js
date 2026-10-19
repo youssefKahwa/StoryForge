@@ -11,6 +11,7 @@ import AppLayout from '../components/AppLayout';
 import ExecutionTable from '../components/ExecutionTable';
 import PublishKitView from '../components/PublishKitView';
 import QaReportView from '../components/QaReportView';
+import RevisePanel from '../components/RevisePanel';
 import RunStatusTag from '../components/RunStatusTag';
 import StageChips from '../components/StageChips';
 import usePolling from '../hooks/usePolling';
@@ -190,6 +191,17 @@ const RunPage = ({ location }) => {
         defaultActiveKey={kit ? 'kit' : 'overview'}
         items={[
           { key: 'kit', label: intl.formatMessage({ id: 'run.tab.kit' }), children: <PublishKitView kit={kit} runId={run.id} /> },
+          {
+            key: 'revise',
+            label: intl.formatMessage({ id: 'run.tab.revise' }),
+            children: (
+              <RevisePanel
+                run={run}
+                busy={ACTIVE.includes(run.status)}
+                videoUrl={video ? `${ApiRoutes.runFile(run.id, 'assemble', video.name)}?v=${video.sizeBytes}` : null}
+              />
+            ),
+          },
           { key: 'overview', label: intl.formatMessage({ id: 'run.tab.overview' }), children: overview },
           { key: 'video', label: intl.formatMessage({ id: 'run.tab.video' }), children: videoTab },
           { key: 'qa', label: intl.formatMessage({ id: 'run.tab.qa' }), children: <QaReportView report={qaReport} /> },

@@ -1,0 +1,4 @@
+{"shots": [{"id": "shot_001", "prompt": "wide view of a dark rocky coastline at night, a single distant lighthouse beam going out under storm clouds, waves breaking"},
+           {"id": "shot_002", "prompt": "weathered man in his fifties, dark wool pea coat, knitted grey cap, seen from behind on a cliff, staring at the dark sea"}],
+ "overlays": [{"kind": "location", "shot": "shot_001", "title": "Shore", "subtitle": "three in the morning"},
+              {"kind": "location", "shot": "shot_002", "title": "Atlantis", "subtitle": "1900"}]}

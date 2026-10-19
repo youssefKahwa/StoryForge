@@ -19,17 +19,32 @@ public class MockLlmProvider implements LlmProvider {
     @Override
     public LlmResponse complete(LlmRequest request) {
         String stage = request.stage().folder();
-        String topic = request.vars().getOrDefault("topic", "the story");
-        String body = load("mock/llm/" + stage + ".json");
-        if (body != null) {
-            topic = topic.replace("\\", "\\\\").replace("\"", "\\\"");
-        } else {
+        String prompt = request.prompt();
+        boolean jsonBody = true;
+        String body = prompt == null ? null : load("mock/llm/prompt-" + prompt + ".json");
+        if (body == null && prompt != null) {
+            body = load("mock/llm/prompt-" + prompt + ".md");
+            jsonBody = body == null;
+        }
+        if (body == null) {
+            body = load("mock/llm/" + stage + ".json");
+            jsonBody = true;
+        }
+        if (body == null) {
             body = load("mock/llm/" + stage + ".md");
+            jsonBody = false;
         }
         if (body == null) {
             throw new LlmException("No canned mock response for stage " + stage);
         }
-        String text = body.replace("{{topic}}", topic);
+        java.util.Map<String, String> vars = new java.util.HashMap<>(request.vars());
+        vars.putIfAbsent("topic", "the story");
+        String text = body;
+        for (var entry : vars.entrySet()) {
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            text = text.replace("{{" + entry.getKey() + "}}",
+                    jsonBody ? value.replace("\\", "\\\\").replace("\"", "\\\"") : value);
+        }
         long input = (request.system().length() + request.user().length()) / 4;
         return new LlmResponse(text, name(), "canned", input, text.length() / 4, BigDecimal.ZERO, 0);
     }

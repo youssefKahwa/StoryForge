@@ -1,5 +1,5 @@
 ---
-version: 0.3.0
+version: 0.4.0
 tier: fast
 ---
 ## system
@@ -11,6 +11,8 @@ Topic: {{topic}}
 Angle: {{angle}}
 Opening line: {{hook}}
 Chapters: {{chapters}}
+Owner notes on earlier versions (follow them; "none" means no notes):
+{{owner_notes}}
 
 Return:
 {"titles": ["10 distinct titles, each <= 60 characters, curiosity plus clarity, include the main keyword"],

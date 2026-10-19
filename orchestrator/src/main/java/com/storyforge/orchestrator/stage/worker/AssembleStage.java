@@ -11,6 +11,7 @@ import com.storyforge.orchestrator.model.Edl;
 import com.storyforge.orchestrator.model.Edl.EdlAudio;
 import com.storyforge.orchestrator.model.Edl.EdlCaption;
 import com.storyforge.orchestrator.model.Outline;
+import com.storyforge.orchestrator.model.Overlay;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.provider.render.RenderProvider;
@@ -67,7 +68,10 @@ public class AssembleStage implements StageWorker {
         FormatDefinition.Style style = formats.get(context.run().format()).style();
         Edl edl = EdlBuilder.build(new EdlBuilder.Frame(video.width(), video.height(), video.fps()), scenes,
                 alignment, shots, assets, outline, audio, captions,
-                new Edl.EdlStyle(style.fonts(), style.palette(), preferences.get().burnCaptions()));
+                new Edl.EdlStyle(style.fonts(), style.palette(), preferences.get().burnCaptions()),
+                files.exists(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS)
+                        ? files.read(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS, new TypeReference<List<Overlay>>() { })
+                        : List.of());
 
         files.write(Stage.ASSEMBLE, "edl.json", edl);
         files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions));

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { navigate } from 'gatsby';
 import {
   Button, Card, Empty, Form, Input, Popconfirm, Select, Space, Table, Tag, Typography, message,
@@ -9,7 +9,7 @@ import AppLayout from '../components/AppLayout';
 import usePolling from '../hooks/usePolling';
 import { createRun } from '../store/runs/runsSlice';
 import {
-  archiveTopic, createTopic, fetchTopics, selectTopics,
+  archiveTopic, createTopic, fetchTopics, selectTopics, suggestTopics,
 } from '../store/topics/topicsSlice';
 
 const FORMATS = ['GREAT_STORIES', 'FILM_ANALYSIS'];
@@ -21,6 +21,22 @@ const TopicsPage = ({ location }) => {
   const topics = useSelector(selectTopics);
   const refresh = useCallback(() => dispatch(fetchTopics()), [dispatch]);
   usePolling(refresh, 30000);
+
+  const [suggesting, setSuggesting] = useState(false);
+  const suggest = () => {
+    setSuggesting(true);
+    dispatch(suggestTopics({
+      count: 5,
+      onSuccess: (created) => {
+        setSuggesting(false);
+        message.success(intl.formatMessage({ id: 'topics.suggested' }, { count: created.length }));
+      },
+      onFail: (error) => {
+        setSuggesting(false);
+        onFail(error);
+      },
+    }));
+  };
 
   const onFail = (error) => message.error(intl.formatMessage({ id: 'error.request' }, { message: error.message }));
 
@@ -76,6 +92,7 @@ const TopicsPage = ({ location }) => {
             <Select options={FORMATS.map((format) => ({ value: format, label: format }))} className="format-select" />
           </Form.Item>
           <Button type="primary" htmlType="submit"><FormattedMessage id="topics.add" /></Button>
+          <Button className="suggest-button" loading={suggesting} onClick={suggest}><FormattedMessage id="topics.suggest" /></Button>
         </Form>
       </Card>
       <Table

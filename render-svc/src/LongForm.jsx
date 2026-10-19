@@ -5,6 +5,7 @@ import { KineticText } from './components/KineticText';
 import { ChapterCard } from './components/ChapterCard';
 import { FilmLook } from './components/FilmLook';
 import { Captions } from './components/Captions';
+import { OverlayLayer } from './components/Overlays';
 
 const CROSSFADE_FRAMES = 10;
 const CHAPTER_FRAMES = 105;
@@ -84,6 +85,15 @@ export const LongForm = ({ edl, assetBase }) => {
         return (
           <Sequence key={`chapter-${index}`} from={from} durationInFrames={CHAPTER_FRAMES}>
             <ChapterCard title={chapter.title} number={index + 1} palette={palette} durationInFrames={CHAPTER_FRAMES} />
+          </Sequence>
+        );
+      })}
+      {(edl.overlays || []).map((overlay, index) => {
+        const from = Math.round(overlay.start * fps);
+        const length = Math.max(1, Math.min(Math.round((overlay.end - overlay.start) * fps), durationInFrames - from));
+        return (
+          <Sequence key={`overlay-${index}`} from={from} durationInFrames={length}>
+            <OverlayLayer overlay={overlay} palette={palette} durationInFrames={length} />
           </Sequence>
         );
       })}

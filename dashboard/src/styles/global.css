@@ -175,3 +175,64 @@ body {
   background: #000;
   border-radius: 6px;
 }
+
+.mark-button {
+  margin-top: 12px;
+}
+
+.shot-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.shot-thumb {
+  position: relative;
+  flex: 0 0 132px;
+  height: 74px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #1f2a36;
+  cursor: pointer;
+}
+
+.shot-thumb.selected {
+  border-color: #c9a46b;
+}
+
+.shot-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shot-graphic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #e8dcc4;
+  font-weight: 700;
+}
+
+.shot-time {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+}
+
+.suggest-button {
+  margin-left: 8px;
+}
+
+.wizard-advanced {
+  margin-top: 28px !important;
+}

@@ -9,6 +9,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import ApiRoutes from '../api/ApiRoutes';
 import AppLayout from '../components/AppLayout';
+import QuickStartCard from '../components/QuickStartCard';
 import usePolling from '../hooks/usePolling';
 import { createRun } from '../store/runs/runsSlice';
 import { fetchPreferences } from '../store/settings/settingsSlice';
@@ -244,6 +245,8 @@ const NewVideoPage = ({ location }) => {
   return (
     <AppLayout location={location}>
       <Typography.Title level={3}><FormattedMessage id="wizard.title" /></Typography.Title>
+      <QuickStartCard />
+      <Typography.Title level={5} className="wizard-advanced"><FormattedMessage id="quick.orWizard" /></Typography.Title>
       <Steps current={step} className="wizard-steps" items={STEPS.map((s) => ({ title: intl.formatMessage({ id: `wizard.step.${s}` }) }))} />
       {content}
       {step > 0 && (

@@ -18,6 +18,9 @@ import java.util.stream.Collectors;
 
 public final class SoundDesigner {
 
+    /** Scene music mood meaning "no music here" (owner revision). */
+    public static final String SILENCE = "none";
+
     public static final double CROSSFADE = 1.5;
     private static final double MIN_SEGMENT = 20;
     private static final double MIN_SFX_GAP = 6;
@@ -49,7 +52,8 @@ public final class SoundDesigner {
         for (Scene scene : scenes) {
             SceneSpan span = spans.get(scene.id());
             if (scene.music() != null) {
-                current = MusicLibrary.canonicalMood(scene.music().mood());
+                current = SILENCE.equals(scene.music().mood()) ? SILENCE
+                        : MusicLibrary.canonicalMood(scene.music().mood());
                 intensity = scene.music().intensity();
             }
             int last = segmentMoods.size() - 1;
@@ -72,6 +76,9 @@ public final class SoundDesigner {
         List<MusicSegment> segments = new ArrayList<>();
         String previousFile = null;
         for (int i = 0; i < ranges.size(); i++) {
+            if (SILENCE.equals(segmentMoods.get(i))) {
+                continue;
+            }
             Track track = pick(segmentMoods.get(i), library, seed + i, previousFile);
             if (track == null) {
                 return List.of();

@@ -12,6 +12,9 @@ import tools.jackson.databind.json.JsonMapper;
 public class PreferencesService {
 
     private static final String KEY = "preferences";
+    public static final String DEFAULT_BRIEF = "English-language long-form storytelling channel: true stories, "
+            + "unsolved mysteries, historical disasters and incredible survivals, told like a documentary film for "
+            + "curious adults. Calm, confident narrator; facts over speculation.";
     private static final List<String> VOLUMES = List.of("off", "low", "normal", "high");
 
     private final AppSettingRepository repository;
@@ -64,7 +67,8 @@ public class PreferencesService {
                 "normal",
                 publish.day(),
                 publish.time().toString(),
-                publish.zone());
+                publish.zone(),
+                DEFAULT_BRIEF);
     }
 
     private Preferences validate(Preferences p) {
@@ -74,6 +78,9 @@ public class PreferencesService {
         }
         if (p.shortsCount() < 0 || p.shortsCount() > 5) {
             throw new IllegalArgumentException("Shorts per video must be between 0 and 5");
+        }
+        if (p.channelBrief() != null && p.channelBrief().length() > 2000) {
+            throw new IllegalArgumentException("Channel brief must be at most 2000 characters");
         }
         if (p.musicVolume() != null && !VOLUMES.contains(p.musicVolume())) {
             throw new IllegalArgumentException("Music volume must be one of " + VOLUMES);
@@ -96,6 +103,7 @@ public class PreferencesService {
                 p.musicVolume() == null ? "normal" : p.musicVolume(),
                 p.publishDay() == null ? base.publishDay() : p.publishDay(),
                 p.publishTime(),
-                p.publishZone());
+                p.publishZone(),
+                p.channelBrief() == null || p.channelBrief().isBlank() ? base.channelBrief() : p.channelBrief().strip());
     }
 }

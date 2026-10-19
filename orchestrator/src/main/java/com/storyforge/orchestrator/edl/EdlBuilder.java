@@ -8,6 +8,7 @@ import com.storyforge.orchestrator.model.Edl.EdlCaption;
 import com.storyforge.orchestrator.model.Edl.EdlChapter;
 import com.storyforge.orchestrator.model.Edl.EdlShot;
 import com.storyforge.orchestrator.model.Outline;
+import com.storyforge.orchestrator.model.Overlay;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import java.util.ArrayList;
@@ -27,14 +28,15 @@ public final class EdlBuilder {
 
     public static Edl build(Frame frame, List<Scene> scenes, Alignment alignment, ShotList shotList,
                             AssetManifest assets, Outline outline, List<EdlAudio> audio,
-                            List<EdlCaption> captions, Edl.EdlStyle style) {
+                            List<EdlCaption> captions, Edl.EdlStyle style, List<Overlay> overlays) {
         List<EdlShot> shots = shotList.shots().stream().map(shot -> new EdlShot(
                 shot.id(), shot.sceneId(), shot.type(), shot.start(), shot.end(),
                 assets.forShot(shot.id()).map(AssetManifest.Asset::file)
                         .orElseThrow(() -> new IllegalStateException("No asset for " + shot.id())),
                 shot.motion(), shot.text(), "cut")).toList();
         return new Edl(VERSION, frame.width(), frame.height(), frame.fps(), alignment.durationSec(), null,
-                shots, audio, captions, chapters(scenes, alignment, outline), style);
+                shots, audio, captions, chapters(scenes, alignment, outline), style,
+                overlays == null ? List.of() : overlays);
     }
 
     public static List<EdlChapter> chapters(List<Scene> scenes, Alignment alignment, Outline outline) {

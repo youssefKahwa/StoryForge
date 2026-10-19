@@ -68,7 +68,8 @@ public class RunService {
             throw new IllegalArgumentException("Either seedTopicId or topicTitle is required");
         }
         run.setInspirationId(request.inspirationId());
-        run.setAngle(blankToNull(request.angle()));
+        String seedNotes = request.seedTopicId() != null ? seedTopics.get(request.seedTopicId()).getNotes() : null;
+        run.setAngle(blankToNull(request.angle()) != null ? blankToNull(request.angle()) : blankToNull(seedNotes));
         run.setVoice(blankToNull(request.voice()) != null ? blankToNull(request.voice())
                 : preferences.saved().map(Preferences::defaultVoice).orElse(null));
         Instant now = Instant.now();

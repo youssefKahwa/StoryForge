@@ -64,6 +64,36 @@ public final class RunFiles {
         return file;
     }
 
+    /** Run-level file outside the stage folders (survives re-runs). */
+    public <T> java.util.Optional<T> readRoot(String name, Class<T> type) {
+        Path file = root.resolve(name);
+        return Files.isRegularFile(file) ? java.util.Optional.of(json.readValue(file, type)) : java.util.Optional.empty();
+    }
+
+    public void writeRoot(String name, Object value) {
+        try {
+            Files.createDirectories(root.resolve(name).getParent());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        json.writerWithDefaultPrettyPrinter().writeValue(root.resolve(name).toFile(), value);
+    }
+
+    /** Owner revisions for this run. Kept at the run root, so re-running stages never deletes them. */
+    public RunOverrides overrides() {
+        Path file = root.resolve(RunOverrides.FILE);
+        return Files.isRegularFile(file) ? json.readValue(file, RunOverrides.class) : RunOverrides.empty();
+    }
+
+    public void writeOverrides(RunOverrides overrides) {
+        try {
+            Files.createDirectories(root);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        json.writerWithDefaultPrettyPrinter().writeValue(root.resolve(RunOverrides.FILE).toFile(), overrides);
+    }
+
     public String readText(Stage stage, String name) {
         try {
             return Files.readString(requireFile(stage, name), StandardCharsets.UTF_8);

@@ -66,14 +66,16 @@ public class LlmRouter {
                 }
                 log.warn("Repairing JSON for {} (attempt {}): {}", promptName, attempt + 1, e.getOriginalMessage());
                 LlmRequest repair = new LlmRequest(stage, prompt.version() + "+repair", REPAIR_SYSTEM,
-                        "Parser error: " + e.getOriginalMessage() + "\n\nJSON to fix:\n" + text, prompt.tier(), vars);
+                        "Parser error: " + e.getOriginalMessage() + "\n\nJSON to fix:\n" + text, prompt.tier(), vars,
+                        prompt.name());
                 text = complete(usage, salt, repair).text();
             }
         }
     }
 
     private LlmRequest request(Stage stage, RenderedPrompt prompt, Map<String, String> vars) {
-        return new LlmRequest(stage, prompt.version(), prompt.system(), prompt.user(), prompt.tier(), vars);
+        return new LlmRequest(stage, prompt.version(), prompt.system(), prompt.user(), prompt.tier(), vars,
+                prompt.name());
     }
 
     private LlmResponse complete(StageUsage usage, int salt, LlmRequest request) {

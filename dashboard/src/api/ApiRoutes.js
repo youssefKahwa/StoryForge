@@ -27,6 +27,12 @@ const ApiRoutes = {
   youtubeDisconnect: () => `${API_BASE}/api/youtube/disconnect`,
   testNotification: () => `${API_BASE}/api/youtube/test-notification`,
   vetoRun: (id) => `${API_BASE}/api/runs/${id}/veto`,
+  timeline: (id) => `${API_BASE}/api/runs/${id}/timeline`,
+  revisions: (id) => `${API_BASE}/api/runs/${id}/revisions`,
+  revision: (id, revisionId) => `${API_BASE}/api/runs/${id}/revisions/${revisionId}`,
+  applyRevisions: (id) => `${API_BASE}/api/runs/${id}/revisions/apply`,
+  quickStart: () => `${API_BASE}/api/quick-start`,
+  suggestTopics: (count) => `${API_BASE}/api/seed-topics/suggest?count=${count}`,
 
   settings: () => `${API_BASE}/api/settings`,
   killSwitch: () => `${API_BASE}/api/settings/kill-switch`,

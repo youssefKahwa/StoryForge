@@ -15,7 +15,18 @@ import com.storyforge.orchestrator.media.MediaInfo;
 import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.qa.QaService;
+import com.storyforge.orchestrator.artifact.RunOverrides;
+import com.storyforge.orchestrator.model.Overlay;
+import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ScheduleSlot;
+import com.storyforge.orchestrator.model.ShotList;
+import com.storyforge.orchestrator.revision.Revision;
+import com.storyforge.orchestrator.revision.RevisionKind;
+import com.storyforge.orchestrator.revision.RevisionService;
+import com.storyforge.orchestrator.revision.RevisionStatus;
+import com.storyforge.orchestrator.run.QuickStartService;
+import com.storyforge.orchestrator.stage.worker.VisualPlanStage;
+import tools.jackson.core.type.TypeReference;
 import com.storyforge.orchestrator.settings.Preferences;
 import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.system.CheckResult;
@@ -71,6 +82,12 @@ class MockPipelineE2ETest {
 
     @Autowired
     private SystemCheckService systemCheck;
+
+    @Autowired
+    private RevisionService revisions;
+
+    @Autowired
+    private QuickStartService quickStart;
 
     @BeforeAll
     static void cleanDataDir() throws IOException {
@@ -166,9 +183,9 @@ class MockPipelineE2ETest {
         Preferences base = preferences.get();
         try {
             preferences.save(new Preferences("bm_george", 12.5, base.defaultFormat(), false, 0, false, false, "low",
-                    DayOfWeek.SUNDAY, "09:30", "Europe/London"));
+                    DayOfWeek.SUNDAY, "09:30", "Europe/London", null));
             assertThatThrownBy(() -> preferences.save(new Preferences(null, 0.2, null, false, 0, false, false,
-                    "loud", null, "9h", "Mars/Olympus"))).isInstanceOf(IllegalArgumentException.class);
+                    "loud", null, "9h", "Mars/Olympus", null))).isInstanceOf(IllegalArgumentException.class);
 
             long id = runFresh("Preferences check");
             Run run = runs.get(id);
@@ -195,6 +212,71 @@ class MockPipelineE2ETest {
                 .contains("claude", "ffmpeg", "media-svc", "disk", "youtube", "telegram");
         assertThat(checks).filteredOn(c -> c.key().equals("ffmpeg"))
                 .allSatisfy(c -> assertThat(c.level()).isEqualTo(CheckResult.Level.OK));
+    }
+
+    @Test
+    void directorAddsOnlyOverlaysTheNarrationSupports() {
+        long id = runFresh("Director check");
+        RunFiles files = artifacts.forRun(id);
+        List<Overlay> overlays = files.read(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS,
+                new TypeReference<List<Overlay>>() { });
+        assertThat(overlays).extracting(Overlay::title).containsExactly("Shore");
+        assertThat(overlays.get(0).subtitle()).isEqualTo("three in the morning");
+        ShotList shots = files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class);
+        assertThat(shots.shots().get(0).prompt()).contains("lighthouse beam going out");
+        assertThat(files.readText(Stage.ASSEMBLE, "edl.json")).contains("\"overlays\"", "Shore");
+    }
+
+    @Test
+    void ownerRevisionsRedoOnlyWhatWasPointedAt() {
+        long id = runFresh("Revision check");
+        revisions.add(id, RevisionKind.IMAGE, "01#1", 1.0, "make it a moonlit night, colder light");
+        revisions.add(id, RevisionKind.NARRATION, "03", 20.0, "shorter and more vivid");
+        revisions.add(id, RevisionKind.MUSIC, "02", null, "none");
+        revisions.add(id, RevisionKind.PACKAGE, "title", null, "mention the lighthouse in the title");
+        assertThatThrownBy(() -> revisions.add(id, RevisionKind.MUSIC, "02", null, "jazz"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        revisions.apply(id);
+        assertThat(revisions.list(id)).extracting(Revision::getStatus).containsOnly(RevisionStatus.QUEUED);
+        assertThat(runs.claimNextQueued()).contains(id);
+        engine.execute(id);
+
+        assertThat(runs.get(id).getStatus()).as(runs.get(id).getStatusReason()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(revisions.list(id)).extracting(Revision::getStatus).containsOnly(RevisionStatus.APPLIED);
+        RunFiles files = artifacts.forRun(id);
+        List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
+        assertThat(scenes.stream().filter(sc -> sc.id().equals("03")).findFirst().orElseThrow().narration())
+                .startsWith("It began with an ordinary crew");
+        ShotList shots = files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class);
+        assertThat(RevisionService.byKey(shots).get("01#1").prompt()).contains("full moon");
+        RunOverrides overrides = files.overrides();
+        assertThat(overrides.sceneMusic()).containsEntry("02", "none");
+        assertThat(overrides.packageNotes()).containsExactly("[title] mention the lighthouse in the title");
+        assertThat(executions.forRun(id).stream().filter(e -> e.getStage() == Stage.SCRIPT)).hasSize(1);
+    }
+
+    @Test
+    void quickStartNeedsNothingButCanTakeLinksOrATopic() throws InterruptedException {
+        QuickStartService.Result fromNothing = quickStart.start(List.of(), null, null, null);
+        assertThat(fromNothing.runId()).isNotNull();
+        assertThat(runs.claimNextQueued()).contains(fromNothing.runId());
+        engine.execute(fromNothing.runId());
+
+        QuickStartService.Result fromText = quickStart.start(List.of(),
+                "Qissa dyal wahed lmarkab li tlef f lbhar, w hta wahed ma 3ref chno wqe3.", null, "keep it eerie");
+        assertThat(fromText.inspirationId()).isNotNull();
+        Long started = null;
+        for (int i = 0; i < 100 && started == null; i++) {
+            Thread.sleep(100);
+            started = runs.list().stream().filter(r -> fromText.inspirationId().equals(r.getInspirationId()))
+                    .map(Run::getId).findFirst().orElse(null);
+        }
+        assertThat(started).as("run started by itself").isNotNull();
+        assertThat(runs.get(started).getAngle()).contains("Owner notes: keep it eerie");
+        assertThat(runs.claimNextQueued()).contains(started);
+        engine.execute(started);
+        assertThat(runs.get(started).getStatus()).isEqualTo(RunStatus.COMPLETED);
     }
 
     private long runFresh(String topic) {
