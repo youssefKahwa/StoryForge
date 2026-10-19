@@ -57,8 +57,14 @@
 - QA warning `audio.music` when a video ends up without background music.
 - Tests: 43 passing (new: preferences E2E, system check, storage cleanup).
 
+### Music library (2026-10-19)
+- 21 CC BY 4.0 tracks (Kevin MacLeod, incompetech.com), 3 per mood, chosen from the incompetech catalog by mood
+  tags (instrumental only). `licenses.json` gives each one type `cc-by-4.0`, so the attribution goes into
+  the description. ISRC proof is in `MUSIC_CREDITS.txt`. System check: music OK.
+- `scripts/set-cloudflare-token.ps1`: hidden prompt, verifies with Cloudflare, writes `.env`.
+
 ## Next
-- Owner steps in `docs/OWNER_SETUP.md` (music, YouTube client, Telegram, power settings).
+- Owner steps in `docs/OWNER_SETUP.md` (roll Cloudflare token, YouTube client, Telegram, power settings).
 - First real YouTube upload test once the Google client exists.
 - M6: analytics pulls + retention-based learning; M7: Film-analysis format.
 

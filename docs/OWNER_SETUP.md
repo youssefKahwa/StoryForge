@@ -14,24 +14,15 @@ The app already blocks sleep while a run is active, but closing the lid can stil
 - Control Panel → Hardware and Sound → Power Options → *Choose what closing the lid does* →
   **When plugged in: Do nothing**, if you close the lid during runs.
 
-## 2. Music (about 15 min). Recommended.
-Without it, videos have voice and sound effects but no music.
+## 2. Music: done (2026-10-19)
+21 instrumental tracks by Kevin MacLeod (incompetech.com), 3 per mood, are installed in
+`C:\Users\anasa\storyforge-data\library\music\<mood>`. License: Creative Commons Attribution 4.0, so they're free
+for monetized YouTube videos as long as they're credited. The app adds the credit lines to the description by itself (section "Music").
+Each track's ISRC and download URL are in `library\music\MUSIC_CREDITS.txt`, in case a Content ID claim ever shows up
+(dispute it with the ISRC and the CC BY 4.0 license).
 
-1. YouTube Studio → **Audio Library** → Music → filter **License type: No attribution required**.
-2. Download 2–3 instrumental tracks per mood into these folders:
-
-| Folder | Mood | Audio Library filter idea |
-|---|---|---|
-| `C:\Users\anasa\storyforge-data\library\music\dread` | dark, ominous | Mood: Dark, Genre: Ambient / Cinematic |
-| `...\tension` | suspense, urgency | Mood: Dramatic |
-| `...\mystery` | curious, eerie | Mood: Dark or Calm, Ambient |
-| `...\calm` | reflective, quiet | Mood: Calm |
-| `...\hope` | warm, uplifting | Mood: Inspirational / Bright |
-| `...\sad` | grief, loss | Mood: Sad |
-| `...\epic` | triumphant, climax | Mood: Dramatic, Cinematic |
-
-Creative-Commons tracks are fine too: add their credit in `library\music\licenses.json` (see `README.txt` there).
-The credit is then added to the video description automatically.
+To add your own tracks later: drop them into a mood folder. Tracks without an entry in `licenses.json` are treated
+as YouTube Audio Library "No attribution required" downloads, so only add tracks of that kind that way.
 
 ## 3. YouTube upload (about 15 min). Optional.
 Without it, every run still produces the full Publish Kit and you upload by hand.
@@ -78,7 +69,10 @@ privately and you get a Telegram message to review it before it goes public.
 
 ## 6. Security housekeeping (2 min). Recommended.
 The NVIDIA key and the Cloudflare token were pasted into a chat once. To be safe:
-- Cloudflare: *My Profile → API Tokens → Roll* the Workers AI token, then update `CLOUDFLARE_API_TOKEN` in `.env`.
+- Cloudflare (2 min): dash.cloudflare.com → *My Profile → API Tokens* → your Workers AI token → **Roll** → copy the
+  new value, then run `.\scripts\set-cloudflare-token.ps1` and paste it at the hidden prompt (it checks the token
+  and saves it to `.env`). Don't paste it into a chat. The app can't roll it itself: the token is limited to
+  Workers AI on purpose.
 - NVIDIA: the key is no longer used; you can delete it at build.nvidia.com.
 
 ---
