@@ -80,7 +80,18 @@ public class InspirationService {
         inspiration.setOwnerNotes(ownerNotes == null || ownerNotes.isBlank() ? null : ownerNotes.strip());
         inspiration.setCreatedAt(Instant.now());
         Inspiration saved = repository.save(inspiration);
-        executor.submit(() -> process(saved.getId()));
+        // Start the analysis only once the new row is committed; otherwise the worker thread may not find it yet.
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            executor.submit(() -> process(saved.getId()));
+                        }
+                    });
+        } else {
+            executor.submit(() -> process(saved.getId()));
+        }
         return saved;
     }
 
