@@ -296,6 +296,26 @@ public class RealMediaFinder {
         return Optional.empty();
     }
 
+    public boolean stockAvailable() {
+        return enabled && !pixabayKey.isEmpty();
+    }
+
+    /** Stock photo for a search the LLM proposed for a picture that could not be generated. */
+    public Optional<Found> stockPhoto(String query, Set<String> used, Path target) {
+        if (!stockAvailable() || query == null || query.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return pixabayPhoto(query, used, target);
+        } catch (IOException | RuntimeException e) {
+            log.warn("Stock photo search failed for '{}': {}", query, e.getMessage());
+            return Optional.empty();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        }
+    }
+
     /**
      * NASA Image and Video Library (no key): NASA's own media is public domain; anything credited to a third party
      * or marked copyrighted is skipped. https://images.nasa.gov/docs/images.nasa.gov_api_docs.pdf (2026-10-20).
@@ -436,7 +456,22 @@ public class RealMediaFinder {
         return l.replace(' ', '-');
     }
 
+    private long lastPixabayCall;
+
+    /** Pixabay allows 100 requests a minute; keep a little under it. */
+    private synchronized void throttle(String url) throws InterruptedException {
+        if (!url.contains("pixabay.com")) {
+            return;
+        }
+        long wait = lastPixabayCall + 650 - System.currentTimeMillis();
+        if (wait > 0) {
+            Thread.sleep(wait);
+        }
+        lastPixabayCall = System.currentTimeMillis();
+    }
+
     private JsonNode get(String url, String authorization) throws IOException, InterruptedException {
+        throttle(url);
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20))
                 .header("User-Agent", USER_AGENT);
         if (authorization != null) {

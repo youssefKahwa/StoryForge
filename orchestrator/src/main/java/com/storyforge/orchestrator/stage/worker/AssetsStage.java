@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -94,32 +95,6 @@ public class AssetsStage implements StageWorker {
         log.warn("Run {}: {} new images needed but only {} left in today's free quota; spreading them and reusing "
                 + "the rest", context.run().id(), misses.size(), remaining);
         return allowed;
-    }
-
-    private ImageResult fallback(StageContext context, Shot shot, Path file, List<Asset> assets,
-                                 RuntimeException cause) {
-        Asset donor = null;
-        for (int i = assets.size() - 1; i >= 0 && donor == null; i--) {
-            if (assets.get(i).provider().equals(images.name())) {
-                donor = assets.get(i);
-            }
-        }
-        if (donor != null) {
-            log.warn("Run {} {}: image provider failed ({}), reusing {}", context.run().id(), shot.id(),
-                    cause.getMessage(), donor.shotId());
-            try {
-                Files.copy(context.files().root().resolve(donor.file()), file, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            return new ImageResult("reused-fallback", donor.model(), BigDecimal.ZERO, donor.realistic(),
-                    donor.license());
-        }
-        log.warn("Run {} {}: image provider failed, using a placeholder: {}", context.run().id(), shot.id(),
-                cause.getMessage());
-        CardRenderer.placeholder(file, video.width(), video.height(), shot.seed(), shot.type(), shot.prompt());
-        return new ImageResult("placeholder-fallback", "java2d", BigDecimal.ZERO, false,
-                LicenseRecord.generated("storyforge-placeholder"));
     }
 
     /** Real photos and footage for the shots the director picked; anything not found falls back to AI images. */
@@ -193,6 +168,99 @@ public class AssetsStage implements StageWorker {
         return List.of("assets.json");
     }
 
+    public record StockQuery(String shot, String query) {
+    }
+
+    public record StockQueries(List<StockQuery> queries) {
+    }
+
+    /**
+     * Pictures that could not be generated: one LLM call proposes stock searches where a stock photo can honestly
+     * fit, the verify pass rejects anything off-topic, and the rest reuse a picture from the same scene or, as a
+     * last resort, the branded backdrop. Never a text placeholder.
+     */
+    private void fillMissing(StageContext context, ShotList shots, FormatDefinition.Style style, List<Shot> missing,
+                             List<Asset> assets, Set<String> used) {
+        Map<String, RealMediaFinder.Found> stock = new HashMap<>();
+        Map<String, RealMedia> queries = new HashMap<>();
+        if (finder.stockAvailable()) {
+            Alignment alignment = context.files().read(Stage.ALIGN, "alignment.json", Alignment.class);
+            String items = missing.stream().map(shot -> String.join(" | ", shot.id(),
+                    RevisionService.spoken(alignment, shot), description(shot, style)))
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            try {
+                StockQueries proposed = llm.json(context, Stage.ASSETS, "stock_queries",
+                        Map.of("topic", context.run().topicTitle(), "items", items), StockQueries.class);
+                if (proposed.queries() != null) {
+                    proposed.queries().stream().filter(q -> q.shot() != null && q.query() != null && !q.query().isBlank())
+                            .forEach(q -> queries.put(q.shot(), new RealMedia(RealMedia.PHOTO, q.query().strip())));
+                }
+            } catch (LlmException e) {
+                log.warn("Run {}: stock queries failed: {}", context.run().id(), e.getMessage());
+            }
+            for (Shot shot : missing) {
+                RealMedia query = queries.get(shot.id());
+                if (query != null) {
+                    finder.stockPhoto(query.query(), used, context.files().path(Stage.ASSETS, shot.id()))
+                            .ifPresent(photo -> stock.put(shot.id(), photo));
+                }
+            }
+        }
+        Map<String, RealMediaFinder.Found> kept = verified(context, shots, queries, stock);
+        Map<String, String> sceneOf = new HashMap<>();
+        shots.shots().forEach(shot -> sceneOf.put(shot.id(), shot.sceneId()));
+        for (Shot shot : missing) {
+            RealMediaFinder.Found photo = kept.get(shot.id());
+            if (photo != null) {
+                context.usage().provider("stock-fallback");
+                assets.add(new Asset(shot.id(), context.files().relative(photo.file()), shot.type(), "stock-fallback",
+                        "pixabay", photo.label(), shot.seed(), BigDecimal.ZERO, false, photo.license(), "photo",
+                        photo.credit()));
+                continue;
+            }
+            Path file = context.files().path(Stage.ASSETS, shot.id() + ".png");
+            ImageResult result = reuseOrBackdrop(context, shot, file, assets, sceneOf);
+            context.usage().provider(result.provider());
+            assets.add(new Asset(shot.id(), context.files().relative(file), shot.type(), result.provider(),
+                    result.model(), shot.prompt(), shot.seed(), BigDecimal.ZERO, result.realistic(), result.license(),
+                    "ai", null));
+        }
+        log.info("Run {}: {} stock photo(s) kept of {} missing pictures", context.run().id(), kept.size(),
+                missing.size());
+    }
+
+    /** Reuses an AI picture from the same scene (else the nearest one), or draws the branded backdrop. */
+    private ImageResult reuseOrBackdrop(StageContext context, Shot shot, Path file, List<Asset> assets,
+                                        Map<String, String> sceneOf) {
+        Asset donor = null;
+        for (Asset candidate : assets) {
+            boolean usable = "ai".equals(candidate.media()) && !candidate.provider().endsWith("-fallback")
+                    && !GRAPHICS.equals(candidate.provider());
+            if (usable && (donor == null || shot.sceneId().equals(sceneOf.get(candidate.shotId())))) {
+                donor = candidate;
+            }
+        }
+        if (donor != null) {
+            try {
+                Files.copy(context.files().root().resolve(donor.file()), file, StandardCopyOption.REPLACE_EXISTING);
+                return new ImageResult("reused-fallback", donor.model(), BigDecimal.ZERO, donor.realistic(),
+                        donor.license());
+            } catch (IOException e) {
+                log.warn("Run {} {}: reuse failed: {}", context.run().id(), shot.id(), e.getMessage());
+            }
+        }
+        CardRenderer.backdrop(file, video.width(), video.height(), shot.seed());
+        return new ImageResult("backdrop-fallback", "java2d", BigDecimal.ZERO, false,
+                LicenseRecord.generated("storyforge-backdrop"));
+    }
+
+    /** The director's picture description without the style words, for stock photo searches. */
+    private static String description(Shot shot, FormatDefinition.Style style) {
+        String prompt = shot.prompt() == null ? "" : shot.prompt();
+        String prefix = style.promptPrefix() + ", ";
+        return prompt.startsWith(prefix) ? prompt.substring(prefix.length()) : prompt;
+    }
+
     /** Fair-use trailer clips when the story is about a screen work and the owner has the mode on. */
     private Map<String, FilmClipFinder.Clip> clips(StageContext context, ShotList shots, Set<String> taken) {
         if (!clipFinder.enabled() || !preferences.get().fairUseClipsEnabled()) {
@@ -208,7 +276,6 @@ public class AssetsStage implements StageWorker {
         ShotList shots = context.files().read(Stage.VISUAL_PLAN, "shotlist.json", ShotList.class);
         FormatDefinition.Style style = formats.get(context.run().format()).style();
         List<Asset> assets = new ArrayList<>();
-        int fallbacks = 0;
         Map<String, RealMediaFinder.Found> real = realMedia(context, shots);
         Map<String, MapPin> maps = context.files().exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
                 ? context.files().read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS, new TypeReference<Map<String, MapPin>>() { })
@@ -219,6 +286,8 @@ public class AssetsStage implements StageWorker {
         Set<String> notAi = new HashSet<>(taken);
         notAi.addAll(clips.keySet());
         Set<String> allowedNew = budget(context, shots, style, notAi);
+        Set<String> stockUsed = new HashSet<>(real.values().stream().map(RealMediaFinder.Found::key).toList());
+        List<Shot> missing = new ArrayList<>();
         for (Shot shot : shots.shots()) {
             MapPin pin = maps.get(shot.id());
             if (pin != null) {
@@ -264,8 +333,9 @@ public class AssetsStage implements StageWorker {
                 }
                 result = images.generate(request, file);
             } catch (RuntimeException e) {
-                result = fallback(context, shot, file, assets, e);
-                fallbacks++;
+                // No AI picture (free quota used up or provider down): handled together after the loop.
+                missing.add(shot);
+                continue;
             }
             if (result.costUsd().signum() > 0) {
                 context.usage().call(result.provider(), 0, 0, result.costUsd());
@@ -275,8 +345,10 @@ public class AssetsStage implements StageWorker {
             assets.add(new Asset(shot.id(), relative, shot.type(), result.provider(), result.model(), shot.prompt(),
                     shot.seed(), result.costUsd(), result.realistic(), result.license(), "ai", null));
         }
-        if (fallbacks > 0) {
-            log.warn("Run {}: {} of {} images are placeholders", context.run().id(), fallbacks, shots.shots().size());
+        if (!missing.isEmpty()) {
+            log.warn("Run {}: {} of {} pictures could not be generated; finding stock photos or reusing pictures",
+                    context.run().id(), missing.size(), shots.shots().size());
+            fillMissing(context, shots, style, missing, assets, stockUsed);
         }
         boolean realistic = assets.stream().anyMatch(Asset::realistic);
         context.files().write(Stage.ASSETS, "assets.json", new AssetManifest(realistic, assets));

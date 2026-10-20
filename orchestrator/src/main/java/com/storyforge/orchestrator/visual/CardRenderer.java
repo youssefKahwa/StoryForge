@@ -39,6 +39,23 @@ public final class CardRenderer {
         write(image, out);
     }
 
+    /** Text-free BiPath night backdrop (radial glow and snow), the last resort when no picture can be found. */
+    public static void backdrop(Path out, int width, int height, long seed) {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new java.awt.RadialGradientPaint(width * 0.5f, height * 0.42f, width * 0.6f,
+                new float[]{0f, 1f}, new Color[]{new Color(0x1c, 0x2c, 0x44), new Color(0x0b, 0x0f, 0x17)}));
+        g.fillRect(0, 0, width, height);
+        java.util.Random random = new java.util.Random(seed);
+        for (int i = 0; i < 140; i++) {
+            int size = 2 + random.nextInt(5);
+            g.setColor(new Color(240, 240, 240, 60 + random.nextInt(150)));
+            g.fillOval(random.nextInt(width), random.nextInt(height), size, size);
+        }
+        g.dispose();
+        write(image, out);
+    }
+
     public static void kineticText(Path out, int width, int height, long seed, String text) {
         BufferedImage image = canvas(width, height, seed);
         Graphics2D g = graphics(image);

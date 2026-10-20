@@ -111,7 +111,8 @@ public class QaService {
         long placeholders = assets.assets().stream()
                 .filter(asset -> asset.provider().endsWith("-fallback")).count();
         checks.add(check("content.real_images", "content", WARNING, placeholders == 0,
-                placeholders == 0 ? "all images generated" : placeholders + " image(s) reused or placeholder (quota?)"));
+                placeholders == 0 ? "all pictures as planned" : placeholders + " picture(s) replaced by a stock photo, "
+                        + "a reused picture or a backdrop because no AI image was available (daily free quota?)"));
 
         Set<String> clipShots = assets.assets().stream().filter(asset -> "clip".equals(asset.media()))
                 .map(AssetManifest.Asset::shotId).collect(Collectors.toSet());
@@ -230,11 +231,14 @@ public class QaService {
                 .filter(track -> track.license() == null || !track.license().complete())
                 .forEach(track -> unlicensedAudio.add(track.file()));
         long musicTracks = audio.tracks().stream().filter(track -> !"narration".equals(track.kind())).count();
+        long clips = assets.assets().stream().filter(asset -> "clip".equals(asset.media())).count();
+        String filmDetail = clips == 0 ? "no film footage or official artwork"
+                : "no film material beyond the " + clips + " fair-use trailer clip(s)";
         return List.of(
                 check("legal.asset_licenses", "legal", CRITICAL, missing.isEmpty(),
                         missing.isEmpty() ? assets.assets().size() + " asset(s) with provenance" : "missing: " + missing),
                 check("legal.no_film_material", "legal", CRITICAL, forbidden.isEmpty(),
-                        forbidden.isEmpty() ? "no film footage or official artwork" : "forbidden: " + forbidden),
+                        forbidden.isEmpty() ? filmDetail : "forbidden: " + forbidden),
                 check("legal.music_licenses", "legal", CRITICAL, unlicensedAudio.isEmpty(),
                         unlicensedAudio.isEmpty() ? musicTracks + " music/SFX track(s), all licensed"
                                 : "unknown license: " + unlicensedAudio));

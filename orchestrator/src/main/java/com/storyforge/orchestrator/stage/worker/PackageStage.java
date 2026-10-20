@@ -139,11 +139,18 @@ public class PackageStage implements StageWorker {
         if (!files.exists(Stage.ASSETS, "assets.json")) {
             return null;
         }
-        List<AssetManifest.Asset> candidates = files.read(Stage.ASSETS, "assets.json", AssetManifest.class).assets()
-                .stream()
+        List<AssetManifest.Asset> assets = files.read(Stage.ASSETS, "assets.json", AssetManifest.class).assets();
+        List<AssetManifest.Asset> candidates = assets.stream()
                 .filter(asset -> asset.provider().equals(images.name()))
                 .sorted(Comparator.comparing(asset -> "establishing".equals(asset.kind()) ? 0 : 1))
                 .toList();
+        if (candidates.isEmpty()) {
+            // No AI picture at all (daily quota used up): a real or stock photo beats a plain dark background.
+            candidates = assets.stream()
+                    .filter(asset -> "photo".equals(asset.media()))
+                    .sorted(Comparator.comparing(asset -> "character".equals(asset.kind()) ? 0 : 1))
+                    .toList();
+        }
         if (candidates.isEmpty()) {
             return null;
         }

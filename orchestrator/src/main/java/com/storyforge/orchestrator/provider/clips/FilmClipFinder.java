@@ -75,6 +75,8 @@ public class FilmClipFinder {
     private static final double SKIP_HEAD = 5;
     private static final double SKIP_TAIL = 8;
     private static final double MIN_SEGMENT = 1.6;
+    /** Trailers cut fast; a longer "segment" usually hides a cut the detector missed in dark footage. */
+    private static final double MAX_SEGMENT = 6;
     private static final int TILE_W = 320;
     private static final int TILE_H = 180;
     private static final int COLS = 4;
@@ -177,7 +179,10 @@ public class FilmClipFinder {
             }
             Path out = context.files().path(Stage.ASSETS, shot.id() + ".clip.mp4");
             // Slow motion, then a freeze on the last frame while the narrator keeps commenting.
-            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-ss", fmt(segment.start() + 0.1), "-t", fmt(source),
+            // Centre the clip on the frame the model looked at (the tile is the segment's middle frame).
+            double mid = (segment.start() + segment.end()) / 2;
+            double from = Math.max(segment.start() + 0.05, Math.min(mid - source / 2, segment.end() - source - 0.05));
+            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-ss", fmt(from), "-t", fmt(source),
                     "-i", segment.trailer().file().toString(), "-vf",
                     "setpts=PTS/" + fmt(factor) + ",scale=" + width + ":" + height
                             + ":force_original_aspect_ratio=increase,crop=" + width + ":" + height + ",fps=30"
@@ -221,7 +226,7 @@ public class FilmClipFinder {
         List<Segment> segments = new ArrayList<>();
         for (MediaSvcClient.Trailer trailer : found) {
             String output = ffmpeg.ffmpeg(List.of("-i", trailer.file().toString(), "-an", "-vf",
-                    "select='gt(scene,0.32)',showinfo", "-f", "null", "-"));
+                    "select='gt(scene,0.18)',showinfo", "-f", "null", "-"));
             List<Double> cuts = new ArrayList<>(List.of(0.0));
             Matcher matcher = PTS.matcher(output);
             while (matcher.find()) {
@@ -232,7 +237,8 @@ public class FilmClipFinder {
             for (int i = 0; i + 1 < cuts.size() && segments.size() < MAX_TILES; i++) {
                 double start = cuts.get(i);
                 double end = cuts.get(i + 1);
-                if (start >= SKIP_HEAD && end <= duration - SKIP_TAIL && end - start >= MIN_SEGMENT) {
+                if (start >= SKIP_HEAD && end <= duration - SKIP_TAIL && end - start >= MIN_SEGMENT
+                        && end - start <= MAX_SEGMENT) {
                     segments.add(new Segment(segments.size() + 1, trailer, start, end));
                 }
             }
