@@ -15,3 +15,6 @@ library/**/*.flac
 
 # Owner's channel media (large binaries stay local)
 ChannelAssets/*.mp4
+
+# Owner notes
+linkexempletoseetest.txt
