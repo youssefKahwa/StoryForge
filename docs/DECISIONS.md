@@ -225,3 +225,23 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
 - Consequences: `dashboard-url` defaults to http://localhost:8080 (`dev.ps1` sets :8000). Rebuild the dashboard
   after dashboard changes (`start.ps1` does it automatically when sources are newer than the build).
 
+## ADR-022 V2: directed shots, overlays, owner revisions, zero-input start (2026-10-19, owner request)
+- Context: images within a scene all used the scene's single @visual line (near-duplicates in a row), recurring
+  people changed look, there were no documentary graphics, and the only correction tool was "re-run a stage".
+- Decision:
+  - Shot director (VISUAL_PLAN): one Haiku call writes a visual bible (era, light, fixed looks of recurring people and
+    places); chunked Haiku calls (40 shots) write one prompt per image from the words spoken during it. Any failure
+    falls back to the rule-based prompts. `prompt_memory.json` (run root) keys prompts by scene, shot index and scene
+    text, so a narration revision in one scene does not re-prompt (and re-generate) the others.
+  - Overlays (location/date lower third, quotation card, year marker) are proposed by the director but kept only
+    when the narration says them verbatim (place, quote, numbers), at most one per 40 s, 20 s apart.
+  - Revisions: table `revision`; notes are turned into inputs, never patched into outputs: scene rewrite
+    (Sonnet, claims-only) into critique/scenes.json with a history copy; image notes into `overrides.json` (new
+    prompt via Haiku + new seed); music mood/none/volume into overrides; package notes into the package prompt.
+    Then `rerunFrom(earliest stage)`. Refused while the video is live on YouTube (veto first).
+  - Quick start: links → inspiration with `auto_start`; an `InspirationFinished` event starts the run with the
+    strongest angle. Nothing given → next backlog topic; empty backlog → `topics` prompt fills it from the channel
+    brief (Preferences). Autopilot uses the same path.
+- Consequences: about 4–6 more Haiku calls per video (subscription, $0). Shot ids are positional, so overrides use
+  `sceneId#n` keys. Mock LLM answers per prompt (`mock/llm/prompt-<name>.json|md`) with `{{var}}` filling.
+

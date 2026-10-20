@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.1.1
 tier: fast
 ---
 ## system
@@ -21,6 +21,7 @@ Rules for every prompt (25-45 words, English):
   (from behind, silhouette, or face in shadow); detail = close-up of a meaningful object; symbolic = metaphor for
   the idea being said.
 - Never two neighbouring shots with the same subject and framing. Vary distance, angle and light.
+- One single frozen moment per image: never "cut to", never two places or two moments in one prompt.
 - Never readable text, letters, numbers, logos, maps with labels, or the face of a real, identifiable person.
 
 Overlays (optional, sparse, at most one every 40 seconds):

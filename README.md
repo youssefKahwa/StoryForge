@@ -21,8 +21,9 @@ JDK 17, Node 22, FFmpeg on PATH, Docker Desktop (optional: the `h2` profile work
 ## Weekly use
 1. `.\scripts\start.ps1` (charger plugged in). It builds the dashboard if needed, starts everything and opens
    http://localhost:8080. Check **Settings → System check** is green.
-2. **New video**: paste 1–3 YouTube links → pick an angle and a voice → Start.
-3. After 1–2 hours, open the run → **Publish kit** tab (or the folder in `%USERPROFILE%\storyforge-data\exports`).
+2. **New video → Quick start**: 1–3 inspiration links, a topic, or nothing → **Make my video**.
+3. After 1–2 hours, open the run → **Revise** tab to point at anything you want redone → **Publish kit** tab
+   (or the folder in `%USERPROFILE%\storyforge-data\exports`).
 
 One-time setup: `docs/OWNER_SETUP.md`.
 
@@ -47,4 +48,6 @@ One-time setup: `docs/OWNER_SETUP.md`.
 `GET /api/system/storage?olderThanDays=14` · `POST /api/system/cleanup?olderThanDays=14` ·
 `GET/POST /api/runs` · `GET /api/runs/{id}` · `POST /api/runs/{id}/cancel|resume` ·
 `POST /api/runs/{id}/stages/{stage}/rerun?fresh=false` · `GET /api/runs/{id}/files/{stage}/{name}` ·
+`POST /api/quick-start` · `POST /api/seed-topics/suggest?count=5` · `GET /api/runs/{id}/timeline` ·
+`GET/POST /api/runs/{id}/revisions` · `DELETE /api/runs/{id}/revisions/{rid}` · `POST /api/runs/{id}/revisions/apply` ·
 `GET/POST/DELETE /api/seed-topics` · `GET /api/settings` · `PUT /api/settings/kill-switch`

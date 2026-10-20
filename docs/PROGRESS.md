@@ -63,6 +63,14 @@
   the description. ISRC proof is in `MUSIC_CREDITS.txt`. System check: music OK.
 - `scripts/set-cloudflare-token.ps1`: hidden prompt, verifies with Cloudflare, writes `.env`.
 
+### V2: premium look + near-zero interaction (2026-10-19)
+- Shot director with visual bible: a distinct, story-matched prompt per image and consistent recurring characters.
+- Documentary overlays in Remotion: location/date lower thirds, quote cards, year markers (narration-verified).
+- Revise tab: mark a moment, note picture/narration/music/title changes, apply; targeted re-run with caches.
+- Quick start (links, topic or nothing), channel brief, AI topic ideas; autopilot fills its own backlog.
+- Script prompt 0.3.0: cold open, open loops per chapter, re-hooks every 60–90 s, spoken places/years.
+- Tests: 48 passing (new: director overlays E2E + unit, revisions E2E, quick start E2E).
+
 ## Next
 - Owner steps in `docs/OWNER_SETUP.md` (roll Cloudflare token, YouTube client, Telegram, power settings).
 - First real YouTube upload test once the Google client exists.

@@ -12,6 +12,16 @@ $dashboard = Join-Path $root 'dashboard'
 $index = Join-Path $dashboard 'public\index.html'
 $profiles = if ($Docker) { $Mode } else { "$Mode,h2" }
 
+# Already running (another window)? Just open it: a second copy would fight over the database.
+try {
+    Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://localhost:8080/actuator/health' | Out-Null
+    Write-Host 'StoryForge is already running: opening http://localhost:8080' -ForegroundColor Green
+    if (-not $NoBrowser) { Start-Process 'http://localhost:8080' }
+    return
+} catch {
+    # not running yet: start it below
+}
+
 $stale = $Rebuild -or -not (Test-Path $index)
 if (-not $stale) {
     $built = (Get-Item $index).LastWriteTime

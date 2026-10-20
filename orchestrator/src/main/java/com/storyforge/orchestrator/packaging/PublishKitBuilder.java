@@ -28,6 +28,7 @@ public class PublishKitBuilder {
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm (zzz)",
             Locale.ENGLISH);
     private static final String CATEGORY = "Education";
+    private static final String EXPORT_REF = "export.json";
 
     private final Path exportsRoot;
 
@@ -37,6 +38,7 @@ public class PublishKitBuilder {
 
     public PublishKit build(RunFiles files, VideoPackage pkg, ScheduleSlot slot, List<ShortClip> shorts) {
         Path dir = exportsRoot.resolve(LocalDate.now() + "-" + slug(pkg.title()));
+        archivePrevious(files, dir);
         List<String> thumbnails = new ArrayList<>();
         thumbnails.add(pkg.thumbnail());
         thumbnails.addAll(pkg.thumbnailAlternates() == null ? List.of() : pkg.thumbnailAlternates());
@@ -85,6 +87,26 @@ public class PublishKitBuilder {
         write(dir.resolve("description.txt"), kit.description());
         write(dir.resolve("tags.txt"), kit.tagsCsv());
         return kit;
+    }
+
+    /** A revised run gets a fresh export; the earlier version moves to exports/_previous so only one is current. */
+    private void archivePrevious(RunFiles files, Path current) {
+        files.readRoot(EXPORT_REF, ExportRef.class).map(ref -> Path.of(ref.dir()))
+                .filter(previous -> !previous.equals(current) && Files.isDirectory(previous))
+                .ifPresent(previous -> {
+                    try {
+                        Path archive = exportsRoot.resolve("_previous");
+                        Files.createDirectories(archive);
+                        Path target = archive.resolve(previous.getFileName() + "-" + System.currentTimeMillis());
+                        Files.move(previous, target);
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
+        files.writeRoot(EXPORT_REF, new ExportRef(current.toString()));
+    }
+
+    record ExportRef(String dir) {
     }
 
     static List<String> checklist(boolean altered, List<String> hashtags) {

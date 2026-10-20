@@ -61,10 +61,15 @@ export const QuoteCard = ({ title, subtitle, palette, durationInFrames }) => {
   const size = words.length > 22 ? 52 : words.length > 12 ? 62 : 74;
   return (
     <AbsoluteFill style={{ opacity, alignItems: 'center', justifyContent: 'center', padding: '0 220px' }}>
-      <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(8,8,10,0.62)' }} />
+      <div style={{
+        position: 'absolute', inset: 0, backgroundColor: 'rgba(8,8,10,0.74)', backdropFilter: 'blur(10px)',
+      }} />
       <div style={{ position: 'relative', maxWidth: 1400, textAlign: 'center' }}>
         <div style={{ fontFamily: cinzel, fontSize: 150, lineHeight: 0.6, color: accent, opacity: 0.85 }}>“</div>
-        <div style={{ fontFamily: cormorant, fontStyle: 'italic', fontSize: size, lineHeight: 1.25, color: '#f5f0e6' }}>
+        <div style={{
+          fontFamily: cormorant, fontStyle: 'italic', fontSize: size, lineHeight: 1.25, color: '#f5f0e6',
+          textShadow: '0 4px 24px rgba(0,0,0,0.9)',
+        }}>
           {words.map((word, i) => (
             <span
               key={`${word}-${i}`}

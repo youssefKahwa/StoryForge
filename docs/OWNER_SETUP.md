@@ -77,13 +77,21 @@ The NVIDIA key and the Cloudflare token were pasted into a chat once. To be safe
 
 ---
 
-## Your weekly routine (about 15 minutes of your time)
+## Your weekly routine (about 10 minutes of your time)
+
+One time: write your **channel brief** in Settings → Preferences (niche, audience, tone). With autopilot on
+(`STORYFORGE_AUTOPILOT=true`), a video even starts by itself every week.
 1. `.\scripts\start.ps1` (opens http://localhost:8080). Glance at **Settings → System check**: a red line tells
    you what to fix; "Cloudflare images: 0 left" means wait for 00:00 UTC (02:00 Morocco summer time) or images get
    reused. Your defaults (voice, length, Shorts, music volume, publish slot) are in **Settings → Preferences**.
-2. **New video** → paste 1–3 YouTube links → **Analyze** → pick an angle → pick a voice → **Start**.
+2. **New video** → **Quick start**: paste 1–3 YouTube links (or just a topic, or nothing: the app takes the next
+   backlog topic and asks the AI for new ideas when the backlog is empty) → **Make my video**. The angle, voice,
+   length and publish slot are chosen for you. (The step-by-step wizard below it is still there.)
 3. Come back after 1–2 hours (charger plugged in) → open the run → **Publish kit** tab.
-4. Watch the video. Then either upload it with the kit (copy buttons + checklist), or, if YouTube is connected, it's
+4. Watch the video in the **Revise** tab. Something off? Press **Mark this moment** (or click a picture in the strip),
+   choose Picture / Narration / Music / Title & thumbnail, write a short note, add as many notes as you like, then
+   **Apply**. Only what you pointed at is redone (same voice clips and images elsewhere), and the video is rendered
+   again. When you're happy, either upload it with the kit (copy buttons + checklist), or, if YouTube is connected, it's
    already uploaded as private: let it publish, or press **Veto**.
 5. Post the Shorts on the following days (titles are in the kit).
 6. Every month or so: **Settings → Storage → Free …** deletes the heavy working files of runs older than 14 days.
