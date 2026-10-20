@@ -1,11 +1,13 @@
 import React from 'react';
 import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import { KenBurnsImage } from './components/KenBurnsImage';
+import { MediaShot } from './components/MediaShot';
 import { KineticText } from './components/KineticText';
 import { ChapterCard } from './components/ChapterCard';
 import { FilmLook } from './components/FilmLook';
 import { Captions } from './components/Captions';
 import { OverlayLayer } from './components/Overlays';
+import { HostBubble } from './components/HostBubble';
 
 const CROSSFADE_FRAMES = 10;
 const CHAPTER_FRAMES = 105;
@@ -17,9 +19,9 @@ const assetUrl = (base, file) => `${base}/${file.split('/').map(encodeURICompone
 
 const previousImage = (shots, index) => {
   for (let i = index - 1; i >= 0; i -= 1) {
-    if (!isGraphic(shots[i].type)) return shots[i].asset;
+    if (!isGraphic(shots[i].type) && shots[i].media !== 'footage') return shots[i].asset;
   }
-  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type));
+  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type) && shot.media !== 'footage');
   return next ? next.asset : null;
 };
 
@@ -39,7 +41,7 @@ const Shot = ({ shot, index, shots, assetBase, palette, durationInFrames, fadeIn
   }
   return (
     <AbsoluteFill style={{ opacity }}>
-      <KenBurnsImage src={assetUrl(assetBase, shot.asset)} motion={shot.motion} durationInFrames={durationInFrames} />
+      <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={durationInFrames} />
     </AbsoluteFill>
   );
 };
@@ -94,6 +96,16 @@ export const LongForm = ({ edl, assetBase }) => {
         return (
           <Sequence key={`overlay-${index}`} from={from} durationInFrames={length}>
             <OverlayLayer overlay={overlay} palette={palette} durationInFrames={length} />
+          </Sequence>
+        );
+      })}
+      {edl.host && (edl.host.appearances || []).map((appearance, index) => {
+        const from = Math.round(appearance.start * fps);
+        const length = Math.max(1, Math.min(Math.round((appearance.end - appearance.start) * fps), durationInFrames - from));
+        const frameUrl = (i) => assetUrl(assetBase, edl.host.framePattern.replace('%04d', String(i + 1).padStart(4, '0')));
+        return (
+          <Sequence key={`host-${index}`} from={from} durationInFrames={length}>
+            <HostBubble appearance={appearance} frameUrl={frameUrl} palette={palette} durationInFrames={length} />
           </Sequence>
         );
       })}

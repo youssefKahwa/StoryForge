@@ -71,6 +71,12 @@
 - Script prompt 0.3.0: cold open, open loops per chapter, re-hooks every 60–90 s, spoken places/years.
 - Tests: 48 passing (new: director overlays E2E + unit, revisions E2E, quick start E2E).
 
+### Real media + talking host (2026-10-20)
+- Real photos (Wikimedia Commons) and stock footage (Pexels, optional key) mixed with illustrations, license-filtered,
+  relevance-checked, credited on screen and in the description. Live probe: real 1959 Dyatlov tent photo (PD),
+  Flannan Isles lighthouse (CC BY-SA), Mary Celeste 1861 painting (PD); a same-name island was correctly rejected.
+- Talking logo host with loudness lip-sync at the opening, questions and outro.
+
 ## Next
 - Owner steps in `docs/OWNER_SETUP.md` (roll Cloudflare token, YouTube client, Telegram, power settings).
 - First real YouTube upload test once the Google client exists.

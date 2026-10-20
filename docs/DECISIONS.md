@@ -253,3 +253,22 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
   code but off by default and out of the owner guide (it needs the app running all week). Quick start with no
   input replaces it: one click picks the next topic (AI ideas when the backlog is empty).
 
+## ADR-024 Real photos and footage, talking logo host, no film clips by default (2026-10-20, owner request)
+- Context: all-AI stills looked fake; the owner wanted real material "from the story itself" and suggested short
+  film/anime clips "under 3 seconds". Research (2026-10-20): YouTube lists "a few seconds is fine" as a copyright
+  myth (support.google.com/youtube/answer/2797449); Content ID can claim any length, music fastest; fair use is a
+  defense, not a permission. YouTube's July 2025 YPP update demonetizes "mass-produced, repetitive" content.
+- Decision:
+  - Real media, licensed: Wikimedia Commons photos (public domain, CC0, CC BY, CC BY-SA; no NC/ND/GFDL-only, no
+    "Restrictions") and Pexels video (Pexels license, `PEXELS_API_KEY`). The director marks shots "photo"/"footage"
+    with an unambiguous query; the finder needs >= 75% of the query words in the file's title/description; one
+    Haiku `verify_media` pass rejects off-topic picks (same-name places). Max half the pictures real. Credits on
+    screen (corner caption) and in the description ("Photos and footage", compact form if over 5,000 chars).
+    Photos render as prints over a blurred copy; footage is cut to the shot length, muted, graded.
+  - Film/anime clips stay out of the automatic pipeline (`legal.no_film_material` remains CRITICAL).
+  - Talking logo host from `ChannelAssets/DownRightTalkingMouth.mp4`: circle-cropped frames cached once; mouth
+    frame per video frame chosen from narration loudness (openness measured from dark/red mouth pixels); pops in at
+    the opening, rhetorical questions (>= 45 s apart) and the outro, <= 20% of runtime. Preference `hostMascot`.
+- Consequences: more authentic, less "AI slop" risk; Commons photos are often small (600-1600 px), hence the print
+  style. Without a Pexels key only photos are real. One extra Haiku call per video.
+

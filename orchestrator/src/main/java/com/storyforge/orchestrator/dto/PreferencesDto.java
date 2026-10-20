@@ -16,16 +16,18 @@ public record PreferencesDto(
         DayOfWeek publishDay,
         String publishTime,
         String publishZone,
-        String channelBrief) {
+        String channelBrief,
+        Boolean hostMascot) {
 
     public static PreferencesDto from(Preferences p) {
         return new PreferencesDto(p.defaultVoice(), p.defaultMinutes(), p.defaultFormat(), p.shortsEnabled(),
                 p.shortsCount(), p.burnCaptions(), p.upscaleImages(), p.musicVolume(), p.publishDay(),
-                p.publishTime(), p.publishZone(), p.channelBrief());
+                p.publishTime(), p.publishZone(), p.channelBrief(), p.hostEnabled());
     }
 
     public Preferences toPreferences() {
         return new Preferences(defaultVoice, defaultMinutes, defaultFormat, shortsEnabled, shortsCount, burnCaptions,
-                upscaleImages, musicVolume, publishDay, publishTime, publishZone, channelBrief);
+                upscaleImages, musicVolume, publishDay, publishTime, publishZone, channelBrief,
+                hostMascot);
     }
 }

@@ -1,5 +1,5 @@
 ---
-version: 0.1.1
+version: 0.2.0
 tier: fast
 ---
 ## system
@@ -24,6 +24,16 @@ Rules for every prompt (25-45 words, English):
 - One single frozen moment per image: never "cut to", never two places or two moments in one prompt.
 - Never readable text, letters, numbers, logos, maps with labels, or the face of a real, identifiable person.
 
+Real media (premium documentaries mix real photos and footage with illustrations; aim for about a third of the
+shots, never two thirds):
+- "photo": the shot shows a specific, named, real place, building, ship, object, document or historical person
+  that has public photographs (Wikimedia Commons). query = 2-5 words naming it unambiguously, with the wider
+  place when the name is common, e.g. "Flannan Isles lighthouse", "Eilean Mor Flannan Isles", "Dyatlov Pass tent 1959".
+- "footage": the shot is generic real-world motion that stock video shows well: sea, storm, rain, fog, fire,
+  snow, forest, sky, city street at night, candle, clock. query = 2-4 plain words, e.g. "stormy sea waves".
+  Never footage of identifiable people, brands, or anything pretending to show the actual event.
+Always still write "prompt": it is the fallback when no real media is found.
+
 Overlays (optional, sparse, at most one every 40 seconds):
 - "location": only when the narrator names a place during that shot. title = the place as said (add the country
   after a comma if obvious), subtitle = the date or year if it is said in the same shot, else "".
@@ -32,6 +42,6 @@ Overlays (optional, sparse, at most one every 40 seconds):
 - "year": only on a jump in time. title = the year as said.
 
 Return:
-{"shots": [{"id": "shot_001", "prompt": "..."}],
+{"shots": [{"id": "shot_001", "prompt": "...", "real": {"kind": "photo|footage", "query": "..."}}],
  "overlays": [{"kind": "location|quote|year", "shot": "shot_001", "title": "...", "subtitle": "..."}]}
-Every shot id from the list must appear once in "shots".
+Every shot id from the list must appear once in "shots"; "real" is optional (omit it for illustrated shots).

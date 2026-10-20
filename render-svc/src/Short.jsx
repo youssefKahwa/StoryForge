@@ -2,7 +2,7 @@ import React from 'react';
 import { AbsoluteFill, Audio, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { loadFont as loadAnton } from '@remotion/google-fonts/Anton';
 import { loadFont as loadInter } from '@remotion/google-fonts/Inter';
-import { KenBurnsImage } from './components/KenBurnsImage';
+import { MediaShot } from './components/MediaShot';
 import { FilmLook } from './components/FilmLook';
 
 const anton = loadAnton('normal', { weights: ['400'], subsets: ['latin'] }).fontFamily;
@@ -106,7 +106,7 @@ export const Short = ({ edl, assetBase }) => {
         return (
           <Sequence key={shot.id} from={from} durationInFrames={Math.min(length, durationInFrames - from)}>
             <AbsoluteFill>
-              <KenBurnsImage src={assetUrl(assetBase, shot.asset)} motion={shot.motion || 'push_in'} durationInFrames={length} />
+              <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={length} />
             </AbsoluteFill>
           </Sequence>
         );

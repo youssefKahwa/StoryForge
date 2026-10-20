@@ -59,6 +59,15 @@ Without it, every run still produces the full Publish Kit and you upload by hand
    ```
 5. Restart → **Settings → Send test notification**.
 
+## 4b. Real stock footage (2 min). Recommended.
+Real photos (Wikimedia Commons) work without any key. For real video clips (sea, storms, fog, forests...):
+1. Create a free account at https://www.pexels.com/api/ and click **Your API key**.
+2. Put it in `.env`: `PEXELS_API_KEY=...` and restart StoryForge.
+Settings → System check then shows "Real photos and footage: OK".
+
+Your talking logo: `ChannelAssets/DownRightTalkingMouth.mp4` is used automatically (Settings → Preferences →
+"Talking logo host" to switch it off). Replace the file with another logo video of the same layout to change it.
+
 ## 5. How the app runs: only when you open it
 StoryForge is not a server that stays on. You start it when you want a video (once a week, or 2–3 times), give the
 input, wait until the video is done, review it, then close the window. Nothing runs while it is closed.

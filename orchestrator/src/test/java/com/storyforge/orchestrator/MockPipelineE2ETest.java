@@ -183,9 +183,9 @@ class MockPipelineE2ETest {
         Preferences base = preferences.get();
         try {
             preferences.save(new Preferences("bm_george", 12.5, base.defaultFormat(), false, 0, false, false, "low",
-                    DayOfWeek.SUNDAY, "09:30", "Europe/London", null));
+                    DayOfWeek.SUNDAY, "09:30", "Europe/London", null, null));
             assertThatThrownBy(() -> preferences.save(new Preferences(null, 0.2, null, false, 0, false, false,
-                    "loud", null, "9h", "Mars/Olympus", null))).isInstanceOf(IllegalArgumentException.class);
+                    "loud", null, "9h", "Mars/Olympus", null, null))).isInstanceOf(IllegalArgumentException.class);
 
             long id = runFresh("Preferences check");
             Run run = runs.get(id);

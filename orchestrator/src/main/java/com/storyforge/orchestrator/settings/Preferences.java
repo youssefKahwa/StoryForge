@@ -15,7 +15,13 @@ public record Preferences(
         DayOfWeek publishDay,
         String publishTime,
         String publishZone,
-        String channelBrief) {
+        String channelBrief,
+        Boolean hostMascot) {
+
+    /** The talking channel logo pops in during the video (on unless switched off). */
+    public boolean hostEnabled() {
+        return hostMascot == null || hostMascot;
+    }
 
     public double musicGainOffsetDb() {
         return switch (musicVolume == null ? "normal" : musicVolume) {

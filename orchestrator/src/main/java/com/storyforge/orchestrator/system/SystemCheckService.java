@@ -1,6 +1,8 @@
 package com.storyforge.orchestrator.system;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
+import com.storyforge.orchestrator.host.HostMascot;
+import com.storyforge.orchestrator.provider.realmedia.RealMediaFinder;
 import com.storyforge.orchestrator.notify.NotificationService;
 import com.storyforge.orchestrator.provider.image.ImageQuota;
 import com.storyforge.orchestrator.provider.media.MediaSvcLauncher;
@@ -30,10 +32,14 @@ public class SystemCheckService {
     private final YouTubeAuthService youtube;
     private final NotificationService notifications;
     private final StorageService storage;
+    private final HostMascot host;
+    private final RealMediaFinder realMedia;
 
     public SystemCheckService(StoryForgeProperties properties, MediaSvcLauncher mediaSvc, MusicLibrary music,
                               ImageQuota quota, YouTubeAuthService youtube, NotificationService notifications,
-                              StorageService storage) {
+                              StorageService storage, HostMascot host, RealMediaFinder realMedia) {
+        this.host = host;
+        this.realMedia = realMedia;
         this.properties = properties;
         this.mediaSvc = mediaSvc;
         this.music = music;
@@ -59,6 +65,15 @@ public class SystemCheckService {
                         "Not used by this profile (" + providers.image() + ")."));
         checks.add(properties.sound().enabled() ? musicLibrary()
                 : CheckResult.off("music", "Music library", "Sound design is off in this profile."));
+        checks.add(host.available() ? CheckResult.ok("host", "Talking logo host", host.video().getFileName() + " found.")
+                : CheckResult.off("host", "Talking logo host", "No logo video at " + host.video() + "."));
+        checks.add(!realMedia.enabled() ? CheckResult.off("real-media", "Real photos and footage",
+                "Not used by this profile.")
+                : realMedia.footageAvailable() ? CheckResult.ok("real-media", "Real photos and footage",
+                        "Wikimedia Commons photos and Pexels footage.")
+                : CheckResult.warn("real-media", "Real photos and footage",
+                        "Real photos on (Wikimedia Commons); real video footage off.",
+                        "Get a free key at pexels.com/api and set PEXELS_API_KEY in .env."));
         checks.add(disk());
         checks.add("youtube".equals(providers.publish()) ? youtubeCheck()
                 : CheckResult.off("youtube", "YouTube upload", "Publish mode is " + providers.publish()

@@ -12,3 +12,6 @@ library/**/*.flac
 .idea/
 .vscode/
 *.stackdump
+
+# Owner's channel media (large binaries stay local)
+ChannelAssets/*.mp4

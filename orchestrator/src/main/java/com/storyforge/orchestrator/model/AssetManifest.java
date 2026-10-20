@@ -7,7 +7,12 @@ import java.util.Optional;
 public record AssetManifest(boolean realisticImagery, List<Asset> assets) {
 
     public record Asset(String shotId, String file, String kind, String provider, String model, String prompt,
-                        long seed, BigDecimal costUsd, boolean realistic, LicenseRecord license) {
+                        long seed, BigDecimal costUsd, boolean realistic, LicenseRecord license, String media,
+                        String credit) {
+
+        public Asset {
+            media = media == null ? "ai" : media;
+        }
     }
 
     public Optional<Asset> forShot(String shotId) {

@@ -5,6 +5,7 @@ import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
+import com.storyforge.orchestrator.model.RealMedia;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.ShotList.Shot;
@@ -26,6 +27,7 @@ public class VisualPlanStage implements StageWorker {
     public static final String SHOTLIST = "shotlist.json";
     public static final String OVERLAYS = "overlays.json";
     public static final String BIBLE = "visual_bible.json";
+    public static final String REAL_MEDIA = "real_media.json";
     private static final long REVISION_SEED_STEP = 7919;
 
     private final FormatRegistry formats;
@@ -59,7 +61,17 @@ public class VisualPlanStage implements StageWorker {
         context.usage().provider("shot-planner");
         ShotDirector.Result directed = director.direct(context, context.run().topicTitle(), scenes, alignment, plan,
                 style);
-        ShotList shots = applyRevisions(directed.shots(), context.files().overrides(), style);
+        RunOverrides overrides = context.files().overrides();
+        ShotList shots = applyRevisions(directed.shots(), overrides, style);
+        Map<String, RealMedia> real = new HashMap<>(directed.realMedia());
+        Map<String, Integer> perScene = new HashMap<>();
+        for (Shot shot : shots.shots()) {
+            String key = shotKey(shot.sceneId(), perScene.merge(shot.sceneId(), 1, Integer::sum));
+            if (overrides.shots().containsKey(key)) {
+                real.remove(shot.id());
+            }
+        }
+        context.files().write(Stage.VISUAL_PLAN, REAL_MEDIA, real);
         context.files().write(Stage.VISUAL_PLAN, BIBLE, directed.bible());
         context.files().write(Stage.VISUAL_PLAN, OVERLAYS, directed.overlays());
         context.files().write(Stage.VISUAL_PLAN, SHOTLIST, shots);

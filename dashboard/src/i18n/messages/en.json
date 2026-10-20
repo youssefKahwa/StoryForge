@@ -239,5 +239,7 @@
   "topics.suggest": "Suggest 5 with AI",
   "topics.suggested": "{count} new topic idea(s) added",
   "prefs.channelBrief": "Channel brief (used for AI topic ideas)",
-  "prefs.channelBriefHelp": "Your niche, audience and tone in a few sentences. The autopilot and \"Suggest with AI\" pick topics that fit it."
+  "prefs.channelBriefHelp": "Your niche, audience and tone in a few sentences. The autopilot and \"Suggest with AI\" pick topics that fit it.",
+  "prefs.host": "Talking logo host",
+  "prefs.hostHelp": "Your channel logo (ChannelAssets/DownRightTalkingMouth.mp4) pops in at the opening, on the narrator's questions and at the outro, with its mouth moving to the voice."
 }

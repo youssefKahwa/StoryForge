@@ -68,7 +68,8 @@ public class PreferencesService {
                 publish.day(),
                 publish.time().toString(),
                 publish.zone(),
-                DEFAULT_BRIEF);
+                DEFAULT_BRIEF,
+                true);
     }
 
     private Preferences validate(Preferences p) {
@@ -104,6 +105,7 @@ public class PreferencesService {
                 p.publishDay() == null ? base.publishDay() : p.publishDay(),
                 p.publishTime(),
                 p.publishZone(),
-                p.channelBrief() == null || p.channelBrief().isBlank() ? base.channelBrief() : p.channelBrief().strip());
+                p.channelBrief() == null || p.channelBrief().isBlank() ? base.channelBrief() : p.channelBrief().strip(),
+                p.hostEnabled());
     }
 }

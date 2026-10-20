@@ -78,6 +78,8 @@ public final class ShortsPlanner {
             clipped.put("id", shot.id());
             clipped.put("asset", shot.asset());
             clipped.put("motion", shot.motion());
+            clipped.put("media", shot.media());
+            clipped.put("credit", shot.credit());
             clipped.put("start", round(Math.max(0, shot.start() - moment.start())));
             clipped.put("end", round(Math.min(length, shot.end() - moment.start())));
             shots.add(clipped);

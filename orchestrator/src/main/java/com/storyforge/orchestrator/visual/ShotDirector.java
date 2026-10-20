@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.visual;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.Overlay;
+import com.storyforge.orchestrator.model.RealMedia;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotDirection;
 import com.storyforge.orchestrator.model.ShotDirection.OverlayDraft;
@@ -37,12 +38,15 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class ShotDirector {
 
-    public record Result(ShotList shots, List<Overlay> overlays, VisualBible bible) {
+    public record Result(ShotList shots, List<Overlay> overlays, VisualBible bible, Map<String, RealMedia> realMedia) {
     }
 
     /** Directed prompts of earlier runs of this video, keyed by scene, shot index and scene text. */
-    public record Memory(int salt, VisualBible bible, Map<String, String> prompts, List<OverlayDraft> overlays) {
+    public record Memory(int salt, VisualBible bible, Map<String, String> prompts, List<OverlayDraft> overlays,
+                         Map<String, RealMedia> real) {
     }
+
+    private static final double MAX_REAL_SHARE = 0.5;
 
     public static final String MEMORY = "prompt_memory.json";
 
@@ -67,7 +71,7 @@ public class ShotDirector {
     public Result direct(StageContext context, String topic, List<Scene> scenes, Alignment alignment, ShotList plan,
                          FormatDefinition.Style style) {
         if (!enabled) {
-            return new Result(plan, List.of(), VisualBible.empty());
+            return new Result(plan, List.of(), VisualBible.empty(), Map.of());
         }
         Memory memory = context.files().readRoot(MEMORY, Memory.class)
                 .filter(m -> m.salt() == context.run().cacheSalt() && m.bible() != null).orElse(null);
@@ -81,7 +85,7 @@ public class ShotDirector {
             } catch (LlmException e) {
                 log.warn("Run {}: visual bible failed, keeping rule-based prompts: {}", context.run().id(),
                         e.getMessage());
-                return new Result(plan, List.of(), VisualBible.empty());
+                return new Result(plan, List.of(), VisualBible.empty(), Map.of());
             }
         }
         Map<String, Scene> sceneById = scenes.stream().collect(Collectors.toMap(Scene::id, Function.identity()));
@@ -90,11 +94,16 @@ public class ShotDirector {
         Map<String, String> prompts = new HashMap<>();
         List<OverlayDraft> drafts = new ArrayList<>();
         Set<String> rememberedIds = new HashSet<>();
+        Map<String, RealMedia> rememberedReal = memory == null || memory.real() == null ? Map.of() : memory.real();
+        Map<String, RealMedia> real = new HashMap<>();
         for (Shot shot : plan.shots()) {
             String known = remembered.get(keys.get(shot.id()));
             if (!shot.graphic() && known != null) {
                 prompts.put(shot.id(), known);
                 rememberedIds.add(shot.id());
+                if (rememberedReal.containsKey(keys.get(shot.id()))) {
+                    real.put(shot.id(), rememberedReal.get(keys.get(shot.id())));
+                }
             }
         }
         if (memory != null && memory.overlays() != null) {
@@ -114,7 +123,12 @@ public class ShotDirector {
                         Map.of("bible", bibleJson, "shots", lines), ShotDirection.class);
                 if (direction.shots() != null) {
                     direction.shots().stream().filter(p -> p.id() != null && p.prompt() != null
-                            && !p.prompt().isBlank()).forEach(p -> prompts.put(p.id(), p.prompt().strip()));
+                            && !p.prompt().isBlank()).forEach(p -> {
+                                prompts.put(p.id(), p.prompt().strip());
+                                if (p.real() != null && p.real().valid()) {
+                                    real.put(p.id(), new RealMedia(p.real().kind(), p.real().query().strip()));
+                                }
+                            });
                 }
                 if (direction.overlays() != null) {
                     drafts.addAll(direction.overlays());
@@ -126,14 +140,32 @@ public class ShotDirector {
         }
         Map<String, String> nextMemory = new HashMap<>(remembered);
         prompts.forEach((id, prompt) -> nextMemory.put(keys.get(id), prompt));
-        context.files().writeRoot(MEMORY, new Memory(context.run().cacheSalt(), bible, nextMemory, drafts));
+        Map<String, RealMedia> nextReal = new HashMap<>(rememberedReal);
+        real.forEach((id, media) -> nextReal.put(keys.get(id), media));
+        context.files().writeRoot(MEMORY, new Memory(context.run().cacheSalt(), bible, nextMemory, drafts, nextReal));
+        capRealShare(real, plan);
         List<Shot> directed = plan.shots().stream().map(shot -> prompts.containsKey(shot.id())
                 ? withPrompt(shot, style.promptPrefix() + ", " + prompts.get(shot.id()))
                 : shot).toList();
         log.info("Run {}: directed {} images ({} remembered), {} overlay draft(s)", context.run().id(),
                 prompts.size(), rememberedIds.size(), drafts.size());
         ShotList shots = new ShotList(plan.durationSec(), directed);
-        return new Result(shots, overlays(drafts, shots, scenes), bible);
+        return new Result(shots, overlays(drafts, shots, scenes), bible, real);
+    }
+
+    /** Keeps at most half of the pictures real, spread evenly, so the illustrated style still carries the film. */
+    static void capRealShare(Map<String, RealMedia> real, ShotList plan) {
+        long pictures = plan.shots().stream().filter(s -> !s.graphic()).count();
+        int max = (int) Math.floor(pictures * MAX_REAL_SHARE);
+        if (real.size() <= max) {
+            return;
+        }
+        List<String> ordered = plan.shots().stream().map(Shot::id).filter(real::containsKey).toList();
+        Set<String> keep = new HashSet<>();
+        for (int i = 0; i < max; i++) {
+            keep.add(ordered.get((int) ((long) i * ordered.size() / max)));
+        }
+        real.keySet().retainAll(keep);
     }
 
     /** Stable key per shot: same scene, same position in the scene and same scene text means the same picture. */

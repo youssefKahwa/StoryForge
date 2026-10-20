@@ -102,6 +102,11 @@ const PreferencesCard = () => {
                 <Select showSearch options={[...new Set([preferences.publishZone, ...ZONES])].map((z) => ({ value: z, label: z }))} />
               </Form.Item>
             </Col>
+            <Col xs={12} md={6}>
+              <Form.Item name="hostMascot" label={t('prefs.host')} valuePropName="checked" tooltip={t('prefs.hostHelp')}>
+                <Switch />
+              </Form.Item>
+            </Col>
             <Col xs={24}>
               <Form.Item name="channelBrief" label={t('prefs.channelBrief')} tooltip={t('prefs.channelBriefHelp')}>
                 <Input.TextArea rows={3} maxLength={2000} showCount />

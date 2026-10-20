@@ -134,6 +134,11 @@ storyforge:
       evidence: Downloaded by the owner from YouTube Studio Audio Library with "Attribution not required"
   dashboard-url: ${STORYFORGE_DASHBOARD_URL:http://localhost:8080}
   dashboard-dir: ../dashboard/public
+  real-media:
+    enabled: false
+    pexels-api-key: ${PEXELS_API_KEY:}
+  host:
+    video: ../ChannelAssets/DownRightTalkingMouth.mp4
   youtube:
     client-id: ${GOOGLE_CLIENT_ID:}
     client-secret: ${GOOGLE_CLIENT_SECRET:}

@@ -23,6 +23,28 @@ public final class DescriptionBuilder {
 
     public static String build(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources,
                                List<String> musicCredits, List<String> hashtags) {
+        return build(hookLine, chapters, sources, musicCredits, List.of(), hashtags);
+    }
+
+    /** With real photo/footage credits; if they do not fit YouTube's limit, a short "author (license)" form is used. */
+    public static String build(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources,
+                               List<String> musicCredits, List<String> mediaCredits, List<String> hashtags) {
+        String full = compose(hookLine, chapters, sources, musicCredits, mediaCredits, hashtags);
+        if (full.length() <= MAX_CHARS || mediaCredits.isEmpty()) {
+            return full.length() <= MAX_CHARS ? full : full.substring(0, MAX_CHARS);
+        }
+        List<String> compact = mediaCredits.stream().map(DescriptionBuilder::compactCredit).distinct().toList();
+        String shorter = compose(hookLine, chapters, sources, musicCredits, compact, hashtags);
+        return shorter.length() <= MAX_CHARS ? shorter : shorter.substring(0, MAX_CHARS);
+    }
+
+    public static String compactCredit(String credit) {
+        return credit.replaceAll(",? ?(via Wikimedia Commons|on Pexels)?:? https?://\\S+$", "")
+                .replaceAll("^\"[^\"]*\" by ", "").strip();
+    }
+
+    private static String compose(String hookLine, List<EdlChapter> chapters, List<Dossier.Source> sources,
+                                  List<String> musicCredits, List<String> mediaCredits, List<String> hashtags) {
         StringBuilder out = new StringBuilder();
         out.append(hookLine.strip()).append("\n\n");
         List<EdlChapter> valid = youtubeChapters(chapters);
@@ -44,12 +66,17 @@ public final class DescriptionBuilder {
             musicCredits.forEach(credit -> out.append("- ").append(credit).append('\n'));
             out.append('\n');
         }
+        if (!mediaCredits.isEmpty()) {
+            out.append("Photos and footage\n");
+            mediaCredits.forEach(credit -> out.append("- ").append(credit).append('\n'));
+            out.append('\n');
+        }
         out.append(AI_DISCLOSURE).append('\n');
         if (!hashtags.isEmpty()) {
             out.append('\n').append(String.join(" ", hashtags.stream().limit(3).map(DescriptionBuilder::hashtag)
                     .toList())).append('\n');
         }
-        return out.length() <= MAX_CHARS ? out.toString() : out.substring(0, MAX_CHARS);
+        return out.toString();
     }
 
     private static final java.util.regex.Pattern NOTE = java.util.regex.Pattern.compile(

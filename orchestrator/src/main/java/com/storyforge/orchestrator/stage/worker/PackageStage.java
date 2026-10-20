@@ -154,6 +154,14 @@ public class PackageStage implements StageWorker {
         return notes.isEmpty() ? "none" : String.join("\n", notes.stream().map(note -> "- " + note).toList());
     }
 
+    /** Real photos and footage: the license's attribution line (author, license, source page). */
+    static List<String> mediaCredits(AssetManifest assets) {
+        return assets.assets().stream()
+                .filter(asset -> !"ai".equals(asset.media()) && asset.license() != null
+                        && asset.license().evidence() != null)
+                .map(asset -> asset.license().evidence()).distinct().toList();
+    }
+
     private static List<String> musicCredits(AudioQa audio) {
         return audio.tracks().stream()
                 .filter(track -> "music".equals(track.kind()) && track.license() != null)
@@ -208,8 +216,10 @@ public class PackageStage implements StageWorker {
         List<String> credits = files.exists(Stage.AUDIO_MIX, "audio_qa.json")
                 ? musicCredits(files.read(Stage.AUDIO_MIX, "audio_qa.json", AudioQa.class)) : List.of();
         List<String> hashtags = draft.hashtags() == null ? List.of() : draft.hashtags();
+        List<String> mediaCredits = files.exists(Stage.ASSETS, "assets.json")
+                ? mediaCredits(files.read(Stage.ASSETS, "assets.json", AssetManifest.class)) : List.of();
         String description = DescriptionBuilder.build(draft.hookLine(), edl.chapters(), dossier.sources(), credits,
-                hashtags);
+                mediaCredits, hashtags);
         files.writeText(Stage.PACKAGE, "description.txt", description);
         List<PublishKit.ShortClip> shorts = shorts(context, edl, draft, brief, titles.get(0).title());
         files.write(Stage.PACKAGE, "package.json", new VideoPackage(titles.get(0).title(), titles, description,
