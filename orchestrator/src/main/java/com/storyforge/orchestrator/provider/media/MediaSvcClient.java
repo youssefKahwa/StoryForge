@@ -55,6 +55,19 @@ public class MediaSvcClient {
                 response.path("duration_sec").asDouble(0));
     }
 
+    /** Official trailer (picture only) for a film or series, downloaded into {@code outDir}. */
+    public record Trailer(Path file, String videoId, String title, String channel, String url, double durationSec) {
+    }
+
+    /** {@code work}: the exact title that must appear in the trailer's title (no other films, no festival reels). */
+    public Trailer trailer(String query, String work, Path outDir) {
+        JsonNode r = post("/trailer", Map.of("query", query, "work", work,
+                "out_dir", outDir.toAbsolutePath().toString()));
+        return new Trailer(Path.of(r.path("file").asString("")), r.path("video_id").asString(""),
+                r.path("title").asString(""), r.path("channel").asString(""), r.path("url").asString(""),
+                r.path("duration_sec").asDouble(0));
+    }
+
     public double sfx(String name, Path out) {
         return post("/sfx", Map.of("name", name, "out_path", out.toAbsolutePath().toString()))
                 .path("duration_sec").asDouble(0);

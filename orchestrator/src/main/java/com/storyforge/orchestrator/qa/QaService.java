@@ -113,6 +113,17 @@ public class QaService {
         checks.add(check("content.real_images", "content", WARNING, placeholders == 0,
                 placeholders == 0 ? "all images generated" : placeholders + " image(s) reused or placeholder (quota?)"));
 
+        Set<String> clipShots = assets.assets().stream().filter(asset -> "clip".equals(asset.media()))
+                .map(AssetManifest.Asset::shotId).collect(Collectors.toSet());
+        if (!clipShots.isEmpty()) {
+            double clipSeconds = edl.shots().stream().filter(shot -> clipShots.contains(shot.id()))
+                    .mapToDouble(shot -> shot.end() - shot.start()).sum();
+            double share = clipSeconds / Math.max(1, info.durationSec());
+            checks.add(check("legal.fair_use_clips", "legal", WARNING, false, clipShots.size()
+                    + " trailer clip(s), " + fmt(clipSeconds) + " s (" + fmt(share * 100) + "% of the video, limit 15%), "
+                    + "muted, framed, credited: watch them before publishing; a Content ID claim is possible"));
+        }
+
         if (properties.sound() != null && properties.sound().enabled()) {
             long musicTracks = audio.tracks() == null ? 0
                     : audio.tracks().stream().filter(track -> "music".equals(track.kind())).count();

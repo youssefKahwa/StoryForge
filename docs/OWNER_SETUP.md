@@ -60,10 +60,17 @@ Without it, every run still produces the full Publish Kit and you upload by hand
 5. Restart → **Settings → Send test notification**.
 
 ## 4b. Real stock footage (2 min). Recommended.
-Real photos (Wikimedia Commons) work without any key. For real video clips (sea, storms, fog, forests...):
-1. Create a free account at https://www.pexels.com/api/ and click **Your API key**.
-2. Put it in `.env`: `PEXELS_API_KEY=...` and restart StoryForge.
-Settings → System check then shows "Real photos and footage: OK".
+Real photos and some videos (Wikimedia Commons) work without any key. For many more real video clips (sea, storms,
+fog, forests, cities...):
+1. Create a free account at https://pixabay.com and open https://pixabay.com/api/docs/ while logged in: your key
+   is shown in the "Parameters" table (`key`).
+2. Put it in `.env`: `PIXABAY_API_KEY=...` and restart StoryForge.
+Settings → System check then shows "Real photos and footage: OK". (Pexels keys are paused; if you ever get one,
+`PEXELS_API_KEY=` works too.)
+
+Fair-use trailer clips: Settings → Preferences → "Fair-use trailer clips" (on). For stories about a film, series
+or anime the app picks a few short, muted moments from the official trailer. Before publishing, watch them (QA
+lists each one). A Content ID claim can still happen; it usually only moves that video's ad money to the studio.
 
 Your talking logo: `ChannelAssets/DownRightTalkingMouth.mp4` is used automatically (Settings → Preferences →
 "Talking logo host" to switch it off). Replace the file with another logo video of the same layout to change it.
@@ -76,6 +83,9 @@ input, wait until the video is done, review it, then close the window. Nothing r
 - With YouTube connected, the video is uploaded as private with a publish date; YouTube publishes it at that time
   even when StoryForge is closed. To cancel, press **Veto** in the app, or set it to Private in YouTube Studio.
 - Telegram messages only arrive while the app is open (for example "your video is ready").
+- Rendering speed: keep the charger plugged in and close Chrome/other heavy apps while a video renders. The app
+  picks how many render tabs fit in the free memory (about 1 GB each) and uses only 2 on battery, so it will not
+  crash, but with 2 GB free a 12-minute video renders several times slower than with 8 GB free.
 - Leave `STORYFORGE_AUTOPILOT=false` (the default): the weekly timer only works if the app stays on all week.
 
 ## 6. Security housekeeping (2 min). Recommended.

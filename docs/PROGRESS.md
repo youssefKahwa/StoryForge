@@ -77,6 +77,12 @@
   Flannan Isles lighthouse (CC BY-SA), Mary Celeste 1861 painting (PD); a same-name island was correctly rejected.
 - Talking logo host with loudness lip-sync at the opening, questions and outro.
 
+### BiPath style, transitions, clips (2026-10-20)
+- All text in the BiPath look (Bungee block letters, slate extrusion, evil-eye blues, snow on cards).
+- Transitions with synthesized swish/impact sounds timed to the cut (whip, zoom, flash, crossfade).
+- Footage from Pixabay (key) and Wikimedia Commons (keyless) since Pexels stopped issuing keys.
+- Automatic fair-use trailer clips for film/series/anime stories, chosen by Claude from trailer contact sheets.
+
 ## Next
 - Owner steps in `docs/OWNER_SETUP.md` (roll Cloudflare token, YouTube client, Telegram, power settings).
 - First real YouTube upload test once the Google client exists.

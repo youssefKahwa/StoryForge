@@ -1,8 +1,8 @@
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/Inter';
+import { BRAND, body } from '../brand';
 
-const { fontFamily } = loadFont('normal', { weights: ['600'], subsets: ['latin'] });
+const fontFamily = body;
 
 export const Captions = ({ captions }) => {
   const frame = useCurrentFrame();
@@ -17,8 +17,9 @@ export const Captions = ({ captions }) => {
           fontFamily,
           fontSize: 44,
           fontWeight: 600,
-          color: '#fff',
-          background: 'rgba(0,0,0,0.55)',
+          color: BRAND.white,
+          background: `${BRAND.night}b3`,
+          borderBottom: `4px solid ${BRAND.sky}`,
           padding: '10px 26px',
           borderRadius: 10,
           maxWidth: 1500,

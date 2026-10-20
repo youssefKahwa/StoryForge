@@ -68,6 +68,8 @@ try {
     outputLocation: outPath,
     inputProps,
     concurrency,
+    // Slow machines (laptop on battery) can need much longer than the 30 s default per frame.
+    timeoutInMilliseconds: Number(process.env.RENDER_TIMEOUT_MS || 120000),
     onProgress: ({ progress }) => {
       const pct = Math.floor(progress * 100);
       if (pct >= lastReported + 5) {

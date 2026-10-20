@@ -1,6 +1,8 @@
 storyforge:
   real-media:
     enabled: true
+  clips:
+    enabled: true
   shorts:
     enabled: true
   sound:

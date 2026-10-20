@@ -1,12 +1,11 @@
 import React from 'react';
 import { AbsoluteFill, Audio, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont as loadAnton } from '@remotion/google-fonts/Anton';
-import { loadFont as loadInter } from '@remotion/google-fonts/Inter';
+import { BRAND, Snow, body, extrude, headline } from './brand';
 import { MediaShot } from './components/MediaShot';
 import { FilmLook } from './components/FilmLook';
 
-const anton = loadAnton('normal', { weights: ['400'], subsets: ['latin'] }).fontFamily;
-const inter = loadInter('normal', { weights: ['700'], subsets: ['latin'] }).fontFamily;
+const anton = headline;
+const inter = body;
 
 const END_CARD_SECONDS = 2.5;
 const CROSSFADE_FRAMES = 8;
@@ -22,15 +21,16 @@ const Title = ({ text, accent }) => {
       <div
         style={{
           fontFamily: anton,
-          fontSize: 92,
-          lineHeight: 1.02,
-          color: '#fff',
+          fontSize: 80,
+          lineHeight: 1.08,
+          color: BRAND.white,
           textAlign: 'center',
           textTransform: 'uppercase',
-          padding: '18px 40px',
-          maxWidth: 960,
-          background: 'rgba(0,0,0,0.55)',
+          padding: '22px 40px',
+          maxWidth: 980,
+          background: `${BRAND.night}cc`,
           borderBottom: `8px solid ${accent}`,
+          textShadow: extrude(6),
           transform: `scale(${0.9 + enter * 0.1})`,
           opacity: enter,
         }}
@@ -58,12 +58,10 @@ const Captions = ({ words, accent }) => {
             style={{
               fontFamily: inter,
               fontWeight: 700,
-              fontSize: 84,
+              fontSize: 80,
               textTransform: 'uppercase',
-              color: groupStart + i === index ? accent : '#fff',
-              WebkitTextStroke: '4px #000',
-              paintOrder: 'stroke fill',
-              textShadow: '0 6px 18px rgba(0,0,0,0.8)',
+              color: groupStart + i === index ? accent : BRAND.white,
+              textShadow: extrude(6),
             }}
           >
             {w.text.replace(/[.,;:!?"]/g, '')}
@@ -78,12 +76,13 @@ const EndCard = ({ accent }) => {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 10], [0, 1], { extrapolateRight: 'clamp' });
   return (
-    <AbsoluteFill style={{ backgroundColor: `rgba(0,0,0,${0.7 * opacity})`, justifyContent: 'center', alignItems: 'center' }}>
+    <AbsoluteFill style={{ backgroundColor: `rgba(11,15,23,${0.85 * opacity})`, justifyContent: 'center', alignItems: 'center' }}>
+      <Snow count={60} opacity={opacity} />
       <div style={{ opacity, textAlign: 'center' }}>
-        <div style={{ fontFamily: anton, fontSize: 110, color: '#fff', textTransform: 'uppercase', lineHeight: 1.05 }}>
+        <div style={{ fontFamily: anton, fontSize: 104, color: BRAND.white, textTransform: 'uppercase', lineHeight: 1.1, textShadow: extrude(8) }}>
           Full story
         </div>
-        <div style={{ fontFamily: anton, fontSize: 110, color: accent, textTransform: 'uppercase', lineHeight: 1.05 }}>
+        <div style={{ fontFamily: anton, fontSize: 104, color: accent, textTransform: 'uppercase', lineHeight: 1.1, textShadow: extrude(8, BRAND.navy) }}>
           on the channel
         </div>
         <div style={{ fontFamily: inter, fontWeight: 700, fontSize: 44, color: '#fff', marginTop: 30 }}>▶ watch now</div>
@@ -94,7 +93,7 @@ const EndCard = ({ accent }) => {
 
 export const Short = ({ edl, assetBase }) => {
   const { fps, durationInFrames } = useVideoConfig();
-  const accent = (edl.style && edl.style.palette && edl.style.palette[2]) || '#f2c94c';
+  const accent = BRAND.sky;
   const shots = edl.shots || [];
   const endFrames = Math.round(END_CARD_SECONDS * fps);
   return (

@@ -107,6 +107,11 @@ const PreferencesCard = () => {
                 <Switch />
               </Form.Item>
             </Col>
+            <Col xs={12} md={6}>
+              <Form.Item name="fairUseClips" label={t('prefs.clips')} valuePropName="checked" tooltip={t('prefs.clipsHelp')}>
+                <Switch />
+              </Form.Item>
+            </Col>
             <Col xs={24}>
               <Form.Item name="channelBrief" label={t('prefs.channelBrief')} tooltip={t('prefs.channelBriefHelp')}>
                 <Input.TextArea rows={3} maxLength={2000} showCount />

@@ -1,5 +1,8 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.model.ShotList;
+import com.storyforge.orchestrator.model.Edl;
+import com.storyforge.orchestrator.edl.TransitionPlanner;
 import com.storyforge.orchestrator.artifact.RunOverrides;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.edl.EdlBuilder;
@@ -61,6 +64,18 @@ public class AudioMixStage implements StageWorker {
         this.soundEnabled = properties.sound().enabled();
     }
 
+    /** An older media-svc may not know a newer preset; the transition then simply plays without sound. */
+    private boolean sfxAvailable(String preset) {
+        try {
+            sfx.file(preset);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Transition sound '{}' unavailable ({}); restart StoryForge to update media-svc", preset,
+                    e.getMessage());
+            return false;
+        }
+    }
+
     @Override
     public Stage stage() {
         return Stage.AUDIO_MIX;
@@ -94,8 +109,17 @@ public class AudioMixStage implements StageWorker {
                 musicOffset = Double.NEGATIVE_INFINITY;
             }
             Map<String, List<MusicLibrary.Track>> library = Double.isInfinite(musicOffset) ? Map.of() : music.scan();
-            SoundPlan plan = SoundDesigner.plan(scenes, alignment, EdlBuilder.chapters(scenes, alignment, outline),
-                    library, context.run().id(), sfx::file, Double.isInfinite(musicOffset) ? 0 : musicOffset);
+            List<Edl.EdlChapter> chapters = EdlBuilder.chapters(scenes, alignment, outline);
+            List<SoundPlan.SfxCue> transitionCues = files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)
+                    ? TransitionPlanner.plan(files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class),
+                            scenes, chapters).stream().filter(t -> t.sfx() != null && sfxAvailable(t.sfx()))
+                            .map(t -> new SoundPlan.SfxCue(t.sfx(), sfx.file(t.sfx()),
+                                    Math.max(0, Math.round((t.at() - t.lead()) * 1000) / 1000.0), t.gainDb(),
+                                    "transition " + t.kind() + " " + t.shotId()))
+                            .toList()
+                    : List.of();
+            SoundPlan plan = SoundDesigner.plan(scenes, alignment, chapters, library, context.run().id(), sfx::file,
+                    Double.isInfinite(musicOffset) ? 0 : musicOffset, transitionCues);
             if (plan.music().isEmpty()) {
                 log.warn("Run {}: no music in {}, mixing voice and SFX only", context.run().id(), music.root());
             }

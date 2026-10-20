@@ -1,5 +1,8 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.model.Scene;
+import com.storyforge.orchestrator.settings.PreferencesService;
+import com.storyforge.orchestrator.provider.clips.FilmClipFinder;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
@@ -50,11 +53,16 @@ public class AssetsStage implements StageWorker {
 
     private final RealMediaFinder finder;
     private final LlmRouter llm;
+    private final FilmClipFinder clipFinder;
+    private final PreferencesService preferences;
 
     public AssetsStage(ImageProvider images, FormatRegistry formats, StoryForgeProperties properties,
-                       RealMediaFinder finder, LlmRouter llm) {
+                       RealMediaFinder finder, LlmRouter llm, FilmClipFinder clipFinder,
+                       PreferencesService preferences) {
         this.finder = finder;
         this.llm = llm;
+        this.clipFinder = clipFinder;
+        this.preferences = preferences;
         this.images = images;
         this.formats = formats;
         this.video = properties.video();
@@ -181,6 +189,16 @@ public class AssetsStage implements StageWorker {
         return List.of("assets.json");
     }
 
+    /** Fair-use trailer clips when the story is about a screen work and the owner has the mode on. */
+    private Map<String, FilmClipFinder.Clip> clips(StageContext context, ShotList shots, Set<String> taken) {
+        if (!clipFinder.enabled() || !preferences.get().fairUseClipsEnabled()) {
+            return Map.of();
+        }
+        List<Scene> scenes = context.files().read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
+        Alignment alignment = context.files().read(Stage.ALIGN, "alignment.json", Alignment.class);
+        return clipFinder.find(context, shots, alignment, scenes, taken, video.width(), video.height());
+    }
+
     @Override
     public void execute(StageContext context) {
         ShotList shots = context.files().read(Stage.VISUAL_PLAN, "shotlist.json", ShotList.class);
@@ -188,8 +206,19 @@ public class AssetsStage implements StageWorker {
         List<Asset> assets = new ArrayList<>();
         int fallbacks = 0;
         Map<String, RealMediaFinder.Found> real = realMedia(context, shots);
-        Set<String> allowedNew = budget(context, shots, style, real.keySet());
+        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, real.keySet());
+        Set<String> notAi = new HashSet<>(real.keySet());
+        notAi.addAll(clips.keySet());
+        Set<String> allowedNew = budget(context, shots, style, notAi);
         for (Shot shot : shots.shots()) {
+            FilmClipFinder.Clip clip = clips.get(shot.id());
+            if (clip != null) {
+                context.usage().provider("fair-use-clip");
+                assets.add(new Asset(shot.id(), context.files().relative(clip.file()), shot.type(), "official-trailer",
+                        "clip", clip.label(), shot.seed(), BigDecimal.ZERO, false, clip.license(), "clip",
+                        clip.credit()));
+                continue;
+            }
             RealMediaFinder.Found found = real.get(shot.id());
             if (found != null) {
                 context.usage().provider(found.provider());

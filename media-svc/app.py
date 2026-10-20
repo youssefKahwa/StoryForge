@@ -157,6 +157,64 @@ def transcript(request: TranscriptRequest):
             "duration_sec": info.get("duration"), "language": language, "source": source, "transcript": text}
 
 
+class TrailerRequest(BaseModel):
+    query: str
+    out_dir: str
+    work: str | None = None
+    max_results: int = 8
+
+
+NOT_A_SINGLE_WORK = ("films of", "fest", "festival", "retrospective", "collection", "compilation", "marathon",
+                     "tribute", "every ", "ranking", "top 10", "reaction", "fan made", "fan-made", "parody", "recap")
+
+
+def _norm(text: str) -> str:
+    return " " + re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip() + " "
+
+
+@app.post("/trailer")
+def trailer(request: TrailerRequest):
+    """Finds the official trailer of a film/series and downloads its picture only (no audio track)."""
+    out_dir = inside_data_dir(request.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    import yt_dlp
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True,
+                               "extract_flat": True}) as ydl:
+            found = ydl.extract_info(f"ytsearch{max(1, min(request.max_results, 15))}:{request.query}",
+                                     download=False)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"YouTube search failed: {e}") from e
+    candidates = []
+    work = _norm(request.work) if request.work else None
+    for entry in found.get("entries") or []:
+        title = (entry.get("title") or "").lower()
+        duration = entry.get("duration") or 0
+        if "trailer" not in title or not 40 <= duration <= 300:
+            continue
+        # Only the work's own trailer: its full title must be there, and no festival/retrospective/compilation reels.
+        if (work and work not in _norm(title)) or any(word in title for word in NOT_A_SINGLE_WORK):
+            continue
+        score = (2 if "official" in title else 0) + (1 if entry.get("channel_is_verified") else 0)
+        candidates.append((score, entry))
+    if not candidates:
+        raise HTTPException(status_code=404, detail="no official trailer found")
+    candidates.sort(key=lambda c: -c[0])
+    entry = candidates[0][1]
+    url = entry.get("url") or f"https://www.youtube.com/watch?v={entry['id']}"
+    options = {"quiet": True, "no_warnings": True, "noplaylist": True,
+               "format": "bv*[height<=1080][ext=mp4]/bv*[height<=1080]",
+               "outtmpl": str(out_dir / "%(id)s.%(ext)s")}
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=True)
+            path = ydl.prepare_filename(info)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"trailer download failed: {e}") from e
+    return {"file": path, "video_id": info.get("id"), "title": info.get("title"), "channel": info.get("channel"),
+            "url": info.get("webpage_url"), "duration_sec": info.get("duration")}
+
+
 SFX_RATE = 48_000
 
 
@@ -217,6 +275,37 @@ def synth(name: str) -> np.ndarray:
         n = int(SFX_RATE * 0.7)
         crackle = rng.standard_normal(n).astype(np.float32) * (rng.random(n) > 0.82)
         sig = _lowpass(crackle, 0.45) * _envelope(n, 0.1, 0.5)
+    elif name in ("whip", "zoom_in", "swoosh_soft"):
+        # Transition swishes: band-limited noise whose brightness peaks at the cut, panned across the stereo field.
+        length = {"whip": 0.42, "zoom_in": 0.85, "swoosh_soft": 0.65}[name]
+        n = int(SFX_RATE * length)
+        x = np.linspace(0, 1, n)
+        peak_at = {"whip": 0.55, "zoom_in": 0.8, "swoosh_soft": 0.5}[name]
+        bright = np.exp(-((x - peak_at) ** 2) / (2 * (0.16 if name != "whip" else 0.1) ** 2))
+        noise = rng.standard_normal(n).astype(np.float32)
+        body = _lowpass(noise, 0.015 + 0.42 * bright) - 0.6 * _lowpass(noise, 0.004)
+        sig = (body * bright).astype(np.float32)
+        if name == "zoom_in":
+            t = np.arange(n) / SFX_RATE
+            thud_start = int(n * peak_at)
+            thud = np.zeros(n, dtype=np.float32)
+            tt = t[: n - thud_start]
+            thud[thud_start:] = np.sin(2 * np.pi * (70 * tt - 20 * tt ** 2)) * np.exp(-tt * 14) * 0.9
+            sig = sig + thud
+        pan = {"whip": np.linspace(-0.9, 0.9, n), "zoom_in": np.zeros(n),
+               "swoosh_soft": np.linspace(0.6, -0.6, n)}[name]
+        peak = float(np.max(np.abs(sig))) or 1.0
+        mono = sig / peak * 0.7
+        left = mono * np.sqrt(0.5 * (1 - pan))
+        right = mono * np.sqrt(0.5 * (1 + pan))
+        return np.stack([left, right], axis=1).astype(np.float32) * 1.41
+    elif name == "flash_hit":
+        n = int(SFX_RATE * 1.4)
+        t = np.arange(n) / SFX_RATE
+        crack = _lowpass(rng.standard_normal(n).astype(np.float32), 0.6) * np.exp(-t * 45)
+        sub = np.sin(2 * np.pi * (48 * t - 6 * t ** 2)) * np.exp(-t * 3.2)
+        shimmer = _lowpass(rng.standard_normal(n).astype(np.float32), 0.25) * np.exp(-t * 6) * 0.25
+        sig = (crack * 0.8 + sub + shimmer).astype(np.float32)
     else:
         raise HTTPException(status_code=400, detail=f"unknown sfx {name}")
     peak = float(np.max(np.abs(sig))) or 1.0

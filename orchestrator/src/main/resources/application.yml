@@ -90,6 +90,7 @@ storyforge:
         high: medium
       stage-tools:
         research: WebSearch,WebFetch
+        assets: Read
   qa:
     loudness-target: -14
     loudness-tolerance: 1
@@ -137,8 +138,11 @@ storyforge:
   real-media:
     enabled: false
     pexels-api-key: ${PEXELS_API_KEY:}
+    pixabay-api-key: ${PIXABAY_API_KEY:}
   host:
     video: ../ChannelAssets/DownRightTalkingMouth.mp4
+  clips:
+    enabled: false
   youtube:
     client-id: ${GOOGLE_CLIENT_ID:}
     client-secret: ${GOOGLE_CLIENT_SECRET:}

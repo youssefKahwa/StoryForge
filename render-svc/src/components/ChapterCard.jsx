@@ -1,48 +1,41 @@
 import React from 'react';
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont as loadCinzel } from '@remotion/google-fonts/Cinzel';
-import { loadFont as loadInter } from '@remotion/google-fonts/Inter';
+import { BRAND, Snow, body, extrude, headline } from '../brand';
 
-const cinzel = loadCinzel('normal', { weights: ['700'], subsets: ['latin'] }).fontFamily;
-const inter = loadInter('normal', { weights: ['500'], subsets: ['latin'] }).fontFamily;
-
-export const ChapterCard = ({ title, number, palette, durationInFrames }) => {
+/** Chapter title in BiPath style: dark night gradient with snow, block letters with slate extrusion. */
+export const ChapterCard = ({ title, number, durationInFrames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = spring({ frame, fps, config: { damping: 20 } });
+  const enter = spring({ frame, fps, config: { damping: 16 } });
   const exit = interpolate(frame, [durationInFrames - 15, durationInFrames - 1], [1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const accent = palette[2] || '#c9a46b';
   return (
-    <AbsoluteFill
-      style={{
-        justifyContent: 'flex-end',
-        padding: '0 0 120px 110px',
-        opacity: exit,
-        background: 'linear-gradient(to top right, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0) 60%)',
-      }}
-    >
-      <div style={{ transform: `translateX(${(1 - enter) * -60}px)`, opacity: enter }}>
-        <div style={{ fontFamily: inter, fontSize: 26, letterSpacing: '0.35em', color: accent, textTransform: 'uppercase' }}>
-          {`Chapter ${number}`}
+    <AbsoluteFill style={{ opacity: exit }}>
+      <AbsoluteFill style={{
+        background: `linear-gradient(to top right, ${BRAND.night}ee 0%, ${BRAND.night}99 40%, rgba(0,0,0,0) 70%)`,
+      }} />
+      <Snow count={40} opacity={0.6} />
+      <AbsoluteFill style={{ justifyContent: 'flex-end', padding: '0 0 120px 110px' }}>
+        <div style={{ transform: `translateX(${(1 - enter) * -70}px)`, opacity: enter }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: 11, backgroundColor: BRAND.navy, border: `5px solid ${BRAND.sky}`,
+              boxShadow: `0 0 16px ${BRAND.sky}`,
+            }} />
+            <div style={{ fontFamily: body, fontWeight: 700, fontSize: 28, letterSpacing: '0.4em', color: BRAND.sky }}>
+              {`CHAPTER ${number}`}
+            </div>
+          </div>
+          <div style={{
+            fontFamily: headline, fontSize: 76, color: BRAND.white, textTransform: 'uppercase', marginTop: 14,
+            textShadow: extrude(7), maxWidth: 1400, lineHeight: 1.08,
+          }}>
+            {title}
+          </div>
         </div>
-        <div
-          style={{
-            fontFamily: cinzel,
-            fontSize: 64,
-            fontWeight: 700,
-            color: '#f5f0e6',
-            textShadow: '0 4px 24px rgba(0,0,0,0.7)',
-            marginTop: 8,
-            borderLeft: `6px solid ${accent}`,
-            paddingLeft: 24,
-          }}
-        >
-          {title}
-        </div>
-      </div>
+      </AbsoluteFill>
     </AbsoluteFill>
   );
 };

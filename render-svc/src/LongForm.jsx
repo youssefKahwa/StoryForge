@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Easing, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import { KenBurnsImage } from './components/KenBurnsImage';
 import { MediaShot } from './components/MediaShot';
 import { KineticText } from './components/KineticText';
@@ -19,29 +19,73 @@ const assetUrl = (base, file) => `${base}/${file.split('/').map(encodeURICompone
 
 const previousImage = (shots, index) => {
   for (let i = index - 1; i >= 0; i -= 1) {
-    if (!isGraphic(shots[i].type) && shots[i].media !== 'footage') return shots[i].asset;
+    if (!isGraphic(shots[i].type) && !['footage', 'clip'].includes(shots[i].media)) return shots[i].asset;
   }
-  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type) && shot.media !== 'footage');
+  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type) && !['footage', 'clip'].includes(shot.media));
   return next ? next.asset : null;
 };
 
-const Shot = ({ shot, index, shots, assetBase, palette, durationInFrames, fadeIn }) => {
-  const frame = useCurrentFrame();
-  const opacity = fadeIn ? interpolate(frame, [0, CROSSFADE_FRAMES], [0, 1], { extrapolateRight: 'clamp' }) : 1;
-  if (isGraphic(shot.type)) {
-    const background = previousImage(shots, index);
-    return (
-      <AbsoluteFill style={{ opacity }}>
-        {background && (
-          <KenBurnsImage src={assetUrl(assetBase, background)} motion="push_in" durationInFrames={durationInFrames} dimmed />
-        )}
-        <KineticText text={shot.text || ''} palette={palette} />
-      </AbsoluteFill>
-    );
+const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
+const fast = { ...clamp, easing: Easing.out(Easing.cubic) };
+
+/** Incoming side of a transition (first frames of a shot). */
+const enterStyle = (kind, frame) => {
+  if (kind === 'whip') {
+    return {
+      transform: `translateX(${interpolate(frame, [0, 9], [100, 0], fast)}%)`,
+      filter: `blur(${interpolate(frame, [0, 9], [26, 0], fast)}px)`,
+    };
   }
+  if (kind === 'zoom') {
+    return {
+      opacity: interpolate(frame, [0, 6], [0, 1], clamp),
+      transform: `scale(${interpolate(frame, [0, 10], [1.32, 1], fast)})`,
+      filter: `blur(${interpolate(frame, [0, 10], [16, 0], fast)}px)`,
+    };
+  }
+  if (kind === 'flash' || kind === 'cut') return {};
+  return { opacity: interpolate(frame, [0, CROSSFADE_FRAMES], [0, 1], clamp) };
+};
+
+/** Outgoing side: the last CROSSFADE_FRAMES of a shot, under the next one. */
+const exitStyle = (nextKind, frame, durationInFrames) => {
+  const local = frame - (durationInFrames - CROSSFADE_FRAMES);
+  if (local < 0) return {};
+  if (nextKind === 'whip') {
+    return {
+      transform: `translateX(${interpolate(local, [0, 9], [0, -100], fast)}%)`,
+      filter: `blur(${interpolate(local, [0, 9], [0, 26], fast)}px)`,
+    };
+  }
+  if (nextKind === 'zoom') {
+    return { transform: `scale(${interpolate(local, [0, 10], [1, 1.45], fast)})` };
+  }
+  return {};
+};
+
+const Flash = () => {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(frame, [0, 2, 12], [0, 0.7, 0], clamp);
+  return <AbsoluteFill style={{ backgroundColor: '#e3f1ff', opacity, mixBlendMode: 'screen' }} />;
+};
+
+const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const kind = index === 0 ? 'cut' : (shot.transition || 'fade');
+  const next = shots[index + 1];
+  const style = { ...exitStyle(next && next.transition, frame, durationInFrames), ...(frame < 14 ? enterStyle(kind, frame) : {}) };
+  const content = isGraphic(shot.type) ? (
+    <>
+      {previousImage(shots, index) && (
+        <KenBurnsImage src={assetUrl(assetBase, previousImage(shots, index))} motion="push_in" durationInFrames={durationInFrames} dimmed />
+      )}
+      <KineticText text={shot.text || ''} />
+    </>
+  ) : <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={durationInFrames} />;
   return (
-    <AbsoluteFill style={{ opacity }}>
-      <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={durationInFrames} />
+    <AbsoluteFill style={{ overflow: 'hidden' }}>
+      <AbsoluteFill style={style}>{content}</AbsoluteFill>
+      {kind === 'flash' && frame < 14 && <Flash />}
     </AbsoluteFill>
   );
 };
@@ -73,9 +117,7 @@ export const LongForm = ({ edl, assetBase }) => {
               index={index}
               shots={shots}
               assetBase={assetBase}
-              palette={palette}
               durationInFrames={length}
-              fadeIn={index > 0}
             />
           </Sequence>
         );

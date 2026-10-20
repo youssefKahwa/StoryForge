@@ -1,9 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, useCurrentFrame } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/Inter';
 import { KenBurnsImage } from './KenBurnsImage';
-
-const { fontFamily } = loadFont('normal', { weights: ['500'], subsets: ['latin'] });
+import { BRAND, Snow, body as fontFamily, extrude, headline } from '../brand';
 
 const Credit = ({ text }) => (text ? (
   <div style={{
@@ -58,7 +56,34 @@ const Footage = ({ shot, src, durationInFrames }) => {
   );
 };
 
+/** Fair-use trailer clip: framed as a screen inside our video (commentary context), muted, credited. */
+const FilmClip = ({ shot, src, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [0.97, 1.0], { extrapolateRight: 'clamp' });
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', background: `radial-gradient(circle at 50% 45%, #182436 0%, ${BRAND.night} 70%)` }}>
+      <Snow count={45} opacity={0.5} />
+      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          width: '80%', aspectRatio: '16 / 9', borderRadius: 18, overflow: 'hidden', transform: `scale(${scale})`,
+          border: `4px solid ${BRAND.sky}`, boxShadow: `0 0 34px ${BRAND.sky}66, 0 30px 80px rgba(0,0,0,0.7)`,
+        }}>
+          <OffthreadVideo src={src} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      </AbsoluteFill>
+      <div style={{
+        position: 'absolute', top: 70, left: 200, fontFamily: headline, fontSize: 26, color: BRAND.white,
+        textShadow: extrude(3), letterSpacing: '0.06em',
+      }}>
+        FROM THE TRAILER
+      </div>
+      <Credit text={shot.credit} />
+    </AbsoluteFill>
+  );
+};
+
 export const MediaShot = ({ shot, src, durationInFrames }) => {
+  if (shot.media === 'clip') return <FilmClip shot={shot} src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'footage') return <Footage shot={shot} src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'photo') return <ArchivalPhoto shot={shot} src={src} durationInFrames={durationInFrames} />;
   return <KenBurnsImage src={src} motion={shot.motion || 'push_in'} durationInFrames={durationInFrames} />;

@@ -1,32 +1,29 @@
 import React from 'react';
 import { AbsoluteFill, Img } from 'remotion';
-import { loadFont } from '@remotion/google-fonts/Anton';
+import { BRAND, extrude, headline } from './brand';
 
-const { fontFamily } = loadFont('normal', { weights: ['400'], subsets: ['latin'] });
-
-export const Thumbnail = ({ background, text, palette }) => {
-  const accent = (palette && palette[2]) || '#f2c94c';
+/** YouTube thumbnail in BiPath style: block letters with slate extrusion, last word in sky blue. */
+export const Thumbnail = ({ background, text }) => {
   const words = (text || '').toUpperCase().split(/\s+/).filter(Boolean).slice(0, 4);
-  const size = words.join(' ').length > 16 ? 120 : 150;
+  const size = words.join(' ').length > 16 ? 112 : 140;
   return (
-    <AbsoluteFill style={{ backgroundColor: '#111' }}>
+    <AbsoluteFill style={{ backgroundColor: BRAND.night }}>
       {background && (
         <Img src={background} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.12) saturate(1.1)' }} />
       )}
-      <AbsoluteFill style={{ background: 'linear-gradient(to right, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0) 80%)' }} />
+      <AbsoluteFill style={{ background: `linear-gradient(to right, ${BRAND.night}e6 0%, ${BRAND.night}66 55%, rgba(0,0,0,0) 80%)` }} />
       <AbsoluteFill style={{ justifyContent: 'center', padding: '0 0 0 64px' }}>
-        <div style={{ width: 120, height: 10, backgroundColor: accent, marginBottom: 22 }} />
+        <div style={{ width: 130, height: 12, borderRadius: 6, backgroundColor: BRAND.sky, marginBottom: 26, boxShadow: `0 0 20px ${BRAND.sky}` }} />
         {words.map((word, i) => (
           <div
             key={`${word}-${i}`}
             style={{
-              fontFamily,
+              fontFamily: headline,
               fontSize: size,
-              lineHeight: 0.98,
-              color: i === words.length - 1 ? accent : '#ffffff',
-              WebkitTextStroke: '3px #000',
-              textShadow: '0 8px 24px rgba(0,0,0,0.85)',
-              maxWidth: 780,
+              lineHeight: 1.04,
+              color: i === words.length - 1 ? BRAND.sky : BRAND.white,
+              textShadow: extrude(Math.round(size / 11), i === words.length - 1 ? BRAND.navy : BRAND.slate),
+              maxWidth: 820,
             }}
           >
             {word}

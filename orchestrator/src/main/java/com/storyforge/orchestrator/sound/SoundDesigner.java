@@ -36,10 +36,24 @@ public final class SoundDesigner {
     public static SoundPlan plan(List<Scene> scenes, Alignment alignment, List<EdlChapter> chapters,
                                  Map<String, List<Track>> library, long seed,
                                  Function<String, String> sfxFile, double musicOffsetDb) {
+        return plan(scenes, alignment, chapters, library, seed, sfxFile, musicOffsetDb, List.of());
+    }
+
+    /** transitionCues: swishes and hits timed to cuts; they replace the chapter whoosh and win over scene SFX. */
+    public static SoundPlan plan(List<Scene> scenes, Alignment alignment, List<EdlChapter> chapters,
+                                 Map<String, List<Track>> library, long seed,
+                                 Function<String, String> sfxFile, double musicOffsetDb,
+                                 List<SfxCue> transitionCues) {
         Map<String, SceneSpan> spans = alignment.scenes().stream()
                 .collect(Collectors.toMap(SceneSpan::sceneId, Function.identity()));
-        return new SoundPlan(music(scenes, spans, alignment.durationSec(), library, seed, musicOffsetDb),
-                sfx(scenes, spans, alignment, chapters, sfxFile));
+        List<SfxCue> sceneCues = sfx(scenes, spans, alignment, transitionCues.isEmpty() ? chapters : List.of(),
+                sfxFile);
+        List<SfxCue> all = new ArrayList<>(transitionCues);
+        sceneCues.stream()
+                .filter(cue -> transitionCues.stream().noneMatch(t -> Math.abs(t.start() - cue.start()) < 2.0))
+                .forEach(all::add);
+        all.sort((a, b) -> Double.compare(a.start(), b.start()));
+        return new SoundPlan(music(scenes, spans, alignment.durationSec(), library, seed, musicOffsetDb), all);
     }
 
     static List<MusicSegment> music(List<Scene> scenes, Map<String, SceneSpan> spans, double duration,

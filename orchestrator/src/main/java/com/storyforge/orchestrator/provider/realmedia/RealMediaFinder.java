@@ -61,15 +61,18 @@ public class RealMediaFinder {
             .followRedirects(HttpClient.Redirect.NORMAL).build();
     private final boolean enabled;
     private final String pexelsKey;
+    private final String pixabayKey;
     private final Path cache;
 
     public RealMediaFinder(FfmpegService ffmpeg, JsonMapper json, StoryForgeProperties properties,
                            @Value("${storyforge.real-media.enabled:false}") boolean enabled,
-                           @Value("${storyforge.real-media.pexels-api-key:}") String pexelsKey) {
+                           @Value("${storyforge.real-media.pexels-api-key:}") String pexelsKey,
+                           @Value("${storyforge.real-media.pixabay-api-key:}") String pixabayKey) {
         this.ffmpeg = ffmpeg;
         this.json = json;
         this.enabled = enabled;
         this.pexelsKey = pexelsKey == null ? "" : pexelsKey.strip();
+        this.pixabayKey = pixabayKey == null ? "" : pixabayKey.strip();
         this.cache = Path.of(properties.dataDir()).toAbsolutePath().resolve("library").resolve("media-cache");
     }
 
@@ -77,8 +80,9 @@ public class RealMediaFinder {
         return enabled;
     }
 
+    /** True when a stock video library with a key is configured (Wikimedia Commons video needs none). */
     public boolean footageAvailable() {
-        return enabled && !pexelsKey.isEmpty();
+        return enabled && (!pexelsKey.isEmpty() || !pixabayKey.isEmpty());
     }
 
     /**
@@ -91,8 +95,17 @@ public class RealMediaFinder {
             return Optional.empty();
         }
         try {
-            if (RealMedia.FOOTAGE.equals(request.kind()) && !pexelsKey.isEmpty()) {
-                Optional<Found> footage = pexels(request.query(), seconds, width, height, used, target);
+            if (RealMedia.FOOTAGE.equals(request.kind())) {
+                Optional<Found> footage = Optional.empty();
+                if (!pexelsKey.isEmpty()) {
+                    footage = pexels(request.query(), seconds, width, height, used, target);
+                }
+                if (footage.isEmpty() && !pixabayKey.isEmpty()) {
+                    footage = pixabay(request.query(), seconds, width, height, used, target);
+                }
+                if (footage.isEmpty()) {
+                    footage = commonsVideo(request.query(), seconds, width, height, used, target);
+                }
                 if (footage.isPresent()) {
                     return footage;
                 }
@@ -232,6 +245,99 @@ public class RealMediaFinder {
                     page.replaceAll(".*/video/", "").replaceAll("-\\d+/?$", "").replace('-', ' ')));
         }
         return Optional.empty();
+    }
+
+    /**
+     * Pixabay videos (Pixabay Content License: commercial use, no attribution required; we credit anyway).
+     * https://pixabay.com/api/docs/ (checked 2026-10-20): GET /api/videos/, search responses cached 24 h.
+     */
+    private Optional<Found> pixabay(String query, double seconds, int width, int height, Set<String> used,
+                                    Path target) throws IOException, InterruptedException {
+        String url = "https://pixabay.com/api/videos/?video_type=film&safesearch=true&per_page=20&key="
+                + enc(pixabayKey) + "&q=" + enc(query);
+        JsonNode hits = cachedJson("pixabay-" + sha1(query), url).path("hits");
+        for (JsonNode hit : hits) {
+            String page = hit.path("pageURL").asString("");
+            double duration = hit.path("duration").asDouble(0);
+            if (used.contains(page) || duration < Math.min(seconds, 4)
+                    || coverage(query, hit.path("tags").asString("")) < 0.5) {
+                continue;
+            }
+            JsonNode file = hit.path("videos").path("medium");
+            if (file.path("width").asInt(0) < 1280) {
+                file = hit.path("videos").path("large");
+            }
+            String link = file.path("url").asString("");
+            if (link.isEmpty() || file.path("width").asInt(0) < 1280) {
+                continue;
+            }
+            Path out = cut(download(link, ".mp4"), seconds, width, height, target);
+            String author = hit.path("user").asString("Pixabay contributor");
+            used.add(page);
+            return Optional.of(new Found(out, RealMedia.FOOTAGE, "pixabay",
+                    new LicenseRecord("pixabay-license", "Pixabay: " + author, page,
+                            "Video by " + author + " on Pixabay: " + page, null),
+                    "Video: " + shorten(author, 40) + " / Pixabay", page, hit.path("tags").asString("")));
+        }
+        return Optional.empty();
+    }
+
+    /** Free-licensed videos on Wikimedia Commons (no key); same license rules as photos. */
+    private Optional<Found> commonsVideo(String query, double seconds, int width, int height, Set<String> used,
+                                         Path target) throws IOException, InterruptedException {
+        String url = "https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search"
+                + "&gsrnamespace=6&gsrlimit=10&gsrsearch=" + enc(query + " filetype:video")
+                + "&prop=imageinfo&iiprop=url%7Cmime%7Csize%7Cextmetadata"
+                + "&iiextmetadatafilter=LicenseShortName%7CArtist%7CRestrictions%7CImageDescription";
+        JsonNode pages = get(url, null).path("query").path("pages");
+        List<JsonNode> ordered = new ArrayList<>();
+        pages.forEach(ordered::add);
+        ordered.sort(Comparator.comparingInt(p -> p.path("index").asInt(999)));
+        for (JsonNode page : ordered) {
+            JsonNode info = page.path("imageinfo").path(0);
+            JsonNode meta = info.path("extmetadata");
+            String license = meta.path("LicenseShortName").path("value").asString("").strip();
+            String pageUrl = info.path("descriptionurl").asString("");
+            double duration = info.path("duration").asDouble(0);
+            if (info.path("width").asInt(0) < 1280 || duration < Math.min(seconds, 3) || !allowed(license)
+                    || !meta.path("Restrictions").path("value").asString("").isBlank() || used.contains(pageUrl)
+                    || coverage(query, title(page) + " " + description(meta)) < MIN_QUERY_COVERAGE) {
+                continue;
+            }
+            Path out = cut(download(info.path("url").asString(), ".video"), seconds, width, height, target);
+            String artist = stripHtml(meta.path("Artist").path("value").asString("unknown author"));
+            String evidence = "\"" + title(page) + "\" by " + artist + ", " + license + ", via Wikimedia Commons: "
+                    + pageUrl;
+            used.add(pageUrl);
+            return Optional.of(new Found(out, RealMedia.FOOTAGE, "wikimedia-commons",
+                    new LicenseRecord(licenseType(license), "Wikimedia Commons: " + artist, pageUrl, evidence, null),
+                    "Video: " + shorten(artist, 40) + " · " + license, pageUrl,
+                    shorten(title(page) + " — " + description(meta), 300)));
+        }
+        return Optional.empty();
+    }
+
+    /** Exact-length, muted 1080p clip that loops the source when it is shorter than the shot. */
+    private Path cut(Path source, double seconds, int width, int height, Path target) {
+        Path out = target.resolveSibling(target.getFileName() + ".mp4");
+        ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-stream_loop", "-1", "-i", source.toString(),
+                "-t", String.format(Locale.ROOT, "%.3f", seconds + 0.6), "-vf",
+                "scale=" + width + ":" + height + ":force_original_aspect_ratio=increase,crop=" + width + ":"
+                        + height + ",fps=30", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-pix_fmt", "yuv420p", out.toString()));
+        return out;
+    }
+
+    private JsonNode cachedJson(String key, String url) throws IOException, InterruptedException {
+        Files.createDirectories(cache);
+        Path file = cache.resolve(key + ".json");
+        if (Files.isRegularFile(file)
+                && Files.getLastModifiedTime(file).toMillis() > System.currentTimeMillis() - Duration.ofHours(24).toMillis()) {
+            return json.readTree(Files.readString(file));
+        }
+        JsonNode node = get(url, null);
+        Files.writeString(file, json.writeValueAsString(node));
+        return node;
     }
 
     static boolean allowed(String license) {

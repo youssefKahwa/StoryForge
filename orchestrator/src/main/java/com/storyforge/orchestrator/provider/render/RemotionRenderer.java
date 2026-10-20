@@ -1,6 +1,7 @@
 package com.storyforge.orchestrator.provider.render;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
+import com.storyforge.orchestrator.run.PowerStatus;
 import com.storyforge.orchestrator.media.MediaException;
 import com.storyforge.orchestrator.model.Edl;
 import java.io.IOException;
@@ -33,12 +34,42 @@ public class RemotionRenderer implements RenderProvider {
     private final Path installDir;
     private final Path sourceDir;
     private final JsonMapper json;
+    private final PowerStatus power;
 
-    public RemotionRenderer(StoryForgeProperties properties, JsonMapper json) {
+    public RemotionRenderer(StoryForgeProperties properties, JsonMapper json, PowerStatus power) {
         this.json = json;
+        this.power = power;
         this.config = properties.renderSvc();
         this.installDir = Path.of(config.dir()).toAbsolutePath();
         this.sourceDir = Path.of(config.source()).toAbsolutePath();
+    }
+
+    private static final double GB_PER_TAB = 0.9;
+    private static final int SAFE_TABS = 2;
+
+    /**
+     * Parallel browser tabs for this render: the configured number, but no more than free memory allows (~0.9 GB a
+     * tab; VS Code and Chrome often leave only 2-4 GB) and only 2 on battery, where each frame is much slower.
+     */
+    private int concurrency() {
+        int configured = config.concurrency() > 0 ? config.concurrency() : 4;
+        double freeGb = freeMemoryGb();
+        int byMemory = Math.max(1, (int) Math.floor(freeGb / GB_PER_TAB));
+        int tabs = Math.min(configured, byMemory);
+        if (power.onBattery()) {
+            tabs = Math.min(SAFE_TABS, tabs);
+        }
+        log.info("Rendering with {} tab(s) ({} GB free{})", tabs, String.format(java.util.Locale.ROOT, "%.1f", freeGb),
+                power.onBattery() ? ", on battery: plug in for full speed" : "");
+        return tabs;
+    }
+
+    private static double freeMemoryGb() {
+        if (java.lang.management.ManagementFactory.getOperatingSystemMXBean()
+                instanceof com.sun.management.OperatingSystemMXBean os) {
+            return os.getFreeMemorySize() / (1024.0 * 1024 * 1024);
+        }
+        return 4;
     }
 
     @Override
@@ -53,6 +84,19 @@ public class RemotionRenderer implements RenderProvider {
             throw new MediaException("Remotion is not installed in " + installDir
                     + ". Run scripts/render-svc.ps1 -Install once.");
         }
+        int tabs = concurrency();
+        try {
+            renderOnce(edl, runRoot, outputMp4, tabs);
+        } catch (MediaException e) {
+            if (tabs <= SAFE_TABS || e.getMessage() == null || !e.getMessage().contains("out of memory")) {
+                throw e;
+            }
+            log.warn("Chrome ran out of memory with {} tabs; rendering again with {}", tabs, SAFE_TABS);
+            renderOnce(edl, runRoot, outputMp4, SAFE_TABS);
+        }
+    }
+
+    private void renderOnce(Edl edl, Path runRoot, Path outputMp4, int tabs) {
         Path edlFile = outputMp4.resolveSibling("edl.json");
         Path logFile = outputMp4.resolveSibling("render.log");
         List<String> command = new ArrayList<>(List.of(config.node(), installDir.resolve("render.mjs").toString(),
@@ -60,9 +104,7 @@ public class RemotionRenderer implements RenderProvider {
         try {
             ProcessBuilder builder = new ProcessBuilder(command).directory(installDir.toFile())
                     .redirectErrorStream(true).redirectOutput(logFile.toFile());
-            if (config.concurrency() > 0) {
-                builder.environment().put("RENDER_CONCURRENCY", String.valueOf(config.concurrency()));
-            }
+            builder.environment().put("RENDER_CONCURRENCY", String.valueOf(tabs));
             log.info("Remotion render started: {} frames", Math.round(edl.durationSec() * edl.fps()));
             Process process = builder.start();
             if (!process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS)) {
@@ -97,9 +139,7 @@ public class RemotionRenderer implements RenderProvider {
             ProcessBuilder builder = new ProcessBuilder(config.node(), installDir.resolve("render.mjs").toString(),
                     specFile.toString(), runRoot.toAbsolutePath().toString(), outputMp4.toAbsolutePath().toString(),
                     "Short").directory(installDir.toFile()).redirectErrorStream(true).redirectOutput(logFile.toFile());
-            if (config.concurrency() > 0) {
-                builder.environment().put("RENDER_CONCURRENCY", String.valueOf(config.concurrency()));
-            }
+            builder.environment().put("RENDER_CONCURRENCY", String.valueOf(concurrency()));
             Process process = builder.start();
             if (!process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS)) {
                 process.destroyForcibly();

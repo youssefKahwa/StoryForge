@@ -16,7 +16,13 @@ public record Preferences(
         String publishTime,
         String publishZone,
         String channelBrief,
-        Boolean hostMascot) {
+        Boolean hostMascot,
+        Boolean fairUseClips) {
+
+    /** Short muted trailer clips for stories about a film/series/anime (owner chose this mode; on by default). */
+    public boolean fairUseClipsEnabled() {
+        return fairUseClips == null || fairUseClips;
+    }
 
     /** The talking channel logo pops in during the video (on unless switched off). */
     public boolean hostEnabled() {

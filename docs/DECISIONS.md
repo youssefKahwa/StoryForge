@@ -272,3 +272,22 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
 - Consequences: more authentic, less "AI slop" risk; Commons photos are often small (600-1600 px), hence the print
   style. Without a Pexels key only photos are real. One extra Haiku call per video.
 
+## ADR-025 BiPath brand, sound-designed transitions, Pixabay, automatic fair-use trailer clips (2026-10-20)
+- Brand: all on-screen text uses Bungee (closest Google font to the BiPath logo lettering) with a slate (#304860)
+  3D extrusion, white (#f0f0f0), evil-eye blues (#100080, #70c0e0) and snow on chapter/end cards
+  (`render-svc/src/brand.jsx`). Thumbnails, Shorts, captions and the host bubble follow it.
+- Transitions: `TransitionPlanner` (deterministic, shared by AUDIO_MIX and ASSEMBLE) gives chapters a whip or
+  zoom with a synthesized swish (`whip`, `zoom_in`), tense scene changes a flash with `flash_hit`, kinetic text a
+  soft zoom (`swoosh_soft`), and a whip about every 20 s; the rest crossfade. Sounds peak on the cut (lead time).
+- Footage: Pexels stopped issuing keys; Pixabay (`PIXABAY_API_KEY`, Content License, search cached 24 h) and
+  keyless Wikimedia Commons video are added. Order: Pexels, Pixabay, Commons.
+- Fair-use clips (owner's choice, automated): only when `clip_work` says the story is about a screen work. The
+  official trailer is found with yt-dlp and downloaded picture-only; scene cuts become numbered contact sheets that
+  Claude reads (Read tool, ASSETS stage) to pair trailer shots with narration moments (`clip_match`). Hard limits
+  in code: <= 15% of runtime, <= 4.5 s of source per clip (slowed to >= 0.75x to fill the shot), >= 15 s apart, no
+  text/logo tiles, muted, framed as a screen with credit, QA warning listing them, credits in the description.
+  Not done on purpose: mirroring, pitch/noise tricks or other Content ID circumvention (against YouTube policy).
+  Downloading trailers with yt-dlp is outside YouTube's download options; the owner accepted this trade-off.
+- Rendering robustness (same day): per-frame timeout 120 s; tabs = min(configured, free RAM / 0.9 GB), 2 on battery
+  (`PowerStatus`), automatic retry with 2 tabs when Chrome runs out of memory; clips use one video layer.
+

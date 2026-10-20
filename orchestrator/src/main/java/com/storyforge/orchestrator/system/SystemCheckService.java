@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.system;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.host.HostMascot;
 import com.storyforge.orchestrator.provider.realmedia.RealMediaFinder;
+import com.storyforge.orchestrator.run.PowerStatus;
 import com.storyforge.orchestrator.notify.NotificationService;
 import com.storyforge.orchestrator.provider.image.ImageQuota;
 import com.storyforge.orchestrator.provider.media.MediaSvcLauncher;
@@ -34,10 +35,12 @@ public class SystemCheckService {
     private final StorageService storage;
     private final HostMascot host;
     private final RealMediaFinder realMedia;
+    private final PowerStatus power;
 
     public SystemCheckService(StoryForgeProperties properties, MediaSvcLauncher mediaSvc, MusicLibrary music,
                               ImageQuota quota, YouTubeAuthService youtube, NotificationService notifications,
-                              StorageService storage, HostMascot host, RealMediaFinder realMedia) {
+                              StorageService storage, HostMascot host, RealMediaFinder realMedia, PowerStatus power) {
+        this.power = power;
         this.host = host;
         this.realMedia = realMedia;
         this.properties = properties;
@@ -72,8 +75,11 @@ public class SystemCheckService {
                 : realMedia.footageAvailable() ? CheckResult.ok("real-media", "Real photos and footage",
                         "Wikimedia Commons photos and Pexels footage.")
                 : CheckResult.warn("real-media", "Real photos and footage",
-                        "Real photos on (Wikimedia Commons); real video footage off.",
-                        "Get a free key at pexels.com/api and set PEXELS_API_KEY in .env."));
+                        "Real photos and some real video (Wikimedia Commons); stock video library off.",
+                        "Get a free key at pixabay.com/api/docs (log in, the key is shown there) and set PIXABAY_API_KEY in .env."));
+        checks.add(power.onBattery() ? CheckResult.warn("power", "Power", "On battery: renders are about 10x slower.",
+                "Plug in the charger before starting a video.")
+                : CheckResult.ok("power", "Power", "Plugged in."));
         checks.add(disk());
         checks.add("youtube".equals(providers.publish()) ? youtubeCheck()
                 : CheckResult.off("youtube", "YouTube upload", "Publish mode is " + providers.publish()

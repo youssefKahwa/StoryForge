@@ -17,6 +17,11 @@ public record Edl(
         List<Overlay> overlays,
         HostTrack host) {
 
+    public Edl withShots(List<EdlShot> newShots) {
+        return new Edl(version, width, height, fps, durationSec, lut, newShots, audio, captions, chapters, style,
+                overlays, host);
+    }
+
     /** Same EDL with the talking host added (or removed with null). */
     public Edl withHost(HostTrack track) {
         return new Edl(version, width, height, fps, durationSec, lut, shots, audio, captions, chapters, style,

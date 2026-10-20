@@ -69,6 +69,7 @@ public class PreferencesService {
                 publish.time().toString(),
                 publish.zone(),
                 DEFAULT_BRIEF,
+                true,
                 true);
     }
 
@@ -106,6 +107,7 @@ public class PreferencesService {
                 p.publishTime(),
                 p.publishZone(),
                 p.channelBrief() == null || p.channelBrief().isBlank() ? base.channelBrief() : p.channelBrief().strip(),
-                p.hostEnabled());
+                p.hostEnabled(),
+                p.fairUseClipsEnabled());
     }
 }
