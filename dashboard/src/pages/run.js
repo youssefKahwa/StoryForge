@@ -12,6 +12,7 @@ import ExecutionTable from '../components/ExecutionTable';
 import PublishKitView from '../components/PublishKitView';
 import QaReportView from '../components/QaReportView';
 import RevisePanel from '../components/RevisePanel';
+import RunProgress from '../components/RunProgress';
 import RunStatusTag from '../components/RunStatusTag';
 import StageChips from '../components/StageChips';
 import usePolling from '../hooks/usePolling';
@@ -161,6 +162,7 @@ const RunPage = ({ location }) => {
           </Button>
         </Space>
       </div>
+      <RunProgress run={run} />
       {publication && (
         <Alert
           className="run-meta"

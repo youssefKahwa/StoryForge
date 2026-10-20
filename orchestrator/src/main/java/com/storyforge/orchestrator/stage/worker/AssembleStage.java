@@ -1,5 +1,6 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.model.MapPin;
 import java.util.Map;
 import com.storyforge.orchestrator.edl.TransitionPlanner;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
@@ -109,11 +110,15 @@ public class AssembleStage implements StageWorker {
                 files.exists(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS)
                         ? files.read(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS, new TypeReference<List<Overlay>>() { })
                         : List.of());
+        Map<String, MapPin> maps = files.exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
+                ? files.read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS, new TypeReference<Map<String, MapPin>>() { })
+                : Map.of();
         Map<String, String> transitions = TransitionPlanner.kinds(TransitionPlanner.plan(shots, scenes,
                 edl.chapters()));
         edl = edl.withShots(edl.shots().stream().map(shot -> new Edl.EdlShot(shot.id(), shot.sceneId(), shot.type(),
                 shot.start(), shot.end(), shot.asset(), shot.motion(), shot.text(),
-                transitions.getOrDefault(shot.id(), "cut"), shot.media(), shot.credit())).toList());
+                transitions.getOrDefault(shot.id(), "cut"), shot.media(), shot.credit(),
+                maps.get(shot.id()))).toList());
 
         edl = withHost(context, edl, alignment);
         files.write(Stage.ASSEMBLE, "edl.json", edl);

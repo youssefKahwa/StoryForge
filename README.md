@@ -51,6 +51,6 @@ One-time setup: `docs/OWNER_SETUP.md`.
 `GET /api/system/storage?olderThanDays=14` · `POST /api/system/cleanup?olderThanDays=14` ·
 `GET/POST /api/runs` · `GET /api/runs/{id}` · `POST /api/runs/{id}/cancel|resume` ·
 `POST /api/runs/{id}/stages/{stage}/rerun?fresh=false` · `GET /api/runs/{id}/files/{stage}/{name}` ·
-`POST /api/quick-start` · `POST /api/seed-topics/suggest?count=5` · `GET /api/runs/{id}/timeline` ·
+`GET /api/runs/{id}/progress` · `POST /api/quick-start` · `POST /api/seed-topics/suggest?count=5` · `GET /api/runs/{id}/timeline` ·
 `GET/POST /api/runs/{id}/revisions` · `DELETE /api/runs/{id}/revisions/{rid}` · `POST /api/runs/{id}/revisions/apply` ·
 `GET/POST/DELETE /api/seed-topics` · `GET /api/settings` · `PUT /api/settings/kill-switch`

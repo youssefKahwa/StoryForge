@@ -47,6 +47,8 @@ public class ShotDirector {
     }
 
     private static final double MAX_REAL_SHARE = 0.5;
+    private static final int MAX_MAPS = 2;
+    private static final double MIN_MAP_GAP_SECONDS = 60;
 
     public static final String MEMORY = "prompt_memory.json";
 
@@ -143,6 +145,7 @@ public class ShotDirector {
         Map<String, RealMedia> nextReal = new HashMap<>(rememberedReal);
         real.forEach((id, media) -> nextReal.put(keys.get(id), media));
         context.files().writeRoot(MEMORY, new Memory(context.run().cacheSalt(), bible, nextMemory, drafts, nextReal));
+        limitMaps(real, plan, scenes);
         capRealShare(real, plan);
         List<Shot> directed = plan.shots().stream().map(shot -> prompts.containsKey(shot.id())
                 ? withPrompt(shot, style.promptPrefix() + ", " + prompts.get(shot.id()))
@@ -151,6 +154,28 @@ public class ShotDirector {
                 prompts.size(), rememberedIds.size(), drafts.size());
         ShotList shots = new ShotList(plan.durationSec(), directed);
         return new Result(shots, overlays(drafts, shots, scenes), bible, real);
+    }
+
+    /** Globe maps: only where the narration names the place, at most two per video, a minute apart. */
+    static void limitMaps(Map<String, RealMedia> real, ShotList plan, List<Scene> scenes) {
+        String corpus = " " + normalize(scenes.stream().map(Scene::narration).filter(n -> n != null)
+                .collect(Collectors.joining(" "))) + " ";
+        double last = -1000;
+        int kept = 0;
+        for (Shot shot : plan.shots()) {
+            RealMedia media = real.get(shot.id());
+            if (media == null || !RealMedia.MAP.equals(media.kind())) {
+                continue;
+            }
+            boolean ok = kept < MAX_MAPS && shot.start() - last >= MIN_MAP_GAP_SECONDS
+                    && said(corpus, media.query().split(",")[0]);
+            if (ok) {
+                kept++;
+                last = shot.start();
+            } else {
+                real.remove(shot.id());
+            }
+        }
     }
 
     /** Keeps at most half of the pictures real, spread evenly, so the illustrated style still carries the film. */

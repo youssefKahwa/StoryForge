@@ -1,5 +1,5 @@
-// Served by the API itself (scripts/start.ps1, port 8080): same origin. `gatsby develop` (8000): the API URL.
-const SAME_ORIGIN = typeof window !== 'undefined' && window.location.port === '8080';
+// Served by the API itself (scripts/start.ps1): same origin. `gatsby develop`/`serve` (8000/9000): the API URL.
+const SAME_ORIGIN = typeof window !== 'undefined' && !['8000', '9000'].includes(window.location.port);
 const API_BASE = (SAME_ORIGIN ? '' : process.env.GATSBY_API_URL || 'http://localhost:8080').replace(/\/$/, '');
 
 const ApiRoutes = {
@@ -28,6 +28,7 @@ const ApiRoutes = {
   testNotification: () => `${API_BASE}/api/youtube/test-notification`,
   vetoRun: (id) => `${API_BASE}/api/runs/${id}/veto`,
   timeline: (id) => `${API_BASE}/api/runs/${id}/timeline`,
+  progress: (id) => `${API_BASE}/api/runs/${id}/progress`,
   revisions: (id) => `${API_BASE}/api/runs/${id}/revisions`,
   revision: (id, revisionId) => `${API_BASE}/api/runs/${id}/revisions/${revisionId}`,
   applyRevisions: (id) => `${API_BASE}/api/runs/${id}/revisions/apply`,

@@ -5,7 +5,9 @@ import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
+import com.storyforge.orchestrator.model.MapPin;
 import com.storyforge.orchestrator.model.RealMedia;
+import com.storyforge.orchestrator.provider.geo.WikidataGeo;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.ShotList.Shot;
@@ -28,13 +30,17 @@ public class VisualPlanStage implements StageWorker {
     public static final String OVERLAYS = "overlays.json";
     public static final String BIBLE = "visual_bible.json";
     public static final String REAL_MEDIA = "real_media.json";
+    public static final String MAPS = "maps.json";
     private static final long REVISION_SEED_STEP = 7919;
 
     private final FormatRegistry formats;
     private final ShotPlanner planner;
     private final ShotDirector director;
+    private final WikidataGeo geo;
 
-    public VisualPlanStage(FormatRegistry formats, StoryForgeProperties properties, ShotDirector director) {
+    public VisualPlanStage(FormatRegistry formats, StoryForgeProperties properties, ShotDirector director,
+                           WikidataGeo geo) {
+        this.geo = geo;
         this.formats = formats;
         this.director = director;
         StoryForgeProperties.Shots shots = properties.shots();
@@ -71,7 +77,16 @@ public class VisualPlanStage implements StageWorker {
                 real.remove(shot.id());
             }
         }
+        Map<String, MapPin> maps = new HashMap<>();
+        real.entrySet().removeIf(entry -> {
+            if (!RealMedia.MAP.equals(entry.getValue().kind())) {
+                return false;
+            }
+            geo.locate(entry.getValue().query()).ifPresent(pin -> maps.put(entry.getKey(), pin));
+            return true;
+        });
         context.files().write(Stage.VISUAL_PLAN, REAL_MEDIA, real);
+        context.files().write(Stage.VISUAL_PLAN, MAPS, maps);
         context.files().write(Stage.VISUAL_PLAN, BIBLE, directed.bible());
         context.files().write(Stage.VISUAL_PLAN, OVERLAYS, directed.overlays());
         context.files().write(Stage.VISUAL_PLAN, SHOTLIST, shots);

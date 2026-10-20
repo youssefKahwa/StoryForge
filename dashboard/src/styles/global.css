@@ -236,3 +236,31 @@ body {
 .wizard-advanced {
   margin-top: 28px !important;
 }
+
+.progress-card {
+  margin: 16px 0;
+}
+
+.progress-title {
+  margin-bottom: 4px !important;
+}
+
+.progress-battery {
+  margin-top: 12px;
+}
+
+.progress-steps {
+  margin-top: 20px;
+}
+
+.progress-done {
+  margin: 12px 0;
+}
+
+.progress-cell {
+  min-width: 220px;
+}
+
+.progress-cell-text {
+  font-size: 12px;
+}

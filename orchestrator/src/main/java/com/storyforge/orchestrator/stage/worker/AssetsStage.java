@@ -1,5 +1,6 @@
 package com.storyforge.orchestrator.stage.worker;
 
+import com.storyforge.orchestrator.model.MapPin;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.provider.clips.FilmClipFinder;
@@ -45,6 +46,9 @@ import tools.jackson.core.type.TypeReference;
 public class AssetsStage implements StageWorker {
 
     private static final String GRAPHICS = "storyforge-graphics";
+    private static final LicenseRecord MAP_LICENSE = new LicenseRecord("public_domain",
+            "Natural Earth (public domain) + Wikidata coordinates (CC0)", "https://www.naturalearthdata.com/about/terms-of-use/",
+            "Map drawn by StoryForge from Natural Earth data (public domain) and Wikidata coordinates (CC0)", null);
     private static final Logger log = LoggerFactory.getLogger(AssetsStage.class);
 
     private final ImageProvider images;
@@ -206,11 +210,26 @@ public class AssetsStage implements StageWorker {
         List<Asset> assets = new ArrayList<>();
         int fallbacks = 0;
         Map<String, RealMediaFinder.Found> real = realMedia(context, shots);
-        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, real.keySet());
-        Set<String> notAi = new HashSet<>(real.keySet());
+        Map<String, MapPin> maps = context.files().exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
+                ? context.files().read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS, new TypeReference<Map<String, MapPin>>() { })
+                : Map.of();
+        Set<String> taken = new HashSet<>(real.keySet());
+        taken.addAll(maps.keySet());
+        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, taken);
+        Set<String> notAi = new HashSet<>(taken);
         notAi.addAll(clips.keySet());
         Set<String> allowedNew = budget(context, shots, style, notAi);
         for (Shot shot : shots.shots()) {
+            MapPin pin = maps.get(shot.id());
+            if (pin != null) {
+                // The globe is drawn by the renderer; the file is only a placeholder for tools that need a picture.
+                Path file = context.files().path(Stage.ASSETS, shot.id() + ".png");
+                CardRenderer.placeholder(file, video.width(), video.height(), shot.seed(), "map", pin.label());
+                assets.add(new Asset(shot.id(), context.files().relative(file), shot.type(), "globe-map", "d3-geo",
+                        pin.label(), shot.seed(), BigDecimal.ZERO, false, MAP_LICENSE, "map",
+                        "Map: Natural Earth · Wikidata"));
+                continue;
+            }
             FilmClipFinder.Clip clip = clips.get(shot.id());
             if (clip != null) {
                 context.usage().provider("fair-use-clip");

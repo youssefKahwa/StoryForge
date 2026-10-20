@@ -1,5 +1,5 @@
 ---
-version: 0.2.0
+version: 0.3.0
 tier: fast
 ---
 ## system
@@ -32,6 +32,9 @@ shots, never two thirds):
 - "footage": the shot is generic real-world motion that stock video shows well: sea, storm, rain, fog, fire,
   snow, forest, sky, city street at night, candle, clock. query = 2-4 plain words, e.g. "stormy sea waves".
   Never footage of identifiable people, brands, or anything pretending to show the actual event.
+- "map": the shot where the narrator first names the main place of the story (or where a journey starts or
+  ends). An animated globe zooms onto it. query = the place as said, with its country, e.g. "Flannan Isles,
+  Scotland". At most 2 maps per video.
 Always still write "prompt": it is the fallback when no real media is found.
 
 Overlays (optional, sparse, at most one every 40 seconds):
@@ -42,6 +45,6 @@ Overlays (optional, sparse, at most one every 40 seconds):
 - "year": only on a jump in time. title = the year as said.
 
 Return:
-{"shots": [{"id": "shot_001", "prompt": "...", "real": {"kind": "photo|footage", "query": "..."}}],
+{"shots": [{"id": "shot_001", "prompt": "...", "real": {"kind": "photo|footage|map", "query": "..."}}],
  "overlays": [{"kind": "location|quote|year", "shot": "shot_001", "title": "...", "subtitle": "..."}]}
 Every shot id from the list must appear once in "shots"; "real" is optional (omit it for illustrated shots).

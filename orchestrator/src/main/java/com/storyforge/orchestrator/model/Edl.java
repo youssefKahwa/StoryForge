@@ -41,7 +41,8 @@ public record Edl(
 
     /** media: "ai" (generated still), "photo" (real photograph, shown as a print) or "footage" (real video). */
     public record EdlShot(String id, String sceneId, String type, double start, double end, String asset,
-                          String motion, String text, String transition, String media, String credit) {
+                          String motion, String text, String transition, String media, String credit,
+                          MapPin map) {
     }
 
     public record EdlAudio(String kind, String file, double start, double gainDb, LicenseRecord license) {

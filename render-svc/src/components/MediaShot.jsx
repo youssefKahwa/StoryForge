@@ -1,6 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, useCurrentFrame } from 'remotion';
 import { KenBurnsImage } from './KenBurnsImage';
+import { GlobeMap } from './GlobeMap';
 import { BRAND, Snow, body as fontFamily, extrude, headline } from '../brand';
 
 const Credit = ({ text }) => (text ? (
@@ -83,6 +84,7 @@ const FilmClip = ({ shot, src, durationInFrames }) => {
 };
 
 export const MediaShot = ({ shot, src, durationInFrames }) => {
+  if (shot.media === 'map' && shot.map) return <GlobeMap map={shot.map} durationInFrames={durationInFrames} />;
   if (shot.media === 'clip') return <FilmClip shot={shot} src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'footage') return <Footage shot={shot} src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'photo') return <ArchivalPhoto shot={shot} src={src} durationInFrames={durationInFrames} />;

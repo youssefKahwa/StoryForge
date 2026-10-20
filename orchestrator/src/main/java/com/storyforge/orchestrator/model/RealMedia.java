@@ -5,9 +5,11 @@ public record RealMedia(String kind, String query) {
 
     public static final String PHOTO = "photo";
     public static final String FOOTAGE = "footage";
+    /** Not media: an animated globe zooming onto this place (coordinates from Wikidata). */
+    public static final String MAP = "map";
 
     public boolean valid() {
-        return (PHOTO.equals(kind) || FOOTAGE.equals(kind)) && query != null && !query.isBlank()
+        return (PHOTO.equals(kind) || FOOTAGE.equals(kind) || MAP.equals(kind)) && query != null && !query.isBlank()
                 && query.length() <= 80;
     }
 }

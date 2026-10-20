@@ -83,6 +83,11 @@
 - Footage from Pixabay (key) and Wikimedia Commons (keyless) since Pexels stopped issuing keys.
 - Automatic fair-use trailer clips for film/series/anime stories, chosen by Claude from trailer contact sheets.
 
+### Live progress + maps + more real media (2026-10-20)
+- Run page progress card (percent, current step and its own progress, elapsed, time left, ready-at, all steps)
+  and a progress column in the runs list; Quick start follows the inspiration analysis and opens the run.
+- Animated globe maps (Wikidata + Natural Earth) for the story's main place; NASA and Pixabay photos.
+
 ## Next
 - Owner steps in `docs/OWNER_SETUP.md` (roll Cloudflare token, YouTube client, Telegram, power settings).
 - First real YouTube upload test once the Google client exists.

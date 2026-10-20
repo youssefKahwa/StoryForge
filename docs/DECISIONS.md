@@ -291,3 +291,17 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
 - Rendering robustness (same day): per-frame timeout 120 s; tabs = min(configured, free RAM / 0.9 GB), 2 on battery
   (`PowerStatus`), automatic retry with 2 tabs when Chrome runs out of memory; clips use one video layer.
 
+## ADR-026 Live progress, globe maps, NASA and Pixabay photos (2026-10-20)
+- Progress: `GET /api/runs/{id}/progress` gives overall percent, the current step in plain words, progress inside
+  the step read from its files (scene clips, shot files, Remotion "progress N%", Shorts), elapsed, remaining and
+  expected finish. Estimates are medians of this PC's own completed non-mock runs (cache hits excluded), scaled by
+  video length for media stages, x3 on battery; defaults until there is history. Shown on the run page (card with
+  steps) and in the runs list; the browser tab title shows the percent. Quick start with links waits on the
+  inspiration and opens the run when it starts.
+- Maps: the director can mark one shot (max 2 per video, >= 60 s apart, place must be said) as "map"; Wikidata
+  (keyless, CC0) gives coordinates (search + P625, cached); Remotion draws an orthographic globe (d3-geo 3.1.1,
+  topojson-client 3.1.0, world-atlas 2.0.2 = Natural Earth 1:50m, public domain) that turns, zooms and pins it.
+- Photos: Commons, then NASA Image Library (public domain, third-party/copyright items skipped), then Pixabay
+  photos (`PIXABAY_API_KEY`). Library of Congress was tried but its API is behind a bot challenge (403).
+- Dashboard API base: same origin unless served by Gatsby dev/serve (8000/9000).
+

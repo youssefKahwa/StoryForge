@@ -8,6 +8,7 @@ import AppLayout from '../components/AppLayout';
 import NewRunModal from '../components/NewRunModal';
 import RunStatusTag from '../components/RunStatusTag';
 import StageChips from '../components/StageChips';
+import { RunProgressCell } from '../components/RunProgress';
 import usePolling from '../hooks/usePolling';
 import { fetchRuns, selectRuns, selectRunsLoading } from '../store/runs/runsSlice';
 
@@ -39,6 +40,12 @@ const RunsPage = ({ location }) => {
       dataIndex: 'status',
       width: 120,
       render: (status) => <RunStatusTag status={status} />,
+    },
+    {
+      title: intl.formatMessage({ id: 'runs.col.progress' }),
+      key: 'progress',
+      width: 260,
+      render: (_, run) => <RunProgressCell run={run} />,
     },
     { title: intl.formatMessage({ id: 'runs.col.state' }), dataIndex: 'state', width: 140 },
     {

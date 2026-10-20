@@ -47,6 +47,21 @@ class ShotDirectorTest {
         assertThat(overlays.get(0).subtitle()).isEmpty();
     }
 
+    @Test
+    void mapsOnlyForPlacesTheNarrationNamesAtMostTwoAMinuteApart() {
+        ShotList shots = new ShotList(200, List.of(shot("shot_001", 0, 6), shot("shot_002", 30, 36),
+                shot("shot_003", 80, 86), shot("shot_004", 150, 156)));
+        java.util.Map<String, com.storyforge.orchestrator.model.RealMedia> real = new java.util.HashMap<>(java.util.Map.of(
+                "shot_001", new com.storyforge.orchestrator.model.RealMedia("map", "Ural Mountains, Russia"),
+                "shot_002", new com.storyforge.orchestrator.model.RealMedia("map", "Ural Mountains, Russia"),
+                "shot_003", new com.storyforge.orchestrator.model.RealMedia("map", "Atlantis, Ocean"),
+                "shot_004", new com.storyforge.orchestrator.model.RealMedia("photo", "Dyatlov tent")));
+
+        ShotDirector.limitMaps(real, shots, List.of(scene(NARRATION)));
+
+        assertThat(real).containsOnlyKeys("shot_001", "shot_004");
+    }
+
     private static Shot shot(String id, double start, double end) {
         return new Shot(id, "01", "establishing", start, end, "prompt", "push_in", null, 1);
     }

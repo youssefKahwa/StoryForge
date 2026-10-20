@@ -114,6 +114,9 @@ public class RealMediaFinder {
                 return Optional.empty();
             }
             Optional<Found> photo = commons(request.query(), used, target);
+            if (photo.isEmpty()) {
+                photo = nasa(request.query(), used, target);
+            }
             return photo.isPresent() || pixabayKey.isEmpty() ? photo : pixabayPhoto(request.query(), used, target);
         } catch (IOException | RuntimeException e) {
             log.warn("Real media search failed for '{}': {}", request.query(), e.getMessage());
@@ -289,6 +292,46 @@ public class RealMediaFinder {
                     new LicenseRecord("pixabay-license", "Pixabay: " + author, page,
                             "Video by " + author + " on Pixabay: " + page, null),
                     "Video: " + shorten(author, 40) + " / Pixabay", page, hit.path("tags").asString("")));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * NASA Image and Video Library (no key): NASA's own media is public domain; anything credited to a third party
+     * or marked copyrighted is skipped. https://images.nasa.gov/docs/images.nasa.gov_api_docs.pdf (2026-10-20).
+     */
+    private Optional<Found> nasa(String query, Set<String> used, Path target) throws IOException, InterruptedException {
+        String url = "https://images-api.nasa.gov/search?media_type=image&page_size=15&q=" + enc(query);
+        for (JsonNode item : cachedJson("nasa-" + sha1(query), url).path("collection").path("items")) {
+            JsonNode data = item.path("data").path(0);
+            String id = data.path("nasa_id").asString("");
+            String title = data.path("title").asString("");
+            String description = data.path("description").asString("");
+            String keywords = data.path("keywords").toString();
+            String lower = (title + " " + description).toLowerCase(Locale.ROOT);
+            String preview = item.path("links").path(0).path("href").asString("");
+            String page = "https://images.nasa.gov/details/" + enc(id);
+            if (id.isEmpty() || preview.isEmpty() || used.contains(page) || lower.contains("copyright")
+                    || lower.contains("©") || lower.contains("courtesy of")
+                    || coverage(query, title + " " + description + " " + keywords) < MIN_QUERY_COVERAGE) {
+                continue;
+            }
+            String large = preview.replaceFirst("~(thumb|small|medium)\\.jpg$", "~large.jpg");
+            Path image;
+            try {
+                image = download(large, ".img");
+            } catch (IOException e) {
+                image = download(preview, ".img");
+            }
+            Path out = target.resolveSibling(target.getFileName() + ".jpg");
+            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", image.toString(), "-vf",
+                    "scale=-2:" + PRINT_HEIGHT + ":flags=lanczos,unsharp=5:5:0.5:5:5:0", "-q:v", "2", out.toString()));
+            String center = data.path("center").asString("NASA");
+            String evidence = "\"" + title + "\" — NASA/" + center + ", public domain (NASA media guidelines): " + page;
+            used.add(page);
+            return Optional.of(new Found(out, RealMedia.PHOTO, "nasa",
+                    new LicenseRecord("public_domain", "NASA/" + center, page, evidence, "US"),
+                    "Photo: NASA/" + center, page, shorten(title + " — " + description, 300)));
         }
         return Optional.empty();
     }

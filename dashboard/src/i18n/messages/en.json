@@ -243,5 +243,15 @@
   "prefs.host": "Talking logo host",
   "prefs.hostHelp": "Your channel logo (ChannelAssets/DownRightTalkingMouth.mp4) pops in at the opening, on the narrator's questions and at the outro, with its mouth moving to the voice.",
   "prefs.clips": "Fair-use trailer clips",
-  "prefs.clipsHelp": "For stories about a film, series or anime: the app finds the official trailer and shows a few short, muted, framed moments while the narrator comments (max 15% of the video). A Content ID claim is still possible; QA lists every clip."
+  "prefs.clipsHelp": "For stories about a film, series or anime: the app finds the official trailer and shows a few short, muted, framed moments while the narrator comments (max 15% of the video). A Content ID claim is still possible; QA lists every clip.",
+  "runs.col.progress": "Progress",
+  "progress.doneIn": "Video finished in {time}.",
+  "progress.queued": "Waiting to start",
+  "progress.elapsed": "Elapsed",
+  "progress.left": "Left (estimate)",
+  "progress.readyAt": "Ready around",
+  "progress.battery": "The laptop is on battery: rendering is about 10x slower. Plug in the charger.",
+  "quick.reading": "Reading the inspiration videos...",
+  "quick.readingHelp": "Getting the transcripts and finding the best angle ({seconds} s). The video starts by itself and this page opens it.",
+  "quick.readFailed": "The videos could not be read: {error}. Paste a transcript in the wizard below instead."
 }
