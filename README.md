@@ -25,6 +25,9 @@ JDK 17, Node 22, FFmpeg on PATH, Docker Desktop (optional: the `h2` profile work
 3. After 1–2 hours, open the run → **Revise** tab to point at anything you want redone → **Publish kit** tab
    (or the folder in `%USERPROFILE%\storyforge-data\exports`).
 
+4. Close the PowerShell window when you're done. StoryForge only runs while it's open; an unfinished video continues
+   where it stopped the next time you start it.
+
 One-time setup: `docs/OWNER_SETUP.md`.
 
 ## Commands

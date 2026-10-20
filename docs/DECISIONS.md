@@ -245,3 +245,11 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
 - Consequences: about 4–6 more Haiku calls per video (subscription, $0). Shot ids are positional, so overrides use
   `sceneId#n` keys. Mock LLM answers per prompt (`mock/llm/prompt-<name>.json|md`) with `{{var}}` filling.
 
+## ADR-023 On-demand use, not an always-on server (2026-10-20, owner clarification)
+- Context: the owner starts StoryForge only when making a video (1–3 per week) and closes it afterwards.
+- Decision: everything must work from "start → input → wait → review → close". Interrupted runs re-queue on startup
+  (`RunWorker.recover`) and continue from the stage they were in; YouTube's own `publishAt` handles scheduled
+  publishing while the app is closed; `start.ps1` reuses an already-open instance. The cron autopilot stays in the
+  code but off by default and out of the owner guide (it needs the app running all week). Quick start with no
+  input replaces it: one click picks the next topic (AI ideas when the backlog is empty).
+

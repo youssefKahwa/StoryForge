@@ -59,13 +59,15 @@ Without it, every run still produces the full Publish Kit and you upload by hand
    ```
 5. Restart → **Settings → Send test notification**.
 
-## 5. Weekly autopilot (1 min). Optional.
-Add topics to **Topics** in the dashboard, then in `.env`:
-```
-STORYFORGE_AUTOPILOT=true
-```
-Every Monday at 06:00 the app starts a run from the oldest topic. With YouTube connected, the video is uploaded
-privately and you get a Telegram message to review it before it goes public.
+## 5. How the app runs: only when you open it
+StoryForge is not a server that stays on. You start it when you want a video (once a week, or 2–3 times), give the
+input, wait until the video is done, review it, then close the window. Nothing runs while it is closed.
+- Closed it (or the PC restarted) in the middle of a video? Start it again: the video continues from the step
+  where it stopped.
+- With YouTube connected, the video is uploaded as private with a publish date; YouTube publishes it at that time
+  even when StoryForge is closed. To cancel, press **Veto** in the app, or set it to Private in YouTube Studio.
+- Telegram messages only arrive while the app is open (for example "your video is ready").
+- Leave `STORYFORGE_AUTOPILOT=false` (the default): the weekly timer only works if the app stays on all week.
 
 ## 6. Security housekeeping (2 min). Recommended.
 The NVIDIA key and the Cloudflare token were pasted into a chat once. To be safe:
@@ -79,8 +81,8 @@ The NVIDIA key and the Cloudflare token were pasted into a chat once. To be safe
 
 ## Your weekly routine (about 10 minutes of your time)
 
-One time: write your **channel brief** in Settings → Preferences (niche, audience, tone). With autopilot on
-(`STORYFORGE_AUTOPILOT=true`), a video even starts by itself every week.
+One time: write your **channel brief** in Settings → Preferences (niche, audience, tone). Quick start uses it to
+pick a topic when you give no input.
 1. `.\scripts\start.ps1` (opens http://localhost:8080). Glance at **Settings → System check**: a red line tells
    you what to fix; "Cloudflare images: 0 left" means wait for 00:00 UTC (02:00 Morocco summer time) or images get
    reused. Your defaults (voice, length, Shorts, music volume, publish slot) are in **Settings → Preferences**.
