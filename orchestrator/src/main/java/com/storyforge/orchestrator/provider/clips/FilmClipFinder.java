@@ -182,7 +182,7 @@ public class FilmClipFinder {
                     "setpts=PTS/" + fmt(factor) + ",scale=" + width + ":" + height
                             + ":force_original_aspect_ratio=increase,crop=" + width + ":" + height + ",fps=30"
                             + ",tpad=stop_mode=clone:stop_duration=" + fmt(hold + 0.1),
-                    "-an", "-t", fmt(target), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                    "-map", "0:v:0", "-map_metadata", "-1", "-write_tmcd", "0", "-an", "-dn", "-t", fmt(target), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                     "-pix_fmt", "yuv420p", out.toString()));
             MediaSvcClient.Trailer trailer = segment.trailer();
             String evidence = "Clip from \"" + trailer.title() + "\" (" + trailer.channel() + "), "

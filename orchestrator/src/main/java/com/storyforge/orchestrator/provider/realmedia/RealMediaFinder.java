@@ -110,7 +110,11 @@ public class RealMediaFinder {
                     return footage;
                 }
             }
-            return RealMedia.PHOTO.equals(request.kind()) ? commons(request.query(), used, target) : Optional.empty();
+            if (!RealMedia.PHOTO.equals(request.kind())) {
+                return Optional.empty();
+            }
+            Optional<Found> photo = commons(request.query(), used, target);
+            return photo.isPresent() || pixabayKey.isEmpty() ? photo : pixabayPhoto(request.query(), used, target);
         } catch (IOException | RuntimeException e) {
             log.warn("Real media search failed for '{}': {}", request.query(), e.getMessage());
             return Optional.empty();
@@ -234,7 +238,7 @@ public class RealMediaFinder {
             ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-stream_loop", "-1", "-i", cached.toString(),
                     "-t", String.format(Locale.ROOT, "%.3f", seconds + 0.6), "-vf",
                     "scale=" + width + ":" + height + ":force_original_aspect_ratio=increase,crop=" + width + ":"
-                            + height + ",fps=30", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                            + height + ",fps=30", "-map", "0:v:0", "-map_metadata", "-1", "-write_tmcd", "0", "-an", "-dn", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                     "-pix_fmt", "yuv420p", out.toString()));
             String author = video.path("user").path("name").asString("Pexels contributor");
             String evidence = "Video by " + author + " on Pexels: " + page;
@@ -263,14 +267,21 @@ public class RealMediaFinder {
                     || coverage(query, hit.path("tags").asString("")) < 0.5) {
                 continue;
             }
-            JsonNode file = hit.path("videos").path("medium");
-            if (file.path("width").asInt(0) < 1280) {
-                file = hit.path("videos").path("large");
+            // medium is usually 1920x1080 (all videos have it), large can be 4K; landscape only (no phone clips).
+            JsonNode file = null;
+            for (String size : List.of("medium", "large", "small")) {
+                JsonNode candidate = hit.path("videos").path(size);
+                int w = candidate.path("width").asInt(0);
+                int h = candidate.path("height").asInt(1);
+                if (!candidate.path("url").asString("").isEmpty() && w >= 1280 && w >= h * 1.3) {
+                    file = candidate;
+                    break;
+                }
             }
-            String link = file.path("url").asString("");
-            if (link.isEmpty() || file.path("width").asInt(0) < 1280) {
+            if (file == null) {
                 continue;
             }
+            String link = file.path("url").asString("");
             Path out = cut(download(link, ".mp4"), seconds, width, height, target);
             String author = hit.path("user").asString("Pixabay contributor");
             used.add(page);
@@ -278,6 +289,35 @@ public class RealMediaFinder {
                     new LicenseRecord("pixabay-license", "Pixabay: " + author, page,
                             "Video by " + author + " on Pixabay: " + page, null),
                     "Video: " + shorten(author, 40) + " / Pixabay", page, hit.path("tags").asString("")));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Pixabay photos as a fallback when Commons has nothing (Content License; downloaded, never hotlinked, as the API
+     * rules require). largeImageURL is at most 1280 px, enough for the print style.
+     */
+    private Optional<Found> pixabayPhoto(String query, Set<String> used, Path target)
+            throws IOException, InterruptedException {
+        String url = "https://pixabay.com/api/?image_type=photo&orientation=horizontal&safesearch=true&per_page=20"
+                + "&min_width=1200&key=" + enc(pixabayKey) + "&q=" + enc(query);
+        JsonNode hits = cachedJson("pixabay-photo-" + sha1(query), url).path("hits");
+        for (JsonNode hit : hits) {
+            String page = hit.path("pageURL").asString("");
+            String link = hit.path("largeImageURL").asString("");
+            String tags = hit.path("tags").asString("");
+            if (link.isEmpty() || used.contains(page) || coverage(query, tags) < 0.5) {
+                continue;
+            }
+            Path out = target.resolveSibling(target.getFileName() + ".jpg");
+            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", download(link, ".img").toString(), "-vf",
+                    "scale=-2:" + PRINT_HEIGHT + ":flags=lanczos,unsharp=5:5:0.5:5:5:0", "-q:v", "2", out.toString()));
+            String author = hit.path("user").asString("Pixabay contributor");
+            used.add(page);
+            return Optional.of(new Found(out, RealMedia.PHOTO, "pixabay",
+                    new LicenseRecord("pixabay-license", "Pixabay: " + author, page,
+                            "Photo by " + author + " on Pixabay: " + page, null),
+                    "Photo: " + shorten(author, 40) + " / Pixabay", page, tags));
         }
         return Optional.empty();
     }
@@ -323,7 +363,7 @@ public class RealMediaFinder {
         ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-stream_loop", "-1", "-i", source.toString(),
                 "-t", String.format(Locale.ROOT, "%.3f", seconds + 0.6), "-vf",
                 "scale=" + width + ":" + height + ":force_original_aspect_ratio=increase,crop=" + width + ":"
-                        + height + ",fps=30", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                        + height + ",fps=30", "-map", "0:v:0", "-map_metadata", "-1", "-write_tmcd", "0", "-an", "-dn", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                 "-pix_fmt", "yuv420p", out.toString()));
         return out;
     }

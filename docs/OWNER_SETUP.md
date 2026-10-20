@@ -59,7 +59,7 @@ Without it, every run still produces the full Publish Kit and you upload by hand
    ```
 5. Restart → **Settings → Send test notification**.
 
-## 4b. Real stock footage (2 min). Recommended.
+## 4b. Real stock footage: done (2026-10-20, Pixabay key in `.env`)
 Real photos and some videos (Wikimedia Commons) work without any key. For many more real video clips (sea, storms,
 fog, forests, cities...):
 1. Create a free account at https://pixabay.com and open https://pixabay.com/api/docs/ while logged in: your key
