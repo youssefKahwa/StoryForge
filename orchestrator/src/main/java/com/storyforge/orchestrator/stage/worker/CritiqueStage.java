@@ -6,12 +6,14 @@ import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Outline;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
+import com.storyforge.orchestrator.script.NarrationStyle;
 import com.storyforge.orchestrator.script.SfmParseException;
 import com.storyforge.orchestrator.script.SfmParser;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
 import com.storyforge.orchestrator.voice.VoiceCalibration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -34,10 +36,12 @@ public class CritiqueStage implements StageWorker {
     private final JsonMapper json;
     private final StoryForgeProperties properties;
     private final VoiceCalibration calibration;
+    private final NarrationStyle style;
 
     public CritiqueStage(LlmRouter llm, JsonMapper json, StoryForgeProperties properties,
-                         VoiceCalibration calibration) {
+                         VoiceCalibration calibration, NarrationStyle style) {
         this.calibration = calibration;
+        this.style = style;
         this.llm = llm;
         this.json = json;
         this.properties = properties;
@@ -67,10 +71,12 @@ public class CritiqueStage implements StageWorker {
         double tolerance = properties.qa().durationTolerance() * LENGTH_MARGIN;
         int targetWords = (int) Math.round(targetSeconds * wordsPerMinute / 60.0 * SPEECH_SHARE);
         Version best = null;
+        String story = style.vars(context).get("story");
         int maxRewrites = properties.llm().maxRewrites();
         for (int round = 0; round <= maxRewrites; round++) {
             Critique critique = llm.json(context, stage(), "critique",
-                            Map.of("script", markup, "outline", outlineJson, "claims", claimsJson), Critique.class)
+                            Map.of("script", markup, "outline", outlineJson, "claims", claimsJson, "story", story),
+                            Critique.class)
                     .evaluated(properties.qa().criticAverage(), properties.qa().criticHook(), round);
             List<Scene> scenes = SfmParser.parse(markup);
             critique = critique.withLength(wordCount(scenes), estimatedSeconds(scenes, wordsPerMinute), targetSeconds,
@@ -84,12 +90,14 @@ public class CritiqueStage implements StageWorker {
             }
             log.info("Run {} critique round {} below threshold (avg {}, hook {}), rewriting", context.run().id(),
                     round, critique.average(), critique.hook());
-            String rewritten = llm.text(context, Stage.SCRIPT, "rewrite", Map.of(
+            Map<String, String> vars = new HashMap<>(style.vars(context));
+            vars.putAll(Map.of(
                     "script", markup,
                     "critique", json.writeValueAsString(critique),
                     "outline", outlineJson,
                     "claims", claimsJson,
                     "total_words", String.valueOf(targetWords)));
+            String rewritten = llm.text(context, Stage.SCRIPT, "rewrite", vars);
             try {
                 SfmParser.parse(rewritten);
                 markup = rewritten;

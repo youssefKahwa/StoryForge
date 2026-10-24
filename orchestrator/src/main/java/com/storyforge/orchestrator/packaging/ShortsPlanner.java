@@ -83,6 +83,12 @@ public final class ShortsPlanner {
             clipped.put("map", shot.map());
             clipped.put("start", round(Math.max(0, shot.start() - moment.start())));
             clipped.put("end", round(Math.min(length, shot.end() - moment.start())));
+            // The Short reuses the long video's sound, so its whooshes and clicks need the same cuts and punch-ins.
+            clipped.put("transition", shot.start() > moment.start() ? shot.transition() : "cut");
+            if (shot.punch() != null && shot.punch().at() > moment.start() && shot.punch().at() < moment.end()) {
+                clipped.put("punch", Map.of("at", round(shot.punch().at() - moment.start()), "x", shot.punch().x(),
+                        "y", shot.punch().y(), "zoom", shot.punch().zoom()));
+            }
             shots.add(clipped);
         }
         for (int i = 0; i + 1 < shots.size(); i++) {

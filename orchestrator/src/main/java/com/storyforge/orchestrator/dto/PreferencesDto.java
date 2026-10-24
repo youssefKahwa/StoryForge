@@ -18,18 +18,19 @@ public record PreferencesDto(
         String publishZone,
         String channelBrief,
         Boolean hostMascot,
-        Boolean fairUseClips) {
+        Boolean fairUseClips,
+        Integer clipSharePercent) {
 
     public static PreferencesDto from(Preferences p) {
         return new PreferencesDto(p.defaultVoice(), p.defaultMinutes(), p.defaultFormat(), p.shortsEnabled(),
                 p.shortsCount(), p.burnCaptions(), p.upscaleImages(), p.musicVolume(), p.publishDay(),
                 p.publishTime(), p.publishZone(), p.channelBrief(), p.hostEnabled(),
-                p.fairUseClipsEnabled());
+                p.fairUseClipsEnabled(), (int) Math.round(p.clipShare() * 100));
     }
 
     public Preferences toPreferences() {
         return new Preferences(defaultVoice, defaultMinutes, defaultFormat, shortsEnabled, shortsCount, burnCaptions,
                 upscaleImages, musicVolume, publishDay, publishTime, publishZone, channelBrief,
-                hostMascot, fairUseClips);
+                hostMascot, fairUseClips, clipSharePercent);
     }
 }

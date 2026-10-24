@@ -72,7 +72,7 @@ const NewRunModal = ({ open, onClose, onCreated }) => {
           label={<FormattedMessage id="newRun.minutes" />}
           extra={<FormattedMessage id="newRun.minutesHint" />}
         >
-          <InputNumber min={0.5} max={60} step={0.5} />
+          <InputNumber min={8} max={60} step={0.5} />
         </Form.Item>
       </Form>
     </Modal>

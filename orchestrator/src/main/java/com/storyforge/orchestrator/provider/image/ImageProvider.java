@@ -15,4 +15,9 @@ public interface ImageProvider {
     default int remainingToday() {
         return Integer.MAX_VALUE;
     }
+
+    /** New images allowed per day by the free tier (unlimited for providers without a quota). */
+    default int dailyLimit() {
+        return Integer.MAX_VALUE;
+    }
 }

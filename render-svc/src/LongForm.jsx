@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Audio, Easing, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import { KenBurnsImage } from './components/KenBurnsImage';
 import { MediaShot } from './components/MediaShot';
 import { KineticText } from './components/KineticText';
@@ -8,8 +8,8 @@ import { FilmLook } from './components/FilmLook';
 import { Captions } from './components/Captions';
 import { OverlayLayer } from './components/Overlays';
 import { HostBubble } from './components/HostBubble';
+import { OVERLAP_FRAMES, PunchIn, TransitionOverlay, enterStyle, exitStyle } from './components/Transitions';
 
-const CROSSFADE_FRAMES = 10;
 const CHAPTER_FRAMES = 105;
 const OUTRO_FADE_FRAMES = 12;
 
@@ -25,55 +25,12 @@ const previousImage = (shots, index) => {
   return next ? next.asset : null;
 };
 
-const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
-const fast = { ...clamp, easing: Easing.out(Easing.cubic) };
-
-/** Incoming side of a transition (first frames of a shot). */
-const enterStyle = (kind, frame) => {
-  if (kind === 'whip') {
-    return {
-      transform: `translateX(${interpolate(frame, [0, 9], [100, 0], fast)}%)`,
-      filter: `blur(${interpolate(frame, [0, 9], [26, 0], fast)}px)`,
-    };
-  }
-  if (kind === 'zoom') {
-    return {
-      opacity: interpolate(frame, [0, 6], [0, 1], clamp),
-      transform: `scale(${interpolate(frame, [0, 10], [1.32, 1], fast)})`,
-      filter: `blur(${interpolate(frame, [0, 10], [16, 0], fast)}px)`,
-    };
-  }
-  if (kind === 'flash' || kind === 'cut') return {};
-  return { opacity: interpolate(frame, [0, CROSSFADE_FRAMES], [0, 1], clamp) };
-};
-
-/** Outgoing side: the last CROSSFADE_FRAMES of a shot, under the next one. */
-const exitStyle = (nextKind, frame, durationInFrames) => {
-  const local = frame - (durationInFrames - CROSSFADE_FRAMES);
-  if (local < 0) return {};
-  if (nextKind === 'whip') {
-    return {
-      transform: `translateX(${interpolate(local, [0, 9], [0, -100], fast)}%)`,
-      filter: `blur(${interpolate(local, [0, 9], [0, 26], fast)}px)`,
-    };
-  }
-  if (nextKind === 'zoom') {
-    return { transform: `scale(${interpolate(local, [0, 10], [1, 1.45], fast)})` };
-  }
-  return {};
-};
-
-const Flash = () => {
-  const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 2, 12], [0, 0.7, 0], clamp);
-  return <AbsoluteFill style={{ backgroundColor: '#e3f1ff', opacity, mixBlendMode: 'screen' }} />;
-};
-
 const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
   const frame = useCurrentFrame();
-  const kind = index === 0 ? 'cut' : (shot.transition || 'fade');
+  const { fps } = useVideoConfig();
+  const kind = index === 0 ? 'cut' : (shot.transition || 'cut');
   const next = shots[index + 1];
-  const style = { ...exitStyle(next && next.transition, frame, durationInFrames), ...(frame < 14 ? enterStyle(kind, frame) : {}) };
+  const style = { ...exitStyle(next && next.transition, frame, durationInFrames), ...enterStyle(kind, frame) };
   const content = isGraphic(shot.type) ? (
     <>
       {previousImage(shots, index) && (
@@ -84,8 +41,10 @@ const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
   ) : <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={durationInFrames} />;
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      <AbsoluteFill style={style}>{content}</AbsoluteFill>
-      {kind === 'flash' && frame < 14 && <Flash />}
+      <AbsoluteFill style={style}>
+        <PunchIn punch={shot.punch} shotStart={shot.start} fps={fps}>{content}</PunchIn>
+      </AbsoluteFill>
+      <TransitionOverlay kind={kind} />
     </AbsoluteFill>
   );
 };
@@ -109,7 +68,7 @@ export const LongForm = ({ edl, assetBase }) => {
       {shots.map((shot, index) => {
         const from = Math.round(shot.start * fps);
         const last = index === shots.length - 1;
-        const length = Math.max(1, Math.round(shot.end * fps) - from + (last ? 0 : CROSSFADE_FRAMES));
+        const length = Math.max(1, Math.round(shot.end * fps) - from + (last ? 0 : OVERLAP_FRAMES));
         return (
           <Sequence key={shot.id} from={from} durationInFrames={Math.min(length, durationInFrames - from)}>
             <Shot

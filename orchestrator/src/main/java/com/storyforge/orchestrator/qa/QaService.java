@@ -23,6 +23,7 @@ import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.VideoTranscript;
 import com.storyforge.orchestrator.run.RunInfo;
 import com.storyforge.orchestrator.stage.Stage;
+import com.storyforge.orchestrator.stage.worker.AssetsStage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -111,8 +112,11 @@ public class QaService {
         long placeholders = assets.assets().stream()
                 .filter(asset -> asset.provider().endsWith("-fallback")).count();
         checks.add(check("content.real_images", "content", WARNING, placeholders == 0,
-                placeholders == 0 ? "all pictures as planned" : placeholders + " picture(s) replaced by a stock photo, "
-                        + "a reused picture or a backdrop because no AI image was available (daily free quota?)"));
+                placeholders == 0 ? "all pictures as planned" : placeholders + " picture(s) replaced by a stock photo "
+                        + "or a reused picture because no AI image was available"));
+        long empty = assets.assets().stream().filter(asset -> AssetsStage.BACKDROP.equals(asset.provider())).count();
+        checks.add(check("content.empty_shots", "content", CRITICAL, empty == 0,
+                empty == 0 ? "every shot shows a picture" : empty + " shot(s) show only an empty background"));
 
         Set<String> clipShots = assets.assets().stream().filter(asset -> "clip".equals(asset.media()))
                 .map(AssetManifest.Asset::shotId).collect(Collectors.toSet());
@@ -121,8 +125,8 @@ public class QaService {
                     .mapToDouble(shot -> shot.end() - shot.start()).sum();
             double share = clipSeconds / Math.max(1, info.durationSec());
             checks.add(check("legal.fair_use_clips", "legal", WARNING, false, clipShots.size()
-                    + " trailer clip(s), " + fmt(clipSeconds) + " s (" + fmt(share * 100) + "% of the video, limit 15%), "
-                    + "muted, framed, credited: watch them before publishing; a Content ID claim is possible"));
+                    + " trailer clip(s), " + fmt(clipSeconds) + " s (" + fmt(share * 100) + "% of the video), "
+                    + "muted, credited: watch them before publishing; a Content ID claim is possible"));
         }
 
         if (properties.sound() != null && properties.sound().enabled()) {

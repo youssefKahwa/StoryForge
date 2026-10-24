@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -110,14 +111,24 @@ public class AudioMixStage implements StageWorker {
             }
             Map<String, List<MusicLibrary.Track>> library = Double.isInfinite(musicOffset) ? Map.of() : music.scan();
             List<Edl.EdlChapter> chapters = EdlBuilder.chapters(scenes, alignment, outline);
-            List<SoundPlan.SfxCue> transitionCues = files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)
-                    ? TransitionPlanner.plan(files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class),
-                            scenes, chapters).stream().filter(t -> t.sfx() != null && sfxAvailable(t.sfx()))
-                            .map(t -> new SoundPlan.SfxCue(t.sfx(), sfx.file(t.sfx()),
-                                    Math.max(0, Math.round((t.at() - t.lead()) * 1000) / 1000.0), t.gainDb(),
-                                    "transition " + t.kind() + " " + t.shotId()))
-                            .toList()
-                    : List.of();
+            List<SoundPlan.SfxCue> transitionCues = new ArrayList<>();
+            if (files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)) {
+                ShotList shotList = files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class);
+                List<TransitionPlanner.Transition> transitions = TransitionPlanner.plan(shotList, scenes, chapters,
+                        alignment);
+                Set<String> maps = files.exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
+                        ? files.read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS,
+                                new TypeReference<Map<String, Object>>() { }).keySet()
+                        : Set.of();
+                transitions.stream().filter(t -> t.sfx() != null && sfxAvailable(t.sfx()))
+                        .forEach(t -> transitionCues.add(new SoundPlan.SfxCue(t.sfx(), sfx.file(t.sfx()),
+                                Math.max(0, Math.round((t.at() - t.lead()) * 1000) / 1000.0), t.gainDb(),
+                                "transition " + t.kind() + " " + t.shotId())));
+                TransitionPlanner.punches(shotList, maps, transitions).stream()
+                        .filter(p -> p.sfx() != null && sfxAvailable(p.sfx()))
+                        .forEach(p -> transitionCues.add(new SoundPlan.SfxCue(p.sfx(), sfx.file(p.sfx()),
+                                p.at(), p.gainDb(), "punch-in " + p.shotId())));
+            }
             SoundPlan plan = SoundDesigner.plan(scenes, alignment, chapters, library, context.run().id(), sfx::file,
                     Double.isInfinite(musicOffset) ? 0 : musicOffset, transitionCues);
             if (plan.music().isEmpty()) {

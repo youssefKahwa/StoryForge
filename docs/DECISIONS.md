@@ -305,3 +305,28 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
   photos (`PIXABAY_API_KEY`). Library of Congress was tried but its API is behind a bot challenge (403).
 - Dashboard API base: same origin unless served by Gatsby dev/serve (8000/9000).
 
+
+## ADR-027 Human script, 8+ minutes, no empty screens, YouTube-style edit (2026-10-20)
+- Script: the inspiration analysis (`inspire` v0.2) now extracts a `blueprint` (the creators' running order and every
+  point, take, joke and question per part) and their `voice`. The outline follows the blueprint; the script
+  (`script` v0.4) is written as a person talking to one viewer (contractions, opinions as opinions, present-tense
+  storytelling, no essay words) with the channel brief and voice; the critic scores `human_voice` and no longer
+  treats opinions as critical. Close adaptation, not translation: same order, points and energy, our own English
+  sentences. The owner offered to copy the scripts; declined because a translated script is still the creator's
+  work and YouTube's reused/inauthentic-content review is exactly what monetization depends on.
+- Channel brief default is now a passionate, conversational storyteller; the old documentary default is upgraded
+  automatically when it was never edited.
+- Length: long-form runs are at least 8 minutes (mid-roll ads); default 10 (fits the daily free picture quota and
+  renders in about 90 min); inspire suggests 8-12.
+- Free picture quota: when a video needs more new pictures than today's quota has left (3 kept for thumbnails), or
+  Cloudflare answers 429 mid-way, the ASSETS stage waits until 00:02 UTC (progress page shows when) instead of
+  filling shots. Leftover gaps reuse the nearest picture (the renderer reframes it); the empty backdrop only remains
+  for a run with no picture at all, and QA `content.empty_shots` fails the run if one appears.
+- Edit: film analysis art direction is cinematic film stills (anonymous figures, realistic = disclosure on). Photos,
+  footage and trailer clips are full screen (no print frames, no "from the trailer" box). Hard cuts by default;
+  `TransitionPlanner` adds film burn / zoom-through at chapters, impact (shake + boom) or dip to black (sub drop) on
+  a reveal pause inside a scene, glitch / flash on tense scene changes, a whip or whoosh every ~14 s, crossfades only
+  into reflective scenes, and punch-ins (same picture, tighter crop, quiet shutter click) in shots over 3.2 s, so the
+  picture changes every 2-3 s without more AI pictures. Shorts carry the same cuts so their borrowed sound matches.
+  New synthesized SFX: shutter, glitch, boom, sub_drop, film_burn, whoosh.
+- Fair-use clips: share is a setting (`clipSharePercent`, default 20%, max 25%), >= 8 s apart, up to 4 trailers.

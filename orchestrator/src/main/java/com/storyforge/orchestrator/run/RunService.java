@@ -73,10 +73,12 @@ public class RunService {
         run.setVoice(blankToNull(request.voice()) != null ? blankToNull(request.voice())
                 : preferences.saved().map(Preferences::defaultVoice).orElse(null));
         Instant now = Instant.now();
-        run.setTargetSeconds(request.targetMinutes() != null
+        int requested = request.targetMinutes() != null
                 ? (int) Math.round(request.targetMinutes() * 60)
                 : preferences.saved().map(p -> (int) Math.round(p.defaultMinutes() * 60))
-                        .orElse(properties.defaults().targetSeconds()));
+                        .orElse(properties.defaults().targetSeconds());
+        // Long-form videos are at least 8 minutes: below that YouTube allows no mid-roll ads.
+        run.setTargetSeconds(Math.max(properties.defaults().minSeconds(), requested));
         run.setProfile(profile);
         run.setState(RunState.CREATED);
         run.setStatus(RunStatus.QUEUED);

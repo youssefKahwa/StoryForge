@@ -1,8 +1,8 @@
 {
   "id": "great_stories",
   "name": "Great Stories",
-  "minMinutes": 14,
-  "maxMinutes": 20,
+  "minMinutes": 8,
+  "maxMinutes": 14,
   "beats": [
     { "id": "cold_open", "purpose": "Start in the middle of the most intense moment and state the stakes. Never 'welcome back'.", "share": 0.03 },
     { "id": "promise", "purpose": "What the viewer will understand by the end; open the main loop.", "share": 0.03 },

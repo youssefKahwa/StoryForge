@@ -1,5 +1,5 @@
 ---
-version: 0.2.0
+version: 0.3.0
 tier: fast
 ---
 ## system
@@ -14,5 +14,6 @@ Narration (start):
 
 If the video is about one specific screen work, return
 {"work": "<exact title>", "year": <release year or null>,
- "queries": ["<title> <year> official trailer", "<title> trailer 2", "<title> international trailer"]}
+ "queries": ["<title> <year> official trailer", "<title> official teaser", "<title> trailer 2",
+             "<title> international trailer"]}
 Otherwise return {"work": null, "year": null, "queries": []}.

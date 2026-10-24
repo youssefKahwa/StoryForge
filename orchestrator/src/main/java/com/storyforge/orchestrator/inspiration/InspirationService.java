@@ -110,7 +110,7 @@ public class InspirationService {
             List<String> errors = new ArrayList<>();
             for (String url : inspiration.getUrlList()) {
                 try {
-                    transcripts.add(media.transcript(url));
+                    transcripts.add(transcript(url));
                 } catch (RuntimeException e) {
                     log.warn("Transcript failed for {}: {}", url, e.getMessage());
                     errors.add(url + ": " + e.getMessage());
@@ -140,6 +140,21 @@ public class InspirationService {
             log.error("Inspiration {} failed", id, e);
             finish(id, InspirationStatus.FAILED, e.getMessage());
             events.publishEvent(new InspirationFinished(id, InspirationStatus.FAILED, e.getMessage()));
+        }
+    }
+
+    /** Reuses a transcript of the same video when there is one, else reads it (one retry: long CPU jobs can time out). */
+    private VideoTranscript transcript(String url) {
+        Optional<VideoTranscript> known = files.known(url);
+        if (known.isPresent()) {
+            log.info("Transcript of {} reused from an earlier inspiration", url);
+            return known.get();
+        }
+        try {
+            return media.transcript(url);
+        } catch (RuntimeException first) {
+            log.warn("Transcript failed for {} ({}), trying once more", url, first.getMessage());
+            return media.transcript(url);
         }
     }
 

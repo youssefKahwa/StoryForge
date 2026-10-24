@@ -12,7 +12,11 @@ import tools.jackson.databind.json.JsonMapper;
 public class PreferencesService {
 
     private static final String KEY = "preferences";
-    public static final String DEFAULT_BRIEF = "English-language long-form storytelling channel: true stories, "
+    public static final String DEFAULT_BRIEF = "English-language long-form storytelling channel: films, anime, true "
+            + "stories and mysteries, told by a passionate, funny, opinionated storyteller who talks to the viewer "
+            + "like a friend and makes them feel why the story matters. Facts right, opinions clearly opinions.";
+    /** The brief used before v3: kept to recognise it and upgrade it to the new default. */
+    static final String OLD_DEFAULT_BRIEF = "English-language long-form storytelling channel: true stories, "
             + "unsolved mysteries, historical disasters and incredible survivals, told like a documentary film for "
             + "curious adults. Calm, confident narrator; facts over speculation.";
     private static final List<String> VOLUMES = List.of("off", "low", "normal", "high");
@@ -29,13 +33,23 @@ public class PreferencesService {
 
     @Transactional(readOnly = true)
     public Preferences get() {
-        return repository.findById(KEY).map(setting -> json.readValue(setting.getValue(), Preferences.class))
-                .orElseGet(this::defaults);
+        return saved().orElseGet(this::defaults);
     }
 
     @Transactional(readOnly = true)
     public java.util.Optional<Preferences> saved() {
-        return repository.findById(KEY).map(setting -> json.readValue(setting.getValue(), Preferences.class));
+        return repository.findById(KEY).map(setting -> upgrade(json.readValue(setting.getValue(), Preferences.class)));
+    }
+
+    /** Saved before v3: the documentary brief made scripts sound robotic, so the untouched old default is replaced. */
+    private static Preferences upgrade(Preferences p) {
+        if (!OLD_DEFAULT_BRIEF.equals(p.channelBrief())) {
+            return p;
+        }
+        return new Preferences(p.defaultVoice(), p.defaultMinutes(), p.defaultFormat(), p.shortsEnabled(),
+                p.shortsCount(), p.burnCaptions(), p.upscaleImages(), p.musicVolume(), p.publishDay(),
+                p.publishTime(), p.publishZone(), DEFAULT_BRIEF, p.hostMascot(), p.fairUseClips(),
+                p.clipSharePercent());
     }
 
     @Transactional
@@ -70,13 +84,20 @@ public class PreferencesService {
                 publish.zone(),
                 DEFAULT_BRIEF,
                 true,
-                true);
+                true,
+                Preferences.DEFAULT_CLIP_SHARE);
     }
 
     private Preferences validate(Preferences p) {
         Preferences base = defaults();
-        if (p.defaultMinutes() < 1 || p.defaultMinutes() > 30) {
-            throw new IllegalArgumentException("Default length must be between 1 and 30 minutes");
+        if (p.defaultMinutes() < Preferences.MIN_LONG_MINUTES || p.defaultMinutes() > 30) {
+            throw new IllegalArgumentException("Default length must be between 8 and 30 minutes (8+ minutes allows "
+                    + "mid-roll ads)");
+        }
+        if (p.clipSharePercent() != null
+                && (p.clipSharePercent() < 0 || p.clipSharePercent() > Preferences.MAX_CLIP_SHARE)) {
+            throw new IllegalArgumentException("Trailer clip share must be between 0 and "
+                    + Preferences.MAX_CLIP_SHARE + "%");
         }
         if (p.shortsCount() < 0 || p.shortsCount() > 5) {
             throw new IllegalArgumentException("Shorts per video must be between 0 and 5");
@@ -108,6 +129,7 @@ public class PreferencesService {
                 p.publishZone(),
                 p.channelBrief() == null || p.channelBrief().isBlank() ? base.channelBrief() : p.channelBrief().strip(),
                 p.hostEnabled(),
-                p.fairUseClipsEnabled());
+                p.fairUseClipsEnabled(),
+                (int) Math.round(p.clipShare() * 100));
     }
 }

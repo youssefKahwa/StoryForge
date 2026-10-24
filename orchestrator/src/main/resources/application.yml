@@ -41,7 +41,8 @@ storyforge:
     - http://localhost:8000
     - http://localhost:9000
   defaults:
-    target-seconds: 960
+    target-seconds: 600
+    min-target-seconds: 480
     format: GREAT_STORIES
     language: en
   worker:

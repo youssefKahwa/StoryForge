@@ -39,10 +39,17 @@ public record Edl(
     public record EdlStyle(List<String> fonts, List<String> palette, boolean burnCaptions) {
     }
 
-    /** media: "ai" (generated still), "photo" (real photograph, shown as a print) or "footage" (real video). */
+    /**
+     * media: "ai" (generated still), "photo" (real photograph), "footage" (real video), "clip" (fair-use trailer) or
+     * "map". punch: optional punch-in inside the shot (same picture, tighter crop) to keep the picture moving.
+     */
     public record EdlShot(String id, String sceneId, String type, double start, double end, String asset,
                           String motion, String text, String transition, String media, String credit,
-                          MapPin map) {
+                          MapPin map, EdlPunch punch) {
+    }
+
+    /** From {@code at} (seconds, absolute) to the end of the shot the picture is cropped around (x, y), 0..1. */
+    public record EdlPunch(double at, double x, double y, double zoom) {
     }
 
     public record EdlAudio(String kind, String file, double start, double gainDb, LicenseRecord license) {

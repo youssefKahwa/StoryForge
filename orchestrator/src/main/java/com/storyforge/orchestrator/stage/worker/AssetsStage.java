@@ -17,6 +17,8 @@ import com.storyforge.orchestrator.model.ShotList.Shot;
 import com.storyforge.orchestrator.provider.image.ImageProvider;
 import com.storyforge.orchestrator.provider.image.ImageRequest;
 import com.storyforge.orchestrator.provider.image.ImageResult;
+import com.storyforge.orchestrator.provider.image.QuotaExhaustedException;
+import com.storyforge.orchestrator.provider.image.QuotaWaiter;
 import com.storyforge.orchestrator.provider.llm.LlmException;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
 import com.storyforge.orchestrator.provider.realmedia.RealMediaFinder;
@@ -47,6 +49,9 @@ import tools.jackson.core.type.TypeReference;
 public class AssetsStage implements StageWorker {
 
     private static final String GRAPHICS = "storyforge-graphics";
+    public static final String BACKDROP = "backdrop-fallback";
+    /** Pictures kept back from the daily free quota for the three thumbnails. */
+    private static final int THUMBNAIL_RESERVE = 3;
     private static final LicenseRecord MAP_LICENSE = new LicenseRecord("public_domain",
             "Natural Earth (public domain) + Wikidata coordinates (CC0)", "https://www.naturalearthdata.com/about/terms-of-use/",
             "Map drawn by StoryForge from Natural Earth data (public domain) and Wikidata coordinates (CC0)", null);
@@ -60,10 +65,12 @@ public class AssetsStage implements StageWorker {
     private final LlmRouter llm;
     private final FilmClipFinder clipFinder;
     private final PreferencesService preferences;
+    private final QuotaWaiter quotaWaiter;
 
     public AssetsStage(ImageProvider images, FormatRegistry formats, StoryForgeProperties properties,
                        RealMediaFinder finder, LlmRouter llm, FilmClipFinder clipFinder,
-                       PreferencesService preferences) {
+                       PreferencesService preferences, QuotaWaiter quotaWaiter) {
+        this.quotaWaiter = quotaWaiter;
         this.finder = finder;
         this.llm = llm;
         this.clipFinder = clipFinder;
@@ -83,7 +90,13 @@ public class AssetsStage implements StageWorker {
         List<Shot> misses = shots.shots().stream().filter(shot -> !shot.graphic())
                 .filter(shot -> !realShots.contains(shot.id()))
                 .filter(shot -> !images.isCached(request(shot, style))).toList();
-        int remaining = images.remainingToday();
+        int remaining = images.remainingToday() - THUMBNAIL_RESERVE;
+        if (misses.size() > remaining && misses.size() <= images.dailyLimit() - THUMBNAIL_RESERVE) {
+            quotaWaiter.waitForReset(context, misses.size() + " new pictures needed, " + Math.max(0, remaining)
+                    + " left in today's free quota");
+            remaining = images.remainingToday() - THUMBNAIL_RESERVE;
+        }
+        remaining = Math.max(0, remaining);
         Set<String> allowed = new HashSet<>();
         if (misses.size() <= remaining) {
             misses.forEach(shot -> allowed.add(shot.id()));
@@ -95,6 +108,16 @@ public class AssetsStage implements StageWorker {
         log.warn("Run {}: {} new images needed but only {} left in today's free quota; spreading them and reusing "
                 + "the rest", context.run().id(), misses.size(), remaining);
         return allowed;
+    }
+
+    /** One AI picture; if the free quota runs out mid-way (used elsewhere today), waits for the reset once. */
+    private ImageResult generate(StageContext context, ImageRequest request, Path file) {
+        try {
+            return images.generate(request, file);
+        } catch (QuotaExhaustedException e) {
+            quotaWaiter.waitForReset(context, "the free picture quota ran out while making pictures");
+            return images.generate(request, file);
+        }
     }
 
     /** Real photos and footage for the shots the director picked; anything not found falls back to AI images. */
@@ -176,8 +199,8 @@ public class AssetsStage implements StageWorker {
 
     /**
      * Pictures that could not be generated: one LLM call proposes stock searches where a stock photo can honestly
-     * fit, the verify pass rejects anything off-topic, and the rest reuse a picture from the same scene or, as a
-     * last resort, the branded backdrop. Never a text placeholder.
+     * fit, the verify pass rejects anything off-topic, and the rest reuse the nearest picture. Never a text card or
+     * an empty background.
      */
     private void fillMissing(StageContext context, ShotList shots, FormatDefinition.Style style, List<Shot> missing,
                              List<Asset> assets, Set<String> used) {
@@ -207,8 +230,12 @@ public class AssetsStage implements StageWorker {
             }
         }
         Map<String, RealMediaFinder.Found> kept = verified(context, shots, queries, stock);
-        Map<String, String> sceneOf = new HashMap<>();
-        shots.shots().forEach(shot -> sceneOf.put(shot.id(), shot.sceneId()));
+        Map<String, Shot> byId = new HashMap<>();
+        Map<String, Integer> order = new HashMap<>();
+        shots.shots().forEach(shot -> {
+            byId.put(shot.id(), shot);
+            order.put(shot.id(), order.size());
+        });
         for (Shot shot : missing) {
             RealMediaFinder.Found photo = kept.get(shot.id());
             if (photo != null) {
@@ -218,40 +245,54 @@ public class AssetsStage implements StageWorker {
                         photo.credit()));
                 continue;
             }
-            Path file = context.files().path(Stage.ASSETS, shot.id() + ".png");
-            ImageResult result = reuseOrBackdrop(context, shot, file, assets, sceneOf);
-            context.usage().provider(result.provider());
-            assets.add(new Asset(shot.id(), context.files().relative(file), shot.type(), result.provider(),
-                    result.model(), shot.prompt(), shot.seed(), BigDecimal.ZERO, result.realistic(), result.license(),
-                    "ai", null));
+            Asset asset = reuse(context, shot, assets, byId, order);
+            context.usage().provider(asset.provider());
+            assets.add(asset);
         }
         log.info("Run {}: {} stock photo(s) kept of {} missing pictures", context.run().id(), kept.size(),
                 missing.size());
     }
 
-    /** Reuses an AI picture from the same scene (else the nearest one), or draws the branded backdrop. */
-    private ImageResult reuseOrBackdrop(StageContext context, Shot shot, Path file, List<Asset> assets,
-                                        Map<String, String> sceneOf) {
+    /**
+     * Reuses the nearest still picture (same scene first); the renderer frames it differently, so it reads as a new
+     * angle. The branded backdrop is only for a run that has no picture at all: a blank screen loses viewers.
+     */
+    private Asset reuse(StageContext context, Shot shot, List<Asset> assets, Map<String, Shot> byId,
+                        Map<String, Integer> order) {
+        int position = order.get(shot.id());
         Asset donor = null;
+        int best = Integer.MAX_VALUE;
         for (Asset candidate : assets) {
-            boolean usable = "ai".equals(candidate.media()) && !candidate.provider().endsWith("-fallback")
-                    && !GRAPHICS.equals(candidate.provider());
-            if (usable && (donor == null || shot.sceneId().equals(sceneOf.get(candidate.shotId())))) {
+            boolean still = "photo".equals(candidate.media())
+                    || "ai".equals(candidate.media()) && !GRAPHICS.equals(candidate.provider())
+                    && !candidate.provider().endsWith("-fallback");
+            Shot other = byId.get(candidate.shotId());
+            if (!still || other == null) {
+                continue;
+            }
+            int distance = Math.abs(order.get(candidate.shotId()) - position)
+                    + (shot.sceneId().equals(other.sceneId()) ? 0 : 1000);
+            if (distance < best) {
+                best = distance;
                 donor = candidate;
             }
         }
         if (donor != null) {
+            String name = donor.file().substring(donor.file().lastIndexOf('/') + 1);
+            Path file = context.files().path(Stage.ASSETS, shot.id() + name.substring(name.lastIndexOf('.')));
             try {
                 Files.copy(context.files().root().resolve(donor.file()), file, StandardCopyOption.REPLACE_EXISTING);
-                return new ImageResult("reused-fallback", donor.model(), BigDecimal.ZERO, donor.realistic(),
-                        donor.license());
+                return new Asset(shot.id(), context.files().relative(file), shot.type(), "reused-fallback",
+                        donor.model(), donor.prompt(), shot.seed(), BigDecimal.ZERO, donor.realistic(),
+                        donor.license(), donor.media(), donor.credit());
             } catch (IOException e) {
                 log.warn("Run {} {}: reuse failed: {}", context.run().id(), shot.id(), e.getMessage());
             }
         }
+        Path file = context.files().path(Stage.ASSETS, shot.id() + ".png");
         CardRenderer.backdrop(file, video.width(), video.height(), shot.seed());
-        return new ImageResult("backdrop-fallback", "java2d", BigDecimal.ZERO, false,
-                LicenseRecord.generated("storyforge-backdrop"));
+        return new Asset(shot.id(), context.files().relative(file), shot.type(), BACKDROP, "java2d", null,
+                shot.seed(), BigDecimal.ZERO, false, LicenseRecord.generated("storyforge-backdrop"), "ai", null);
     }
 
     /** The director's picture description without the style words, for stock photo searches. */
@@ -268,7 +309,8 @@ public class AssetsStage implements StageWorker {
         }
         List<Scene> scenes = context.files().read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
         Alignment alignment = context.files().read(Stage.ALIGN, "alignment.json", Alignment.class);
-        return clipFinder.find(context, shots, alignment, scenes, taken, video.width(), video.height());
+        return clipFinder.find(context, shots, alignment, scenes, taken, video.width(), video.height(),
+                preferences.get().clipShare());
     }
 
     @Override
@@ -331,7 +373,7 @@ public class AssetsStage implements StageWorker {
                 if (!allowedNew.contains(shot.id()) && !images.isCached(request)) {
                     throw new IllegalStateException("over today's free image budget, reusing on purpose");
                 }
-                result = images.generate(request, file);
+                result = generate(context, request, file);
             } catch (RuntimeException e) {
                 // No AI picture (free quota used up or provider down): handled together after the loop.
                 missing.add(shot);
@@ -343,7 +385,8 @@ public class AssetsStage implements StageWorker {
                 context.usage().provider(result.provider());
             }
             assets.add(new Asset(shot.id(), relative, shot.type(), result.provider(), result.model(), shot.prompt(),
-                    shot.seed(), result.costUsd(), result.realistic(), result.license(), "ai", null));
+                    shot.seed(), result.costUsd(), result.realistic() || style.realistic(), result.license(), "ai",
+                    null));
         }
         if (!missing.isEmpty()) {
             log.warn("Run {}: {} of {} pictures could not be generated; finding stock photos or reusing pictures",

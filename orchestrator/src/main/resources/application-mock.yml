@@ -1,6 +1,7 @@
 storyforge:
   defaults:
     target-seconds: 70
+    min-target-seconds: 0
   llm:
     only: mock
   providers:

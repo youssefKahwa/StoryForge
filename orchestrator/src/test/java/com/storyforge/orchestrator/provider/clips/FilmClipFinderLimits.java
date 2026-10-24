@@ -6,7 +6,7 @@ public final class FilmClipFinderLimits {
     private FilmClipFinderLimits() {
     }
 
-    public static int maxClips(double durationSec) {
-        return FilmClipFinder.maxClips(durationSec);
+    public static int maxClips(double durationSec, double share) {
+        return FilmClipFinder.maxClips(durationSec, share);
     }
 }

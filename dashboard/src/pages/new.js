@@ -197,7 +197,7 @@ const NewVideoPage = ({ location }) => {
               <Select value={draft.format} onChange={(format) => setDraft({ ...draft, format })} options={FORMATS.map((f) => ({ value: f, label: intl.formatMessage({ id: `format.${f}` }) }))} />
             </Descriptions.Item>
             <Descriptions.Item label={intl.formatMessage({ id: 'wizard.angle.minutes' })}>
-              <InputNumber min={1} max={30} value={draft.minutes} onChange={(minutes) => setDraft({ ...draft, minutes })} />
+              <InputNumber min={8} max={30} value={draft.minutes} onChange={(minutes) => setDraft({ ...draft, minutes })} />
             </Descriptions.Item>
           </Descriptions>
         </Card>

@@ -40,8 +40,9 @@ import org.springframework.stereotype.Component;
 /**
  * Fair-use commentary clips, fully automatic: when the story is about a film/series/anime, the official trailer is
  * found and downloaded without audio, cut into shots, and Claude matches trailer shots to narration moments by
- * looking at numbered contact sheets. Hard limits keep the use short and transformative: at most 15% of the video,
- * each clip <= 4.5 s of source (slow motion, then a freeze frame), never back to back, muted, framed, credited.
+ * looking at numbered contact sheets. Hard limits keep the use short and transformative: at most the owner's share
+ * of the video (20% by default, 25% max), each clip <= 4.5 s of source (slow motion, then a freeze frame), never back
+ * to back, muted, credited.
  */
 @Component
 public class FilmClipFinder {
@@ -67,11 +68,10 @@ public class FilmClipFinder {
 
     private static final Logger log = LoggerFactory.getLogger(FilmClipFinder.class);
     private static final Pattern PTS = Pattern.compile("pts_time:([0-9.]+)");
-    static final double MAX_SHARE = 0.15;
     static final double MAX_SOURCE_SECONDS = 4.5;
     static final double SLOWEST = 0.5;
     private static final double TYPICAL_SHOT_SECONDS = 5;
-    static final double MIN_GAP_SECONDS = 15;
+    static final double MIN_GAP_SECONDS = 8;
     private static final double SKIP_HEAD = 5;
     private static final double SKIP_TAIL = 8;
     private static final double MIN_SEGMENT = 1.6;
@@ -81,7 +81,8 @@ public class FilmClipFinder {
     private static final int TILE_H = 180;
     private static final int COLS = 4;
     private static final int ROWS = 3;
-    private static final int MAX_TILES = 48;
+    private static final int MAX_TILES = 72;
+    private static final int MAX_TRAILERS = 4;
 
     private final LlmRouter llm;
     private final MediaSvcClient media;
@@ -105,8 +106,8 @@ public class FilmClipFinder {
     }
 
     public Map<String, Clip> find(StageContext context, ShotList shots, Alignment alignment, List<Scene> scenes,
-                                  Set<String> excluded, int width, int height) {
-        if (!enabled) {
+                                  Set<String> excluded, int width, int height, double share) {
+        if (!enabled || share <= 0) {
             return Map.of();
         }
         try {
@@ -129,7 +130,7 @@ public class FilmClipFinder {
             List<Shot> candidates = shots.shots().stream()
                     .filter(s -> !s.graphic() && !excluded.contains(s.id()) && s.start() > 1)
                     .filter(s -> s.duration() <= 8).toList();
-            int maxClips = maxClips(shots.durationSec());
+            int maxClips = maxClips(shots.durationSec(), share);
             if (candidates.isEmpty() || maxClips == 0) {
                 return Map.of();
             }
@@ -141,20 +142,20 @@ public class FilmClipFinder {
                     "tiles", String.valueOf(segments.size()),
                     "shots", lines,
                     "max", String.valueOf(maxClips)), Matches.class);
-            return cut(context, work, shots, segments, matches, maxClips, width, height);
+            return cut(context, work, shots, segments, matches, maxClips, share, width, height);
         } catch (IOException | RuntimeException e) {
             log.warn("Run {}: film clips skipped: {}", context.run().id(), e.getMessage());
             return Map.of();
         }
     }
 
-    static int maxClips(double durationSec) {
-        return (int) Math.floor(durationSec * MAX_SHARE / TYPICAL_SHOT_SECONDS);
+    static int maxClips(double durationSec, double share) {
+        return (int) Math.floor(durationSec * share / TYPICAL_SHOT_SECONDS);
     }
 
     /** Applies the hard limits to the model's picks and renders each clip to exactly the shot's length. */
     private Map<String, Clip> cut(StageContext context, Work work, ShotList shots, List<Segment> segments,
-                                  Matches matches, int maxClips, int width, int height) {
+                                  Matches matches, int maxClips, double share, int width, int height) {
         Map<String, Shot> byId = shots.shots().stream().collect(Collectors.toMap(Shot::id, s -> s));
         Set<Integer> textTiles = matches.textTiles() == null ? Set.of() : Set.copyOf(matches.textTiles());
         List<Match> ordered = (matches.matches() == null ? List.<Match>of() : matches.matches()).stream()
@@ -174,7 +175,7 @@ public class FilmClipFinder {
             double hold = Math.max(0, target - source / factor);
             if (clips.size() >= maxClips || usedTiles.contains(match.tile()) || source < 1.2
                     || shot.start() - lastEnd < MIN_GAP_SECONDS
-                    || total + shot.duration() > shots.durationSec() * MAX_SHARE) {
+                    || total + shot.duration() > shots.durationSec() * share) {
                 continue;
             }
             Path out = context.files().path(Stage.ASSETS, shot.id() + ".clip.mp4");
@@ -208,7 +209,7 @@ public class FilmClipFinder {
         Path dir = trailers.resolve(work.work().replaceAll("[^A-Za-z0-9]+", "_").toLowerCase(Locale.ROOT));
         List<MediaSvcClient.Trailer> found = new ArrayList<>();
         Set<String> ids = new HashSet<>();
-        for (String query : work.queries().stream().limit(3).toList()) {
+        for (String query : work.queries().stream().limit(MAX_TRAILERS).toList()) {
             try {
                 MediaSvcClient.Trailer trailer = media.trailer(query, work.work(), dir);
                 if (ids.add(trailer.videoId()) && Files.isRegularFile(trailer.file())) {

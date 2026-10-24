@@ -3,12 +3,12 @@ import { AbsoluteFill, Audio, Sequence, interpolate, spring, useCurrentFrame, us
 import { BRAND, Snow, body, extrude, headline } from './brand';
 import { MediaShot } from './components/MediaShot';
 import { FilmLook } from './components/FilmLook';
+import { OVERLAP_FRAMES, PunchIn, TransitionOverlay, enterStyle, exitStyle } from './components/Transitions';
 
 const anton = headline;
 const inter = body;
 
 const END_CARD_SECONDS = 2.5;
-const CROSSFADE_FRAMES = 8;
 
 const assetUrl = (base, file) => `${base}/${file.split('/').map(encodeURIComponent).join('/')}`;
 
@@ -91,6 +91,23 @@ const EndCard = ({ accent }) => {
   );
 };
 
+const ShortShot = ({ shot, next, first, assetBase, length }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const kind = first ? 'cut' : (shot.transition || 'cut');
+  const style = { ...exitStyle(next && next.transition, frame, length), ...enterStyle(kind, frame) };
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden' }}>
+      <AbsoluteFill style={style}>
+        <PunchIn punch={shot.punch} shotStart={shot.start} fps={fps}>
+          <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={length} />
+        </PunchIn>
+      </AbsoluteFill>
+      <TransitionOverlay kind={kind} />
+    </AbsoluteFill>
+  );
+};
+
 export const Short = ({ edl, assetBase }) => {
   const { fps, durationInFrames } = useVideoConfig();
   const accent = BRAND.sky;
@@ -101,12 +118,10 @@ export const Short = ({ edl, assetBase }) => {
       {shots.map((shot, index) => {
         const from = Math.round(shot.start * fps);
         const last = index === shots.length - 1;
-        const length = Math.max(1, Math.round(shot.end * fps) - from + (last ? 0 : CROSSFADE_FRAMES));
+        const length = Math.max(1, Math.round(shot.end * fps) - from + (last ? 0 : OVERLAP_FRAMES));
         return (
           <Sequence key={shot.id} from={from} durationInFrames={Math.min(length, durationInFrames - from)}>
-            <AbsoluteFill>
-              <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={length} />
-            </AbsoluteFill>
+            <ShortShot shot={shot} next={shots[index + 1]} first={index === 0} assetBase={assetBase} length={length} />
           </Sequence>
         );
       })}

@@ -3,6 +3,7 @@ package com.storyforge.orchestrator.run;
 import com.storyforge.orchestrator.artifact.ArtifactStore;
 import com.storyforge.orchestrator.artifact.RunFiles;
 import com.storyforge.orchestrator.model.ShotList;
+import com.storyforge.orchestrator.provider.image.QuotaWaiter;
 import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageExecution;
@@ -13,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -104,7 +107,9 @@ public class ProgressService {
                         : Math.min(0.95, estimate == 0 ? 0 : (double) elapsed / estimate);
                 detail = inner.detail();
                 stagePercent = inner.fraction() == null ? null : (int) Math.round(inner.fraction() * 100);
-                long left = inner.fraction() != null && inner.fraction() > 0.03 && elapsed > 20
+                long left = inner.waitUntil() != null
+                        ? Math.max(0, Duration.between(now, inner.waitUntil()).toSeconds()) + estimate
+                        : inner.fraction() != null && inner.fraction() > 0.03 && elapsed > 20
                         ? Math.round(elapsed / inner.fraction() - elapsed)
                         : Math.max(estimate - elapsed, Math.round(estimate * 0.05));
                 remaining += left;
@@ -129,7 +134,12 @@ public class ProgressService {
                 left == null ? null : now.plusSeconds(left), battery, steps);
     }
 
-    private record Inner(Double fraction, String detail) {
+    /** waitUntil: the stage is paused until then (free picture quota), so that time is added to what is left. */
+    private record Inner(Double fraction, String detail, Instant waitUntil) {
+
+        Inner(Double fraction, String detail) {
+            this(fraction, detail, null);
+        }
     }
 
     /** Progress inside the current stage, read from the files it writes. */
@@ -146,6 +156,14 @@ public class ProgressService {
                     }
                 }
                 case ASSETS -> {
+                    if (files.exists(Stage.ASSETS, QuotaWaiter.WAITING)) {
+                        Instant until = Instant.parse(files.read(Stage.ASSETS, QuotaWaiter.WAITING, Map.class)
+                                .get("until").toString());
+                        String at = until.atZone(ZoneId.systemDefault()).toLocalTime()
+                                .truncatedTo(ChronoUnit.MINUTES).toString();
+                        return new Inner(null, "Waiting for the free picture quota (resets daily): continues at "
+                                + at + ", keep the app open", until);
+                    }
                     if (files.exists(Stage.VISUAL_PLAN, "shotlist.json")) {
                         int shots = files.read(Stage.VISUAL_PLAN, "shotlist.json", ShotList.class).shots().size();
                         Set<String> made = new HashSet<>();

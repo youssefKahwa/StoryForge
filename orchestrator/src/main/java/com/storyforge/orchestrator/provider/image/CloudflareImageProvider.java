@@ -71,6 +71,11 @@ public class CloudflareImageProvider implements ImageProvider {
         return quota.remaining();
     }
 
+    @Override
+    public int dailyLimit() {
+        return quota.dailyLimit();
+    }
+
     private String cacheKey(ImageRequest request) {
         return hash(config.imageModel() + "\u0000" + request.prompt() + SAFETY_SUFFIX + "\u0000" + request.seed());
     }
@@ -86,7 +91,7 @@ public class CloudflareImageProvider implements ImageProvider {
                 Files.createDirectories(cacheDir);
                 if (!Files.isRegularFile(raw)) {
                     if (quota.remaining() == 0) {
-                        throw new MediaException("Cloudflare daily free image quota used up (resets 00:00 UTC)");
+                        throw new QuotaExhaustedException("Cloudflare daily free image quota used up (resets 00:00 UTC)");
                     }
                     Files.write(raw, fetch(prompt));
                     quota.recordCall();
@@ -116,6 +121,8 @@ public class CloudflareImageProvider implements ImageProvider {
         } catch (RestClientResponseException e) {
             if (e.getStatusCode().value() == 429) {
                 quota.markExhausted();
+                throw new QuotaExhaustedException("Cloudflare daily free image quota used up (resets 00:00 UTC): "
+                        + e.getResponseBodyAsString(StandardCharsets.UTF_8));
             }
             throw new MediaException("Cloudflare image failed (" + e.getStatusCode().value() + "): "
                     + e.getResponseBodyAsString(StandardCharsets.UTF_8), e);

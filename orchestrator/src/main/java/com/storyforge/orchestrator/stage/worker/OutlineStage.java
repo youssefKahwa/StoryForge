@@ -4,6 +4,7 @@ import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Dossier;
+import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.Outline;
 import com.storyforge.orchestrator.model.TopicBrief;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
@@ -51,7 +52,10 @@ public class OutlineStage implements StageWorker {
         TopicBrief brief = context.files().read(Stage.SELECT, "topic_brief.json", TopicBrief.class);
         Dossier dossier = context.files().read(Stage.RESEARCH, "dossier.json", Dossier.class);
         FormatDefinition format = formats.get(context.run().format());
+        InspirationIdeas ideas = context.files().exists(Stage.DISCOVER, DiscoverStage.INSPIRATION)
+                ? context.files().read(Stage.DISCOVER, DiscoverStage.INSPIRATION, InspirationIdeas.class) : null;
         Map<String, String> vars = Map.of(
+                "blueprint", ideas != null && ideas.hasBlueprint() ? json.writeValueAsString(ideas.blueprint()) : "[]",
                 "topic", brief.title(),
                 "angle", brief.angle(),
                 "core_promise", brief.corePromise(),
@@ -66,7 +70,8 @@ public class OutlineStage implements StageWorker {
         if (draft.beats() == null || draft.beats().isEmpty()) {
             throw new IllegalStateException("Outline has no beats");
         }
-        draft.beats().stream().filter(beat -> !format.hasBeat(beat.beat()))
+        boolean blueprint = ideas != null && ideas.hasBlueprint();
+        draft.beats().stream().filter(beat -> !blueprint && !format.hasBeat(beat.beat()))
                 .forEach(beat -> log.warn("Outline beat '{}' is not in format {}", beat.beat(), format.id()));
         context.files().write(Stage.OUTLINE, "outline.json", normalize(draft, context.run().targetSeconds()));
     }

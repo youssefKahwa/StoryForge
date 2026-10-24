@@ -21,6 +21,10 @@ public class ImageQuota {
         this.dailyLimit = properties.cloudflare().dailyImageLimit();
     }
 
+    public int dailyLimit() {
+        return dailyLimit;
+    }
+
     public synchronized int remaining() {
         return Math.max(0, dailyLimit - used());
     }

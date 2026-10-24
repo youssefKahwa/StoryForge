@@ -71,7 +71,12 @@ public record StoryForgeProperties(
     public record Narration(String voice, double speed, String lang, double maxWer, double retrySpeedFactor) {
     }
 
-    public record Defaults(int targetSeconds, VideoFormat format, String language) {
+    /** minTargetSeconds: floor for long-form runs (480 = 8 min, the mid-roll threshold); 0 in the mock profile. */
+    public record Defaults(int targetSeconds, VideoFormat format, String language, Integer minTargetSeconds) {
+
+        public int minSeconds() {
+            return minTargetSeconds == null ? 480 : minTargetSeconds;
+        }
     }
 
     public record Worker(boolean enabled, long pollMs) {

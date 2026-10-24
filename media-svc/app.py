@@ -306,6 +306,70 @@ def synth(name: str) -> np.ndarray:
         sub = np.sin(2 * np.pi * (48 * t - 6 * t ** 2)) * np.exp(-t * 3.2)
         shimmer = _lowpass(rng.standard_normal(n).astype(np.float32), 0.25) * np.exp(-t * 6) * 0.25
         sig = (crack * 0.8 + sub + shimmer).astype(np.float32)
+    elif name == "shutter":
+        # Camera shutter: two mechanical clicks 50 ms apart and a tiny body thump (the "frame switch" click).
+        n = int(SFX_RATE * 0.2)
+        t = np.arange(n) / SFX_RATE
+        noise = rng.standard_normal(n).astype(np.float32)
+        click = noise - _lowpass(noise, 0.08)
+        sig = np.zeros(n, dtype=np.float32)
+        for start, level in ((0.0, 1.0), (0.05, 0.7)):
+            s0 = int(start * SFX_RATE)
+            tt = t[: n - s0]
+            sig[s0:] += click[: n - s0] * np.exp(-tt * 260).astype(np.float32) * level
+        sig += (np.sin(2 * np.pi * 180 * t) * np.exp(-t * 60) * 0.25).astype(np.float32)
+    elif name == "glitch":
+        # Digital stutter: short square-wave and crushed-noise bursts jumping between the speakers.
+        n = int(SFX_RATE * 0.38)
+        left = np.zeros(n, dtype=np.float32)
+        right = np.zeros(n, dtype=np.float32)
+        pos = 0
+        while pos < n:
+            length = int(SFX_RATE * rng.uniform(0.012, 0.045))
+            end = min(n, pos + length)
+            tt = np.arange(end - pos) / SFX_RATE
+            if rng.random() < 0.5:
+                burst = np.sign(np.sin(2 * np.pi * rng.uniform(180, 1800) * tt)) * 0.6
+            else:
+                burst = np.round(rng.standard_normal(end - pos) * 3) / 3 * 0.5
+            if rng.random() < 0.25:
+                burst = burst * 0.1
+            pan = rng.uniform(-1, 1)
+            left[pos:end] = burst * np.sqrt(0.5 * (1 - pan))
+            right[pos:end] = burst * np.sqrt(0.5 * (1 + pan))
+            pos = end
+        env = _envelope(n, 0.02, 0.2)
+        stereo = np.stack([left * env, right * env], axis=1)
+        peak = float(np.max(np.abs(stereo))) or 1.0
+        return (stereo / peak * 0.7).astype(np.float32)
+    elif name == "boom":
+        # Cinematic impact: a crack, a deep falling body and a long dark tail.
+        n = int(SFX_RATE * 2.6)
+        t = np.arange(n) / SFX_RATE
+        freq = 38 + 34 * np.exp(-t * 4)
+        body = np.sin(2 * np.pi * np.cumsum(freq) / SFX_RATE) * np.exp(-t * 1.6)
+        crack = _lowpass(rng.standard_normal(n).astype(np.float32), 0.5) * np.exp(-t * 38) * 0.9
+        tail = _lowpass(rng.standard_normal(n).astype(np.float32), 0.01) * np.exp(-t * 2.2) * 4
+        sig = (body + crack + tail).astype(np.float32)
+    elif name == "sub_drop":
+        # Sub drop: a sine falling from 110 Hz to about 28 Hz, the bass "drop" under a reveal.
+        n = int(SFX_RATE * 1.8)
+        t = np.arange(n) / SFX_RATE
+        freq = 28 + 82 * np.exp(-t * 2.6)
+        sig = (np.sin(2 * np.pi * np.cumsum(freq) / SFX_RATE) * np.exp(-t * 1.4)
+               * np.minimum(1, t / 0.01)).astype(np.float32)
+    elif name == "film_burn":
+        # Rising whoosh with projector crackle that lands on the cut (peak at 0.45 s), then a soft hit.
+        n = int(SFX_RATE * 1.3)
+        t = np.arange(n) / SFX_RATE
+        peak_at = 0.45
+        bright = np.exp(-((t - peak_at) ** 2) / (2 * 0.12 ** 2))
+        noise = rng.standard_normal(n).astype(np.float32)
+        whoosh = _lowpass(noise, 0.02 + 0.4 * bright) * bright
+        crackle = rng.standard_normal(n).astype(np.float32) * (rng.random(n) > 0.97) * np.exp(-np.abs(t - 0.6) * 3) * 0.6
+        hit_t = np.clip(t - peak_at, 0, None)
+        hit = np.sin(2 * np.pi * (60 * hit_t - 10 * hit_t ** 2)) * np.exp(-hit_t * 7) * (t >= peak_at) * 0.8
+        sig = (whoosh + crackle + hit).astype(np.float32)
     else:
         raise HTTPException(status_code=400, detail=f"unknown sfx {name}")
     peak = float(np.max(np.abs(sig))) or 1.0

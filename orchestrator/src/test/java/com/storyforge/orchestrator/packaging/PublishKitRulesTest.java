@@ -70,8 +70,8 @@ class PublishKitRulesTest {
         assertThat(moments).allSatisfy(m -> assertThat(m.length()).isLessThanOrEqualTo(52.5));
 
         Edl edl = new Edl(2, 1920, 1080, 30, 160, null,
-                List.of(new EdlShot("s1", "01", "establishing", 0, 20, "assets/s1.png", "push_in", null, "cut", "ai", null, null),
-                        new EdlShot("s2", "01", "kinetic_text", 20, 30, "assets/s2.png", "none", "X", "cut", "ai", null, null)),
+                List.of(new EdlShot("s1", "01", "establishing", 0, 20, "assets/s1.png", "push_in", null, "cut", "ai", null, null, null),
+                        new EdlShot("s2", "01", "kinetic_text", 20, 30, "assets/s2.png", "none", "X", "cut", "ai", null, null, null)),
                 List.of(), List.of(), List.of(), new Edl.EdlStyle(List.of(), List.of("#000", "#111", "#c9a46b"), false),
                 List.of(), null);
         Map<String, Object> spec = ShortsPlanner.spec(moments.get(0), edl, alignment, "Hook", "audio_mix/mix.wav");

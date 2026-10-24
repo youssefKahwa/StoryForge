@@ -26,6 +26,7 @@ import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
@@ -113,12 +114,15 @@ public class AssembleStage implements StageWorker {
         Map<String, MapPin> maps = files.exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
                 ? files.read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS, new TypeReference<Map<String, MapPin>>() { })
                 : Map.of();
-        Map<String, String> transitions = TransitionPlanner.kinds(TransitionPlanner.plan(shots, scenes,
-                edl.chapters()));
+        List<TransitionPlanner.Transition> plan = TransitionPlanner.plan(shots, scenes, edl.chapters(), alignment);
+        Map<String, String> transitions = TransitionPlanner.kinds(plan);
+        Map<String, Edl.EdlPunch> punches = new HashMap<>();
+        TransitionPlanner.punches(shots, maps.keySet(), plan).forEach(p -> punches.put(p.shotId(),
+                new Edl.EdlPunch(p.at(), p.x(), p.y(), p.zoom())));
         edl = edl.withShots(edl.shots().stream().map(shot -> new Edl.EdlShot(shot.id(), shot.sceneId(), shot.type(),
                 shot.start(), shot.end(), shot.asset(), shot.motion(), shot.text(),
-                transitions.getOrDefault(shot.id(), "cut"), shot.media(), shot.credit(),
-                maps.get(shot.id()))).toList());
+                transitions.getOrDefault(shot.id(), TransitionPlanner.CUT), shot.media(), shot.credit(),
+                maps.get(shot.id()), punches.get(shot.id()))).toList());
 
         edl = withHost(context, edl, alignment);
         files.write(Stage.ASSEMBLE, "edl.json", edl);

@@ -1,8 +1,8 @@
 {
   "id": "film_analysis",
   "name": "Film Analysis",
-  "minMinutes": 12,
-  "maxMinutes": 18,
+  "minMinutes": 8,
+  "maxMinutes": 14,
   "beats": [
     { "id": "hook_thesis", "purpose": "A provocative question the video answers.", "share": 0.05 },
     { "id": "spoiler_context", "purpose": "Spoiler notice plus release, director and why it matters, in one breath.", "share": 0.04 },
@@ -15,11 +15,11 @@
     { "id": "tease", "purpose": "One-line tease of the next video.", "share": 0.06 }
   ],
   "style": {
-    "artDirection": "symbolic minimal graphics",
-    "promptPrefix": "minimal symbolic illustration, flat shapes, limited palette, generous negative space",
-    "negativePrompt": "film stills, actors, celebrity likeness, movie posters, copyrighted characters, logos, text",
+    "artDirection": "cinematic film stills, moody and atmospheric, like frames from a prestige drama",
+    "promptPrefix": "cinematic film still, moody 35mm photography, dramatic low-key lighting, anamorphic lens, shallow depth of field, rich color grade, anonymous figures with faces in shadow or turned away",
+    "negativePrompt": "celebrity likeness, recognizable actors, movie posters, copyrighted characters, logos, text, watermark, deformed hands",
     "palette": ["#0e0e10", "#f2efe9", "#d9480f", "#495057"],
     "fonts": ["Bebas Neue", "Inter"],
-    "realistic": false
+    "realistic": true
   }
 }

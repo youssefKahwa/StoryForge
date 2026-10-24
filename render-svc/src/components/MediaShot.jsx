@@ -2,41 +2,47 @@ import React from 'react';
 import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, useCurrentFrame } from 'remotion';
 import { KenBurnsImage } from './KenBurnsImage';
 import { GlobeMap } from './GlobeMap';
-import { BRAND, Snow, body as fontFamily, extrude, headline } from '../brand';
+import { body as fontFamily } from '../brand';
 
 const Credit = ({ text }) => (text ? (
   <div style={{
-    position: 'absolute', top: 34, right: 44, fontFamily, fontSize: 18, color: 'rgba(245,240,230,0.78)',
-    textShadow: '0 1px 6px rgba(0,0,0,0.9)', letterSpacing: '0.04em',
+    position: 'absolute', bottom: 30, left: 44, fontFamily, fontSize: 17, color: 'rgba(245,240,230,0.7)',
+    textShadow: '0 1px 6px rgba(0,0,0,0.95)', letterSpacing: '0.04em',
   }}>
     {text}
   </div>
 ) : null);
 
-const tilt = (id) => {
+const DIRECTIONS = [[-1.6, -0.8], [1.6, -0.6], [-1.2, 0.9], [1.4, 0.8]];
+
+const direction = (id) => {
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) % 997;
-  return ((hash % 7) - 3) * 0.45;
+  return DIRECTIONS[hash % DIRECTIONS.length];
 };
 
-/** A real photograph shown like a print on a table: blurred copy behind, white border, slow push. */
-const ArchivalPhoto = ({ shot, src, durationInFrames }) => {
+/**
+ * A real photograph, full screen: a blurred, darkened copy fills the frame and the photo itself sits on top
+ * edge to edge (no print border), drifting like a camera move.
+ */
+const Photo = ({ shot, src, durationInFrames }) => {
   const frame = useCurrentFrame();
   const range = [0, Math.max(1, durationInFrames)];
-  const scale = interpolate(frame, range, [1.0, 1.06], { extrapolateRight: 'clamp', easing: Easing.inOut(Easing.quad) });
+  const ease = { extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic) };
+  const [dx, dy] = direction(shot.id);
+  const scale = interpolate(frame, range, [1.1, 1.2], ease);
   return (
     <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#0b0b0c' }}>
       <Img src={src} style={{
         position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-        filter: 'blur(28px) brightness(0.35) saturate(0.7)', transform: 'scale(1.15)',
+        filter: 'blur(30px) brightness(0.4) saturate(0.8)', transform: 'scale(1.2)',
       }} />
-      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <Img src={src} style={{
-          maxWidth: '74%', maxHeight: '80%', objectFit: 'contain', border: '12px solid #f1ebdf',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.75)', filter: 'saturate(0.85) contrast(1.05)',
-          transform: `rotate(${tilt(shot.id)}deg) scale(${scale})`,
-        }} />
-      </AbsoluteFill>
+      <Img src={src} style={{
+        position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain',
+        filter: 'saturate(0.9) contrast(1.06)',
+        transform: `translate(${interpolate(frame, range, [0, dx], ease)}%, ${interpolate(frame, range, [0, dy], ease)}%) `
+          + `scale(${scale})`,
+      }} />
       <Credit text={shot.credit} />
     </AbsoluteFill>
   );
@@ -45,39 +51,31 @@ const ArchivalPhoto = ({ shot, src, durationInFrames }) => {
 /** Real stock footage, muted (the soundtrack is ours), graded to sit with the illustrations. */
 const Footage = ({ shot, src, durationInFrames }) => {
   const frame = useCurrentFrame();
-  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.0, 1.05], { extrapolateRight: 'clamp' });
+  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.02, 1.1], { extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       <OffthreadVideo src={src} muted style={{
         width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
-        filter: 'saturate(0.82) contrast(1.06) brightness(0.96)',
+        filter: 'saturate(0.85) contrast(1.08) brightness(0.95)',
       }} />
       <Credit text={shot.credit} />
     </AbsoluteFill>
   );
 };
 
-/** Fair-use trailer clip: framed as a screen inside our video (commentary context), muted, credited. */
+/** Fair-use trailer moment: full screen like a film channel, muted, slowly pushed in, credited in the corner. */
 const FilmClip = ({ shot, src, durationInFrames }) => {
   const frame = useCurrentFrame();
-  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [0.97, 1.0], { extrapolateRight: 'clamp' });
+  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.0, 1.08], {
+    extrapolateRight: 'clamp', easing: Easing.inOut(Easing.quad),
+  });
   return (
-    <AbsoluteFill style={{ overflow: 'hidden', background: `radial-gradient(circle at 50% 45%, #182436 0%, ${BRAND.night} 70%)` }}>
-      <Snow count={45} opacity={0.5} />
-      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{
-          width: '80%', aspectRatio: '16 / 9', borderRadius: 18, overflow: 'hidden', transform: `scale(${scale})`,
-          border: `4px solid ${BRAND.sky}`, boxShadow: `0 0 34px ${BRAND.sky}66, 0 30px 80px rgba(0,0,0,0.7)`,
-        }}>
-          <OffthreadVideo src={src} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      </AbsoluteFill>
-      <div style={{
-        position: 'absolute', top: 70, left: 200, fontFamily: headline, fontSize: 26, color: BRAND.white,
-        textShadow: extrude(3), letterSpacing: '0.06em',
-      }}>
-        FROM THE TRAILER
-      </div>
+    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
+      <OffthreadVideo src={src} muted style={{
+        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
+        filter: 'contrast(1.08) saturate(0.95)',
+      }} />
+      <AbsoluteFill style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.45) 100%)' }} />
       <Credit text={shot.credit} />
     </AbsoluteFill>
   );
@@ -87,6 +85,6 @@ export const MediaShot = ({ shot, src, durationInFrames }) => {
   if (shot.media === 'map' && shot.map) return <GlobeMap map={shot.map} durationInFrames={durationInFrames} />;
   if (shot.media === 'clip') return <FilmClip shot={shot} src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'footage') return <Footage shot={shot} src={src} durationInFrames={durationInFrames} />;
-  if (shot.media === 'photo') return <ArchivalPhoto shot={shot} src={src} durationInFrames={durationInFrames} />;
+  if (shot.media === 'photo') return <Photo shot={shot} src={src} durationInFrames={durationInFrames} />;
   return <KenBurnsImage src={src} motion={shot.motion || 'push_in'} durationInFrames={durationInFrames} />;
 };

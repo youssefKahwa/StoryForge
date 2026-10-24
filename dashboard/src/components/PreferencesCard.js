@@ -53,7 +53,7 @@ const PreferencesCard = () => {
             </Col>
             <Col xs={12} md={8}>
               <Form.Item name="defaultMinutes" label={t('prefs.minutes')}>
-                <InputNumber min={1} max={30} step={1} className="full-width" />
+                <InputNumber min={8} max={30} step={1} className="full-width" />
               </Form.Item>
             </Col>
             <Col xs={12} md={8}>
@@ -110,6 +110,11 @@ const PreferencesCard = () => {
             <Col xs={12} md={6}>
               <Form.Item name="fairUseClips" label={t('prefs.clips')} valuePropName="checked" tooltip={t('prefs.clipsHelp')}>
                 <Switch />
+              </Form.Item>
+            </Col>
+            <Col xs={12} md={6}>
+              <Form.Item name="clipSharePercent" label={t('prefs.clipShare')} tooltip={t('prefs.clipShareHelp')}>
+                <InputNumber min={0} max={25} step={5} addonAfter="%" className="full-width" />
               </Form.Item>
             </Col>
             <Col xs={24}>
