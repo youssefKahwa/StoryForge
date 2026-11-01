@@ -53,7 +53,10 @@ public final class TransitionPlanner {
     private static final double CHAPTER_TOLERANCE = 0.35;
     private static final double MIN_ENERGETIC_GAP = 6;
     private static final double PACE_GAP = 14;
-    private static final double REVEAL_PAUSE = 0.45;
+    /** Normal sentence gaps are ~0.4-0.6 s; only a deliberate pause before a reveal is longer. */
+    private static final double REVEAL_PAUSE = 0.7;
+    /** A shake-and-boom is special: at most one every 40 s. */
+    private static final double IMPACT_GAP = 40;
     private static final double DIP_PAUSE = 0.9;
     private static final int MAX_DIPS = 2;
     private static final double PUNCH_MIN_SHOT = 3.2;
@@ -84,6 +87,7 @@ public final class TransitionPlanner {
         int tenseCount = 0;
         int paceCount = 0;
         int dips = 0;
+        double lastImpact = -100;
         for (int i = 1; i < list.size(); i++) {
             Shot shot = list.get(i);
             Shot previous = list.get(i - 1);
@@ -98,9 +102,15 @@ public final class TransitionPlanner {
             if (chapter) {
                 transition = chapterCount++ % 2 == 0 ? new Transition(shot.id(), at, BURN, "film_burn", -8, 0.45)
                         : new Transition(shot.id(), at, ZOOM, "zoom_in", -9, 0.68);
-            } else if (pause >= REVEAL_PAUSE && spaced && !shot.graphic()) {
-                transition = pause >= DIP_PAUSE && dips++ < MAX_DIPS
-                        ? new Transition(shot.id(), at, DIP, "sub_drop", -11, 0.0)
+            } else if (pause >= REVEAL_PAUSE && spaced && !shot.graphic()
+                    && (pause >= DIP_PAUSE && dips < MAX_DIPS || at - lastImpact >= IMPACT_GAP)) {
+                boolean dip = pause >= DIP_PAUSE && dips < MAX_DIPS;
+                if (dip) {
+                    dips++;
+                } else {
+                    lastImpact = at;
+                }
+                transition = dip ? new Transition(shot.id(), at, DIP, "sub_drop", -11, 0.0)
                         : new Transition(shot.id(), at, IMPACT, "boom", -10, 0.0);
             } else if (shot.graphic() && spaced) {
                 transition = new Transition(shot.id(), at, ZOOM, "swoosh_soft", -15, 0.33);

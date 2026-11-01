@@ -24,6 +24,23 @@ _kokoro = None
 _whisper = None
 
 
+def voice_style(voice: str):
+    """A Kokoro voice name, or a blend like "am_michael:60+am_fenrir:40" (weights in percent): the channel's own
+    voice, made by mixing the style vectors of several stock voices."""
+    if "+" not in voice and ":" not in voice:
+        return voice
+    parts = []
+    for item in voice.split("+"):
+        name, _, weight = item.strip().partition(":")
+        parts.append((name.strip(), float(weight) if weight else 1.0))
+    total = sum(w for _, w in parts) or 1.0
+    style = None
+    for name, weight in parts:
+        vector = kokoro().get_voice_style(name) * (weight / total)
+        style = vector if style is None else style + vector
+    return style
+
+
 def kokoro():
     global _kokoro
     with _lock:
@@ -456,7 +473,7 @@ def tts(request: TtsRequest):
     parts = []
     for segment in request.segments:
         if segment.text and segment.text.strip():
-            samples, rate = kokoro().create(segment.text.strip(), voice=request.voice, speed=request.speed,
+            samples, rate = kokoro().create(segment.text.strip(), voice=voice_style(request.voice), speed=request.speed,
                                             lang=request.lang)
             if rate != SAMPLE_RATE:
                 raise HTTPException(status_code=500, detail=f"unexpected sample rate {rate}")

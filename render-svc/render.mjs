@@ -1,6 +1,7 @@
 // Usage: node render.mjs <edl.json> <runDir> <out.mp4> [compositionId]
 import { bundle } from '@remotion/bundler';
 import { ensureBrowser, renderMedia, selectComposition } from '@remotion/renderer';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -16,8 +17,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(runDir);
 const edl = JSON.parse(fs.readFileSync(edlPath, 'utf8'));
 const concurrency = Number(process.env.RENDER_CONCURRENCY) || null;
-// GPU (ANGLE) rendering: the official effects (light leak...) need WebGL2, and filters/transforms get faster.
-const chromiumOptions = { gl: process.env.RENDER_GL || 'angle' };
+// GPU (ANGLE) is the fastest here (~12 frames/s vs ~9 default, ~1 software "swangle"); the orchestrator falls
+// back to RENDER_GL=default if a GPU render crashes or stalls.
+const glMode = process.env.RENDER_GL || 'angle';
+const chromiumOptions = glMode === 'default' ? {} : { gl: glMode };
+// The long video's soundtrack is one finished mix: every render tab downloading it (100+ MB) stalled the asset
+// server, so the picture is rendered silent and the mix is added afterwards with FFmpeg (seconds, no re-encode).
+const tracks = edl.audio || [];
+const muxAfter = compositionId === 'LongForm' && tracks.length === 1 && !tracks[0].start && !tracks[0].gainDb;
+const renderEdl = muxAfter ? { ...edl, audio: [] } : edl;
+const videoOut = muxAfter ? outPath.replace(/\.mp4$/i, '') + '.video.mp4' : outPath;
 
 const TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg' };
 
@@ -58,7 +67,7 @@ try {
   await ensureBrowser();
   console.log('Bundling...');
   const serveUrl = await bundle({ entryPoint: path.join(here, 'src', 'index.jsx') });
-  const inputProps = { edl, assetBase };
+  const inputProps = { edl: renderEdl, assetBase };
   const composition = await selectComposition({ serveUrl, id: compositionId, inputProps, chromiumOptions });
   console.log(`Rendering ${composition.durationInFrames} frames at ${composition.fps} fps`);
   let lastReported = -1;
@@ -67,7 +76,8 @@ try {
     serveUrl,
     codec: 'h264',
     crf: 18,
-    outputLocation: outPath,
+    outputLocation: videoOut,
+    muted: muxAfter,
     inputProps,
     concurrency,
     chromiumOptions,
@@ -81,6 +91,14 @@ try {
       }
     },
   });
+  if (muxAfter) {
+    console.log('Adding the soundtrack');
+    const mux = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', videoOut, '-i', path.join(root, tracks[0].file),
+      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', outPath],
+    { stdio: 'inherit' });
+    if (mux.status !== 0) throw new Error('Adding the soundtrack failed');
+    fs.unlinkSync(videoOut);
+  }
   console.log('Render done');
 } catch (error) {
   console.error(error && error.stack ? error.stack : error);

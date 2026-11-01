@@ -25,9 +25,11 @@ public final class HostMoments {
         }
     }
 
-    static final double MAX_SHARE = 0.10;
-    static final int MAX_MOMENTS = 6;
-    static final double MIN_GAP = 35;
+    static final double MAX_SHARE = 0.14;
+    static final int MAX_MOMENTS = 8;
+    static final double MIN_GAP = 30;
+    /** The host should be met early, in the opening claim, not only near the end. */
+    static final double EARLY = 60;
     static final double NOT_BEFORE = 4;
     static final double MIN_LENGTH = 1.8;
     static final double MAX_LENGTH = 7;
@@ -55,6 +57,9 @@ public final class HostMoments {
             }
             String spoken = RevisionService.spoken(alignment, shot).toLowerCase(Locale.ROOT);
             int score = score(spoken);
+            if (score > 0 && shot.start() < EARLY) {
+                score += 2;
+            }
             if (score > 0) {
                 candidates.add(new Candidate(shot, score, spoken));
             }

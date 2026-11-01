@@ -16,7 +16,7 @@
   ],
   "style": {
     "artDirection": "cinematic film stills, moody and atmospheric, like frames from a prestige drama",
-    "promptPrefix": "cinematic film still, moody 35mm photography, dramatic low-key lighting, anamorphic lens, shallow depth of field, rich color grade, anonymous figures with faces in shadow or turned away",
+    "promptPrefix": "cinematic film still, moody 35mm photography, dramatic cinematic lighting with the subject clearly lit, anamorphic lens, shallow depth of field, rich color grade, anonymous figures with faces in shadow or turned away",
     "negativePrompt": "celebrity likeness, recognizable actors, movie posters, copyrighted characters, logos, text, watermark, deformed hands",
     "palette": ["#0e0e10", "#f2efe9", "#d9480f", "#495057"],
     "fonts": ["Bebas Neue", "Inter"],

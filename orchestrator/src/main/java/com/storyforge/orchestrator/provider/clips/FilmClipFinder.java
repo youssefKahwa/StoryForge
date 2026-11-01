@@ -95,6 +95,7 @@ public class FilmClipFinder {
     private static final Logger log = LoggerFactory.getLogger(FilmClipFinder.class);
     private static final Pattern PTS = Pattern.compile("pts_time:([0-9.]+)");
     private static final Pattern CROP = Pattern.compile("crop=([0-9]+:[0-9]+:[0-9]+:[0-9]+)");
+    private static final Pattern BLACK = Pattern.compile("black_duration:([0-9.]+)");
     private static final Pattern VIDEO_FILE = Pattern.compile("(?i).+\\.(mp4|mkv|webm|mov|avi)");
     static final double SLOWEST = 0.8;
     static final double TYPICAL_SHOT_SECONDS = 4;
@@ -224,12 +225,25 @@ public class FilmClipFinder {
             Path out = context.files().path(Stage.ASSETS, shot.id() + ".clip.mp4");
             ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-ss", fmt(first.start() + 0.05), "-t", fmt(source),
                     "-i", first.source().file().toString(), "-vf",
-                    bars(first.source(), library.resolve(slug(work.work()))) + "setpts=PTS/" + fmt(factor)
+                    bars(first.source(), library.resolve(slug(work.work()))) + watermark(first.source())
+                            + "setpts=PTS/" + fmt(factor)
                             + ",scale=" + width + ":" + height
                             + ":force_original_aspect_ratio=increase,crop=" + width + ":" + height + ",fps=30"
                             + ",tpad=stop_mode=clone:stop_duration=" + fmt(hold + 0.1),
                     "-map", "0:v:0", "-map_metadata", "-1", "-write_tmcd", "0", "-an", "-dn", "-t", fmt(target),
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out.toString()));
+            if (mostlyBlack(out, target)) {
+                // A fade-to-black or a night shot too dark to read: worse than any other picture.
+                log.info("Run {} {}: footage too dark, left for another picture", context.run().id(), shot.id());
+                usedTiles.add(match.tile());
+                usedShots.remove(shot.id());
+                try {
+                    Files.deleteIfExists(out);
+                } catch (IOException e) {
+                    log.debug("Could not delete {}", out);
+                }
+                continue;
+            }
             MediaSvcClient.Trailer from = first.source();
             String where = from.url() == null || from.url().isBlank() ? "owner's copy of the work" : from.url();
             String evidence = "Footage from \"" + from.title() + "\" (" + from.channel() + "), " + fmt(source)
@@ -338,6 +352,31 @@ public class FilmClipFinder {
             }
         }
         return segments;
+    }
+
+    /**
+     * Scene uploads by clip channels carry a corner logo (e.g. "MOVIECLIPS"): a slight centre crop removes it.
+     */
+    static String watermark(MediaSvcClient.Trailer source) {
+        String text = ((source.channel() == null ? "" : source.channel()) + " " + (source.title() == null ? ""
+                : source.title())).toLowerCase(Locale.ROOT);
+        return text.contains("movieclips") || text.contains("movie clips") ? "crop=iw*0.86:ih*0.86," : "";
+    }
+
+    /** True when more than a third of the clip is (near) black. */
+    private boolean mostlyBlack(Path clip, double length) {
+        try {
+            String output = ffmpeg.ffmpeg(List.of("-i", clip.toString(), "-an", "-vf",
+                    "blackdetect=d=0.2:pix_th=0.10", "-f", "null", "-"));
+            Matcher matcher = BLACK.matcher(output);
+            double black = 0;
+            while (matcher.find()) {
+                black += Double.parseDouble(matcher.group(1));
+            }
+            return black > length / 3;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**

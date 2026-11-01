@@ -25,6 +25,8 @@ import tools.jackson.databind.json.JsonMapper;
 @ConditionalOnProperty(prefix = "storyforge.providers", name = "render", havingValue = "remotion")
 public class RemotionRenderer implements RenderProvider {
 
+    /** A render whose log shows no progress this long is stuck (a crashed browser that never came back). */
+    private static final long STALL_MS = 10 * 60 * 1000L;
     private static final Logger log = LoggerFactory.getLogger(RemotionRenderer.class);
     private static final List<String> SYNCED = List.of("package.json", "render.mjs", "still.mjs", "src");
     private static final int TAIL = 3000;
@@ -86,17 +88,18 @@ public class RemotionRenderer implements RenderProvider {
         }
         int tabs = concurrency();
         try {
-            renderOnce(edl, runRoot, outputMp4, tabs);
+            // The Intel GPU (ANGLE) renders about 12 frames/s here, 3x Chrome's default.
+            renderOnce(edl, runRoot, outputMp4, tabs, "angle");
         } catch (MediaException e) {
-            if (tabs <= SAFE_TABS || e.getMessage() == null || !e.getMessage().contains("out of memory")) {
-                throw e;
-            }
-            log.warn("Chrome ran out of memory with {} tabs; rendering again with {}", tabs, SAFE_TABS);
-            renderOnce(edl, runRoot, outputMp4, SAFE_TABS);
+            // A crash, out of memory or a stalled render: once more on Chrome's default GL with fewer tabs.
+            log.warn("Render failed with the GPU and {} tabs ({}); rendering again with Chrome's default GL and {}",
+                    tabs, e.getMessage() == null ? "?" : e.getMessage().lines().findFirst().orElse("?"),
+                    Math.min(tabs, SAFE_TABS));
+            renderOnce(edl, runRoot, outputMp4, Math.min(tabs, SAFE_TABS), "default");
         }
     }
 
-    private void renderOnce(Edl edl, Path runRoot, Path outputMp4, int tabs) {
+    private void renderOnce(Edl edl, Path runRoot, Path outputMp4, int tabs, String gl) {
         Path edlFile = outputMp4.resolveSibling("edl.json");
         Path logFile = outputMp4.resolveSibling("render.log");
         List<String> command = new ArrayList<>(List.of(config.node(), installDir.resolve("render.mjs").toString(),
@@ -105,11 +108,19 @@ public class RemotionRenderer implements RenderProvider {
             ProcessBuilder builder = new ProcessBuilder(command).directory(installDir.toFile())
                     .redirectErrorStream(true).redirectOutput(logFile.toFile());
             builder.environment().put("RENDER_CONCURRENCY", String.valueOf(tabs));
-            log.info("Remotion render started: {} frames", Math.round(edl.durationSec() * edl.fps()));
+            builder.environment().put("RENDER_GL", gl);
+            log.info("Remotion render started: {} frames ({} GL)", Math.round(edl.durationSec() * edl.fps()), gl);
             Process process = builder.start();
-            if (!process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                throw new MediaException("Remotion render timed out after " + config.timeoutSeconds() + "s");
+            long deadline = System.currentTimeMillis() + config.timeoutSeconds() * 1000L;
+            while (!process.waitFor(15, TimeUnit.SECONDS)) {
+                long quiet = System.currentTimeMillis() - Files.getLastModifiedTime(logFile).toMillis();
+                if (quiet > STALL_MS || System.currentTimeMillis() > deadline) {
+                    process.descendants().forEach(ProcessHandle::destroyForcibly);
+                    process.destroyForcibly();
+                    throw new MediaException(quiet > STALL_MS
+                            ? "Remotion render stalled (no progress for " + STALL_MS / 60000 + " min)"
+                            : "Remotion render timed out after " + config.timeoutSeconds() + "s");
+                }
             }
             if (process.exitValue() != 0 || !Files.isRegularFile(outputMp4)) {
                 String output = Files.readString(logFile, StandardCharsets.UTF_8);

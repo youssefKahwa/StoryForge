@@ -15,5 +15,6 @@ Contact sheet of one clip (each tile shows the frame at the time printed in its 
 Split the clip into consecutive segments of 1 to 4 seconds and label each one:
 - gesture: one of explain, point, lean, shrug, count, think, wave, nod, laugh, neutral
 - usable: false when the studio, the posters, the mask or the hands look wrong or change compared with the reference
-  (melting shapes, extra fingers, posters or text changing, a different person), or when the frame is mostly blurred.
+  (melting shapes, extra fingers, posters or text changing, a different person), when the microphone, its arm or its
+  cable is cut, broken, floating or missing, or when the frame is mostly blurred.
 Return {"segments": [{"from": 0.0, "to": 2.5, "gesture": "explain", "usable": true}]} covering the whole clip.

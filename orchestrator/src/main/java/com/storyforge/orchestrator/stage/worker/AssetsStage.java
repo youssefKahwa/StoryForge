@@ -51,6 +51,9 @@ public class AssetsStage implements StageWorker {
 
     private static final String GRAPHICS = "storyforge-graphics";
     public static final String HOST = "bipath-host";
+    /** Average brightness (0-255) under which a picture reads as black on screen, and the level it is lifted to. */
+    static final double DARK_MEAN = 42;
+    static final double DARK_TARGET = 70;
     private static final LicenseRecord HOST_LICENSE = new LicenseRecord("owned", "BiPath channel character", null,
             "The channel's own masked host: gesture clips and stills made for the channel by its owner", null);
     public static final String BACKDROP = "backdrop-fallback";
@@ -118,11 +121,56 @@ public class AssetsStage implements StageWorker {
 
     /** One AI picture; if the free quota runs out mid-way (used elsewhere today), waits for the reset once. */
     private ImageResult generate(StageContext context, ImageRequest request, Path file) {
+        ImageResult result;
         try {
-            return images.generate(request, file);
+            result = images.generate(request, file);
         } catch (QuotaExhaustedException e) {
             quotaWaiter.waitForReset(context, "the free picture quota ran out while making pictures");
-            return images.generate(request, file);
+            result = images.generate(request, file);
+        }
+        brightenIfDark(file);
+        return result;
+    }
+
+    /**
+     * "Low-key" AI pictures can come out nearly black (a small lit object in darkness): on screen that reads as a
+     * black frame. Their shadows are lifted (gamma) until the average brightness is readable.
+     */
+    static void brightenIfDark(Path file) {
+        try {
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(file.toFile());
+            if (image == null) {
+                return;
+            }
+            long sum = 0;
+            int samples = 0;
+            for (int y = 0; y < image.getHeight(); y += 8) {
+                for (int x = 0; x < image.getWidth(); x += 8) {
+                    int rgb = image.getRGB(x, y);
+                    sum += (((rgb >> 16) & 255) * 299 + ((rgb >> 8) & 255) * 587 + (rgb & 255) * 114) / 1000;
+                    samples++;
+                }
+            }
+            double mean = samples == 0 ? 128 : (double) sum / samples;
+            if (mean >= DARK_MEAN) {
+                return;
+            }
+            double gamma = Math.max(0.45, Math.log(DARK_TARGET / 255.0) / Math.log(Math.max(1, mean) / 255.0));
+            byte[] table = new byte[256];
+            for (int i = 0; i < 256; i++) {
+                table[i] = (byte) Math.min(255, Math.round(255 * Math.pow(i / 255.0, gamma)));
+            }
+            java.awt.image.BufferedImage rgbImage = new java.awt.image.BufferedImage(image.getWidth(),
+                    image.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
+            rgbImage.getGraphics().drawImage(image, 0, 0, null);
+            java.awt.image.BufferedImage lifted = new java.awt.image.LookupOp(
+                    new java.awt.image.ByteLookupTable(0, table), null).filter(rgbImage, null);
+            String name = file.getFileName().toString();
+            javax.imageio.ImageIO.write(lifted, name.toLowerCase(java.util.Locale.ROOT).endsWith(".png") ? "png"
+                    : "jpg", file.toFile());
+            log.info("Brightened dark picture {} (average {} -> about {})", name, Math.round(mean), DARK_TARGET);
+        } catch (IOException | RuntimeException e) {
+            log.debug("Brightness check skipped for {}: {}", file, e.getMessage());
         }
     }
 
@@ -341,12 +389,13 @@ public class AssetsStage implements StageWorker {
         Map<String, MapPin> maps = context.files().exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
                 ? context.files().read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS, new TypeReference<Map<String, MapPin>>() { })
                 : Map.of();
-        // The work's own footage first (film, series, anime), then real photos/footage, then AI pictures.
-        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, new HashSet<>(maps.keySet()));
+        // The host's few moments first (otherwise footage takes every early spot), then the work's own footage
+        // (film, series, anime), then real photos/footage, then AI pictures.
+        Map<String, Path> hostShots = hostMoments(context, shots, new HashSet<>(maps.keySet()));
         Set<String> taken = new HashSet<>(maps.keySet());
-        taken.addAll(clips.keySet());
-        Map<String, Path> hostShots = hostMoments(context, shots, taken);
         taken.addAll(hostShots.keySet());
+        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, new HashSet<>(taken));
+        taken.addAll(clips.keySet());
         Map<String, RealMediaFinder.Found> real = realMedia(context, shots, taken);
         Set<String> notAi = new HashSet<>(taken);
         notAi.addAll(real.keySet());

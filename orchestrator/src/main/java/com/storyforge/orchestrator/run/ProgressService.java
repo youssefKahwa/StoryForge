@@ -124,9 +124,8 @@ public class ProgressService {
         }
         boolean finished = run.getStatus() == RunStatus.COMPLETED;
         int percent = finished ? 100 : (int) Math.min(99, Math.floor(doneWeight * 100 / Math.max(1, total)));
-        Instant started = run.getStartedAt() != null ? run.getStartedAt() : run.getCreatedAt();
-        Instant end = run.getFinishedAt() != null ? run.getFinishedAt() : now;
-        long elapsedRun = started == null ? 0 : Duration.between(started, end).toSeconds();
+        // Working time: the sum of the steps' own durations, so days a run sat paused (app closed) don't count.
+        long elapsedRun = steps.stream().mapToLong(step -> step.seconds() == null ? 0 : step.seconds()).sum();
         boolean active = run.getStatus() == RunStatus.RUNNING || run.getStatus() == RunStatus.QUEUED;
         Long left = active ? remaining : null;
         return new RunProgress(runId, run.getStatus(), percent, finished ? null : current,

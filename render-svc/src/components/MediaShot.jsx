@@ -1,6 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame } from 'remotion';
-import { Video } from '@remotion/media';
+import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, useCurrentFrame } from 'remotion';
 import { KenBurnsImage } from './KenBurnsImage';
 import { GlobeMap } from './GlobeMap';
 import { body as fontFamily } from '../brand';
@@ -55,8 +54,8 @@ const Footage = ({ shot, src, durationInFrames }) => {
   const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.02, 1.1], { extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      <Video src={src} muted objectFit="cover" style={{
-        width: '100%', height: '100%', transform: `scale(${scale})`,
+      <OffthreadVideo src={src} muted style={{
+        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
         filter: 'saturate(0.85) contrast(1.08) brightness(0.95)',
       }} />
       <Credit text={shot.credit} />
@@ -72,8 +71,8 @@ const FilmClip = ({ shot, src, durationInFrames }) => {
   });
   return (
     <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
-      <Video src={src} muted objectFit="cover" style={{
-        width: '100%', height: '100%', transform: `scale(${scale})`,
+      <OffthreadVideo src={src} muted style={{
+        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
         filter: 'contrast(1.08) saturate(0.95)',
       }} />
       <AbsoluteFill style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.45) 100%)' }} />
@@ -88,8 +87,8 @@ const Host = ({ src, durationInFrames }) => {
   const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.0, 1.05], { extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
-      <Video src={src} muted objectFit="cover" style={{
-        width: '100%', height: '100%', transform: `scale(${scale})`,
+      <OffthreadVideo src={src} muted style={{
+        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
         filter: 'contrast(1.05) saturate(1.02)',
       }} />
     </AbsoluteFill>

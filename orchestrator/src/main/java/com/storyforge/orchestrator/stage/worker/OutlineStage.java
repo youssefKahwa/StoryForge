@@ -55,14 +55,18 @@ public class OutlineStage implements StageWorker {
         FormatDefinition format = formats.get(context.run().format());
         InspirationIdeas ideas = context.files().exists(Stage.DISCOVER, DiscoverStage.INSPIRATION)
                 ? context.files().read(Stage.DISCOVER, DiscoverStage.INSPIRATION, InspirationIdeas.class) : null;
+        boolean blueprint = ideas != null && ideas.hasBlueprint();
+        // With inspiration links, their running order IS the beat sheet: the generic format beats (hook, recap,
+        // pillars...) are not even shown, so the model cannot fall back to an essay structure.
+        Object beatSheet = blueprint ? blueprintBeats(ideas) : format.beats();
         Map<String, String> vars = Map.of(
-                "blueprint", ideas != null && ideas.hasBlueprint() ? json.writeValueAsString(ideas.blueprint()) : "[]",
+                "blueprint", blueprint ? json.writeValueAsString(ideas.blueprint()) : "[]",
                 "topic", brief.title(),
                 "angle", brief.angle(),
                 "core_promise", brief.corePromise(),
                 "target_seconds", String.valueOf(context.run().targetSeconds()),
                 "words_per_minute", String.valueOf(wordsPerMinute),
-                "beats", json.writeValueAsString(format.beats()),
+                "beats", json.writeValueAsString(beatSheet),
                 "dossier", json.writeValueAsString(Map.of(
                         "claims", dossier.claims(),
                         "wowFacts", dossier.wowFacts() == null ? List.of() : dossier.wowFacts(),
@@ -71,10 +75,57 @@ public class OutlineStage implements StageWorker {
         if (draft.beats() == null || draft.beats().isEmpty()) {
             throw new IllegalStateException("Outline has no beats");
         }
-        boolean blueprint = ideas != null && ideas.hasBlueprint();
-        draft.beats().stream().filter(beat -> !blueprint && !format.hasBeat(beat.beat()))
-                .forEach(beat -> log.warn("Outline beat '{}' is not in format {}", beat.beat(), format.id()));
+        if (blueprint) {
+            draft = followBlueprint(draft, ideas, context.run().targetSeconds());
+        } else {
+            draft.beats().stream().filter(beat -> !format.hasBeat(beat.beat()))
+                    .forEach(beat -> log.warn("Outline beat '{}' is not in format {}", beat.beat(), format.id()));
+        }
         context.files().write(Stage.OUTLINE, "outline.json", normalize(draft, context.run().targetSeconds()));
+    }
+
+    /** The inspiration's parts as a beat sheet: part_1, part_2... with their titles and shares. */
+    private static List<Map<String, Object>> blueprintBeats(InspirationIdeas ideas) {
+        List<Map<String, Object>> beats = new java.util.ArrayList<>();
+        for (int i = 0; i < ideas.blueprint().size(); i++) {
+            InspirationIdeas.Part part = ideas.blueprint().get(i);
+            beats.add(Map.of("id", "part_" + (i + 1), "purpose", part.title() == null ? "" : part.title(),
+                    "share", part.share() == null ? 1.0 / ideas.blueprint().size() : part.share()));
+        }
+        return beats;
+    }
+
+    /**
+     * One beat per inspiration part, in their order, whatever the model returned: its chapter titles, summaries
+     * and claim ids are kept where it followed the parts, and the part's own points fill any gap.
+     */
+    static Outline followBlueprint(Outline draft, InspirationIdeas ideas, int targetSeconds) {
+        Map<String, Outline.Beat> byId = new java.util.HashMap<>();
+        draft.beats().forEach(beat -> byId.putIfAbsent(beat.beat(), beat));
+        List<Outline.Beat> beats = new java.util.ArrayList<>();
+        int parts = ideas.blueprint().size();
+        for (int i = 0; i < parts; i++) {
+            InspirationIdeas.Part part = ideas.blueprint().get(i);
+            String id = "part_" + (i + 1);
+            Outline.Beat model = byId.get(id);
+            double share = part.share() == null || part.share() <= 0 ? 1.0 / parts : part.share();
+            int seconds = (int) Math.round(share * targetSeconds);
+            List<String> points = new java.util.ArrayList<>(part.points() == null ? List.of() : part.points());
+            if (model != null && model.points() != null) {
+                model.points().stream().filter(p -> !points.contains(p)).forEach(points::add);
+            }
+            String title = model != null && model.chapterTitle() != null ? model.chapterTitle()
+                    : i == 0 ? part.title() : null;
+            beats.add(new Outline.Beat(id, title, seconds, 0,
+                    model != null && model.summary() != null ? model.summary() : part.title(), points,
+                    model == null ? null : model.rehook(), model == null ? List.of() : model.claimIds()));
+        }
+        long followed = draft.beats().stream().filter(b -> byId.containsKey(b.beat()) && b.beat().startsWith("part_"))
+                .count();
+        if (followed < parts) {
+            log.info("Outline: rebuilt from the inspiration's {} parts (model followed {})", parts, followed);
+        }
+        return new Outline(targetSeconds, beats);
     }
 
     private Outline normalize(Outline draft, int targetSeconds) {
