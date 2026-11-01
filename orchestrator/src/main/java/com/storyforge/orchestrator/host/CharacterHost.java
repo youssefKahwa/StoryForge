@@ -282,7 +282,8 @@ public class CharacterHost {
         String fit = f("scale=%d:%d:force_original_aspect_ratio=increase:flags=lanczos,crop=%d:%d,setsar=1,fps=30",
                 W, H, W, H);
         Path exe = upscaler == null || upscaler.executable() == null ? null : Path.of(upscaler.executable());
-        if (info.height() > 0 && info.height() < 1000 && exe != null && Files.isRegularFile(exe)) {
+        // Real-ESRGAN only for really small clips: 720p looks fine with a sharp resize and upscaling it costs ~20 min.
+        if (info.height() > 0 && info.height() < 600 && exe != null && Files.isRegularFile(exe)) {
             int scale = (int) Math.min(4, Math.max(2, Math.ceil(1080.0 / info.height())));
             Path work = cache.resolve("tmp-" + master.getFileName());
             Path in = work.resolve("in");

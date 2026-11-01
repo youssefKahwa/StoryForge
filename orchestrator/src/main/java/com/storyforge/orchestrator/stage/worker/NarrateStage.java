@@ -38,7 +38,8 @@ public class NarrateStage implements StageWorker {
 
     private static final Logger log = LoggerFactory.getLogger(NarrateStage.class);
     private static final double FIT_THRESHOLD = 0.03;
-    private static final double MIN_TEMPO = 0.85;
+    // Below ~0.9x a stretched voice starts to sound slow and robotic; the script length is fixed upstream instead.
+    private static final double MIN_TEMPO = 0.9;
     private static final double MAX_TEMPO = 1.15;
 
     private record Take(WavAudio.Builder audio, List<SceneAudio> clips, Map<String, ClipAlignment> alignments,

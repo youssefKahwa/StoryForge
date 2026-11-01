@@ -23,7 +23,8 @@ public class OutlineStage implements StageWorker {
 
     private static final Logger log = LoggerFactory.getLogger(OutlineStage.class);
 
-    private static final double SPEECH_SHARE = 0.9;
+    // Scripts now have few pauses (one per scene at most), so almost all the runtime is speech.
+    private static final double SPEECH_SHARE = 0.97;
 
     private final LlmRouter llm;
     private final FormatRegistry formats;
