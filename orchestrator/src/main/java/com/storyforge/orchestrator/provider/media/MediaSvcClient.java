@@ -68,6 +68,22 @@ public class MediaSvcClient {
                 r.path("duration_sec").asDouble(0));
     }
 
+    /**
+     * Up to {@code maxVideos} real videos of a screen work (trailers, teasers, TV spots, official clips, scene
+     * uploads) for one search, picture only. {@code skipIds}: videos already in the library.
+     */
+    public List<Trailer> footage(String query, String work, Path outDir, int maxVideos, List<String> skipIds) {
+        JsonNode r = post("/footage", Map.of("query", query, "work", work, "max_videos", maxVideos,
+                "skip_ids", skipIds, "out_dir", outDir.toAbsolutePath().toString()));
+        List<Trailer> videos = new ArrayList<>();
+        for (JsonNode v : r.path("videos")) {
+            videos.add(new Trailer(Path.of(v.path("file").asString("")), v.path("video_id").asString(""),
+                    v.path("title").asString(""), v.path("channel").asString(""), v.path("url").asString(""),
+                    v.path("duration_sec").asDouble(0)));
+        }
+        return videos;
+    }
+
     public double sfx(String name, Path out) {
         return post("/sfx", Map.of("name", name, "out_path", out.toAbsolutePath().toString()))
                 .path("duration_sec").asDouble(0);

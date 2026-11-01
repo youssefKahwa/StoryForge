@@ -18,3 +18,6 @@ ChannelAssets/*.mp4
 
 # Owner notes
 linkexempletoseetest.txt
+
+# Owner media (character images and clips), like ChannelAssets: kept out of git
+charachterBipath/

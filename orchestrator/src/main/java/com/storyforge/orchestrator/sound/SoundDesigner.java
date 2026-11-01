@@ -30,6 +30,10 @@ public final class SoundDesigner {
             "whoosh", -14.0, "low_hit", -10.0, "riser", -16.0, "wind", -24.0, "tick", -18.0, "paper", -16.0);
     private static final Map<String, Double> PRESET_LENGTH = Map.of("riser", 3.0);
 
+    /** A recorded sound found for a script cue's own words; gainDb already sets its level, peak aligns it. */
+    public record CueSound(String file, double gainDb, double peak) {
+    }
+
     private SoundDesigner() {
     }
 
@@ -44,10 +48,18 @@ public final class SoundDesigner {
                                  Map<String, List<Track>> library, long seed,
                                  Function<String, String> sfxFile, double musicOffsetDb,
                                  List<SfxCue> transitionCues) {
+        return plan(scenes, alignment, chapters, library, seed, sfxFile, musicOffsetDb, transitionCues, name -> null);
+    }
+
+    /** cueSound: a recorded sound for a script cue's words ("projector whir"), or null to use a preset. */
+    public static SoundPlan plan(List<Scene> scenes, Alignment alignment, List<EdlChapter> chapters,
+                                 Map<String, List<Track>> library, long seed,
+                                 Function<String, String> sfxFile, double musicOffsetDb,
+                                 List<SfxCue> transitionCues, Function<String, CueSound> cueSound) {
         Map<String, SceneSpan> spans = alignment.scenes().stream()
                 .collect(Collectors.toMap(SceneSpan::sceneId, Function.identity()));
         List<SfxCue> sceneCues = sfx(scenes, spans, alignment, transitionCues.isEmpty() ? chapters : List.of(),
-                sfxFile);
+                sfxFile, cueSound);
         List<SfxCue> all = new ArrayList<>(transitionCues);
         sceneCues.stream()
                 .filter(cue -> transitionCues.stream().noneMatch(t -> Math.abs(t.start() - cue.start()) < 2.0))
@@ -128,6 +140,12 @@ public final class SoundDesigner {
 
     static List<SfxCue> sfx(List<Scene> scenes, Map<String, SceneSpan> spans, Alignment alignment,
                             List<EdlChapter> chapters, Function<String, String> sfxFile) {
+        return sfx(scenes, spans, alignment, chapters, sfxFile, name -> null);
+    }
+
+    static List<SfxCue> sfx(List<Scene> scenes, Map<String, SceneSpan> spans, Alignment alignment,
+                            List<EdlChapter> chapters, Function<String, String> sfxFile,
+                            Function<String, CueSound> cueSound) {
         List<SfxCue> cues = new ArrayList<>();
         for (int i = 1; i < chapters.size(); i++) {
             double at = Math.max(0, chapters.get(i).start() - 0.45);
@@ -137,11 +155,17 @@ public final class SoundDesigner {
         for (Scene scene : scenes) {
             SceneSpan span = spans.get(scene.id());
             for (Scene.SfxCue cue : scene.sfx()) {
+                double at = anchorTime(alignment.wordsOf(scene.id()), cue.anchor(), span.start());
+                CueSound recorded = cueSound.apply(cue.name());
+                if (recorded != null) {
+                    cues.add(new SfxCue("cue", recorded.file(), round(Math.max(0, at - recorded.peak())),
+                            recorded.gainDb(), "scene " + scene.id() + ": " + cue.name()));
+                    continue;
+                }
                 String preset = preset(cue.name());
                 if (preset == null) {
                     continue;
                 }
-                double at = anchorTime(alignment.wordsOf(scene.id()), cue.anchor(), span.start());
                 at -= PRESET_LENGTH.getOrDefault(preset, 0.0);
                 cues.add(new SfxCue(preset, sfxFile.apply(preset), round(Math.max(0, at)),
                         PRESET_GAIN.get(preset), "scene " + scene.id() + ": " + cue.name()));

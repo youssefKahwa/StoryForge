@@ -81,9 +81,9 @@ class TransitionPlannerTest {
 
     @Test
     void fairUseClipsStayUnderTheOwnersShare() {
-        assertThat(FilmClipFinderLimits.maxClips(600, 0.20) * 5.0).isLessThanOrEqualTo(600 * 0.20);
-        assertThat(FilmClipFinderLimits.maxClips(600, 0.20)).isEqualTo(24);
-        assertThat(FilmClipFinderLimits.maxClips(20, 0.20)).isZero();
+        assertThat(FilmClipFinderLimits.maxClips(600, 0.20) * 4.0).isLessThanOrEqualTo(600 * 0.20);
+        assertThat(FilmClipFinderLimits.maxClips(600, 0.70)).isEqualTo(105);
+        assertThat(FilmClipFinderLimits.maxClips(10, 0.20)).isZero();
         assertThat(FilmClipFinderLimits.maxClips(600, 0)).isZero();
     }
 

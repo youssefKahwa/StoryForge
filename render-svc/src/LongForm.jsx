@@ -19,9 +19,9 @@ const assetUrl = (base, file) => `${base}/${file.split('/').map(encodeURICompone
 
 const previousImage = (shots, index) => {
   for (let i = index - 1; i >= 0; i -= 1) {
-    if (!isGraphic(shots[i].type) && !['footage', 'clip', 'map'].includes(shots[i].media)) return shots[i].asset;
+    if (!isGraphic(shots[i].type) && !['footage', 'clip', 'map', 'host'].includes(shots[i].media)) return shots[i].asset;
   }
-  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type) && !['footage', 'clip', 'map'].includes(shot.media));
+  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type) && !['footage', 'clip', 'map', 'host'].includes(shot.media));
   return next ? next.asset : null;
 };
 
@@ -44,7 +44,7 @@ const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
       <AbsoluteFill style={style}>
         <PunchIn punch={shot.punch} shotStart={shot.start} fps={fps}>{content}</PunchIn>
       </AbsoluteFill>
-      <TransitionOverlay kind={kind} />
+      <TransitionOverlay kind={kind} seed={index} />
     </AbsoluteFill>
   );
 };

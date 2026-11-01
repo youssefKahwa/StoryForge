@@ -11,6 +11,14 @@ public record SoundPlan(List<MusicSegment> music, List<SfxCue> sfx) {
         }
     }
 
-    public record SfxCue(String preset, String file, double start, double gainDb, String reason) {
+    /**
+     * duration: seconds to play (looped if the file is shorter, faded in and out), null to play the whole file once.
+     * Ambience beds and risers that must stop on a cut use it.
+     */
+    public record SfxCue(String preset, String file, double start, double gainDb, String reason, Double duration) {
+
+        public SfxCue(String preset, String file, double start, double gainDb, String reason) {
+            this(preset, file, start, gainDb, reason, null);
+        }
     }
 }

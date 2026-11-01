@@ -103,7 +103,7 @@ const ShortShot = ({ shot, next, first, assetBase, length }) => {
           <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={length} />
         </PunchIn>
       </AbsoluteFill>
-      <TransitionOverlay kind={kind} />
+      <TransitionOverlay kind={kind} seed={shot.id.length} />
     </AbsoluteFill>
   );
 };

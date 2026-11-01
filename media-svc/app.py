@@ -215,6 +215,64 @@ def trailer(request: TrailerRequest):
             "url": info.get("webpage_url"), "duration_sec": info.get("duration")}
 
 
+class FootageRequest(BaseModel):
+    query: str
+    out_dir: str
+    work: str
+    max_videos: int = 3
+    skip_ids: list[str] = []
+
+
+# Uploads that are not the work itself (reviews, reactions, edits) are never used as footage.
+NOT_FOOTAGE = NOT_A_SINGLE_WORK + ("review", "explained", "ending explained", "analysis", "breakdown", "theory",
+                                   "amv", "edit ", "tiktok", "#shorts", "podcast", "interview", "reacts",
+                                   "behind the scenes", "making of", "honest trailer", "pitch meeting", "everything wrong")
+
+
+@app.post("/footage")
+def footage(request: FootageRequest):
+    """Real footage of a film/series/anime for commentary: trailers, teasers, TV spots, official clips and scene
+    uploads whose title names the work. Picture only (no audio track), at most 1080p, 20 s to 12 min each."""
+    out_dir = inside_data_dir(request.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    import yt_dlp
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True,
+                               "extract_flat": True}) as ydl:
+            found = ydl.extract_info(f"ytsearch15:{request.query}", download=False)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"YouTube search failed: {e}") from e
+    work = _norm(request.work)
+    picked = []
+    for entry in found.get("entries") or []:
+        title = (entry.get("title") or "").lower()
+        duration = entry.get("duration") or 0
+        if entry.get("id") in request.skip_ids or not 20 <= duration <= 720:
+            continue
+        if work not in _norm(title) or any(word in title for word in NOT_FOOTAGE):
+            continue
+        picked.append(entry)
+        if len(picked) >= max(1, min(request.max_videos, 6)):
+            break
+    videos = []
+    options = {"quiet": True, "no_warnings": True, "noplaylist": True,
+               "format": "bv*[height<=1080][ext=mp4]/bv*[height<=1080]",
+               "outtmpl": str(out_dir / "%(id)s.%(ext)s")}
+    for entry in picked:
+        url = entry.get("url") or f"https://www.youtube.com/watch?v={entry['id']}"
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info(url, download=True)
+                path = ydl.prepare_filename(info)
+        except Exception as e:  # one refused video must not stop the others
+            print(f"footage download failed for {url}: {e}", flush=True)
+            continue
+        videos.append({"file": path, "video_id": info.get("id"), "title": info.get("title"),
+                       "channel": info.get("channel"), "url": info.get("webpage_url"),
+                       "duration_sec": info.get("duration")})
+    return {"videos": videos}
+
+
 SFX_RATE = 48_000
 
 

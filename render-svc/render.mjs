@@ -16,6 +16,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(runDir);
 const edl = JSON.parse(fs.readFileSync(edlPath, 'utf8'));
 const concurrency = Number(process.env.RENDER_CONCURRENCY) || null;
+// GPU (ANGLE) rendering: the official effects (light leak...) need WebGL2, and filters/transforms get faster.
+const chromiumOptions = { gl: process.env.RENDER_GL || 'angle' };
 
 const TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg' };
 
@@ -57,7 +59,7 @@ try {
   console.log('Bundling...');
   const serveUrl = await bundle({ entryPoint: path.join(here, 'src', 'index.jsx') });
   const inputProps = { edl, assetBase };
-  const composition = await selectComposition({ serveUrl, id: compositionId, inputProps });
+  const composition = await selectComposition({ serveUrl, id: compositionId, inputProps, chromiumOptions });
   console.log(`Rendering ${composition.durationInFrames} frames at ${composition.fps} fps`);
   let lastReported = -1;
   await renderMedia({
@@ -68,6 +70,7 @@ try {
     outputLocation: outPath,
     inputProps,
     concurrency,
+    chromiumOptions,
     // Slow machines (laptop on battery) can need much longer than the 30 s default per frame.
     timeoutInMilliseconds: Number(process.env.RENDER_TIMEOUT_MS || 120000),
     onProgress: ({ progress }) => {

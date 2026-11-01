@@ -102,7 +102,8 @@ storyforge:
     critic-hook: 9
   media-svc:
     url: http://127.0.0.1:8090
-    timeout-seconds: 900
+    # Whisper on CPU needs ~20 min for an 11-minute video; footage downloads can take several minutes too.
+    timeout-seconds: 2400
     autostart: true
     python: ${user.home}/.storyforge/media-venv/Scripts/python.exe
     dir: ../media-svc

@@ -68,7 +68,8 @@ public class AssembleStage implements StageWorker {
 
     /** Adds the talking channel logo; any problem just leaves it out of this video. */
     private Edl withHost(StageContext context, Edl edl, Alignment alignment) {
-        if (!preferences.get().hostEnabled() || !host.available()) {
+        if (!preferences.get().hostEnabled() || !host.available()
+                || edl.shots().stream().anyMatch(shot -> "host".equals(shot.media()))) {
             return edl;
         }
         try {

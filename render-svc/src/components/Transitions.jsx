@@ -1,5 +1,6 @@
 import React from 'react';
-import { AbsoluteFill, Easing, interpolate, random, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Easing, Solid, interpolate, random, useCurrentFrame, useVideoConfig } from 'remotion';
+import { lightLeak } from '@remotion/effects/light-leak';
 
 /**
  * Transitions as the YouTube editors do them: hard cuts by default, and on the cuts that matter a whip, a zoom-through,
@@ -87,26 +88,26 @@ const GlitchBars = ({ frame }) => (
   </AbsoluteFill>
 );
 
-const LightLeak = ({ frame }) => {
-  const x = interpolate(frame, [0, 18], [-30, 110], clamp);
-  const opacity = interpolate(frame, [0, 3, 9, 18], [0, 0.95, 0.8, 0], clamp);
+/** Remotion's official light leak (WebGL), played over the cut: it blooms in, then retracts. */
+const LightLeak = ({ frame, seed }) => {
+  const { width, height } = useVideoConfig();
   return (
-    <AbsoluteFill style={{
-      pointerEvents: 'none', mixBlendMode: 'screen', opacity,
-      background: `radial-gradient(ellipse 60% 120% at ${x}% 55%, rgba(255,236,190,1) 0%, rgba(255,150,40,0.85) 28%, `
-        + `rgba(220,60,10,0.45) 55%, rgba(0,0,0,0) 80%)`,
-    }} />
+    <AbsoluteFill style={{ pointerEvents: 'none', mixBlendMode: 'screen' }}>
+      <Solid width={width} height={height} effects={[
+        lightLeak({ seed, progress: interpolate(frame, [0, TRANSITION_FRAMES - 1], [0, 1], clamp) }),
+      ]} />
+    </AbsoluteFill>
   );
 };
 
 /** Drawn over the incoming shot during its first frames. */
-export const TransitionOverlay = ({ kind }) => {
+export const TransitionOverlay = ({ kind, seed = 0 }) => {
   const frame = useCurrentFrame();
   if (frame >= TRANSITION_FRAMES) return null;
   if (kind === 'flash') return frame < 14 ? <Flash frame={frame} /> : null;
   if (kind === 'impact') return frame < 10 ? <Flash frame={frame} peak={0.35} /> : null;
   if (kind === 'glitch') return frame < 7 ? <GlitchBars frame={frame} /> : null;
-  if (kind === 'burn') return <LightLeak frame={frame} />;
+  if (kind === 'burn') return <LightLeak frame={frame} seed={seed} />;
   if (kind === 'dip') {
     return <AbsoluteFill style={{ backgroundColor: '#000', opacity: interpolate(frame, [0, 4, 16], [1, 1, 0], clamp) }} />;
   }

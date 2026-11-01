@@ -1,5 +1,6 @@
 import React from 'react';
-import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Easing, Img, interpolate, useCurrentFrame } from 'remotion';
+import { Video } from '@remotion/media';
 import { KenBurnsImage } from './KenBurnsImage';
 import { GlobeMap } from './GlobeMap';
 import { body as fontFamily } from '../brand';
@@ -54,8 +55,8 @@ const Footage = ({ shot, src, durationInFrames }) => {
   const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.02, 1.1], { extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      <OffthreadVideo src={src} muted style={{
-        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
+      <Video src={src} muted objectFit="cover" style={{
+        width: '100%', height: '100%', transform: `scale(${scale})`,
         filter: 'saturate(0.85) contrast(1.08) brightness(0.95)',
       }} />
       <Credit text={shot.credit} />
@@ -71,8 +72,8 @@ const FilmClip = ({ shot, src, durationInFrames }) => {
   });
   return (
     <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
-      <OffthreadVideo src={src} muted style={{
-        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
+      <Video src={src} muted objectFit="cover" style={{
+        width: '100%', height: '100%', transform: `scale(${scale})`,
         filter: 'contrast(1.08) saturate(0.95)',
       }} />
       <AbsoluteFill style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.45) 100%)' }} />
@@ -81,7 +82,22 @@ const FilmClip = ({ shot, src, durationInFrames }) => {
   );
 };
 
+/** The channel's masked host: already cut and framed by the orchestrator, played full screen with a soft push. */
+const Host = ({ src, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.0, 1.05], { extrapolateRight: 'clamp' });
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
+      <Video src={src} muted objectFit="cover" style={{
+        width: '100%', height: '100%', transform: `scale(${scale})`,
+        filter: 'contrast(1.05) saturate(1.02)',
+      }} />
+    </AbsoluteFill>
+  );
+};
+
 export const MediaShot = ({ shot, src, durationInFrames }) => {
+  if (shot.media === 'host') return <Host src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'map' && shot.map) return <GlobeMap map={shot.map} durationInFrames={durationInFrames} />;
   if (shot.media === 'clip') return <FilmClip shot={shot} src={src} durationInFrames={durationInFrames} />;
   if (shot.media === 'footage') return <Footage shot={shot} src={src} durationInFrames={durationInFrames} />;

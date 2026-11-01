@@ -6,6 +6,7 @@ import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.provider.clips.FilmClipFinder;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
+import com.storyforge.orchestrator.host.CharacterHost;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.AssetManifest;
@@ -49,6 +50,9 @@ import tools.jackson.core.type.TypeReference;
 public class AssetsStage implements StageWorker {
 
     private static final String GRAPHICS = "storyforge-graphics";
+    public static final String HOST = "bipath-host";
+    private static final LicenseRecord HOST_LICENSE = new LicenseRecord("owned", "BiPath channel character", null,
+            "The channel's own masked host: gesture clips and stills made for the channel by its owner", null);
     public static final String BACKDROP = "backdrop-fallback";
     /** Pictures kept back from the daily free quota for the three thumbnails. */
     private static final int THUMBNAIL_RESERVE = 3;
@@ -66,11 +70,13 @@ public class AssetsStage implements StageWorker {
     private final FilmClipFinder clipFinder;
     private final PreferencesService preferences;
     private final QuotaWaiter quotaWaiter;
+    private final CharacterHost characterHost;
 
     public AssetsStage(ImageProvider images, FormatRegistry formats, StoryForgeProperties properties,
                        RealMediaFinder finder, LlmRouter llm, FilmClipFinder clipFinder,
-                       PreferencesService preferences, QuotaWaiter quotaWaiter) {
+                       PreferencesService preferences, QuotaWaiter quotaWaiter, CharacterHost characterHost) {
         this.quotaWaiter = quotaWaiter;
+        this.characterHost = characterHost;
         this.finder = finder;
         this.llm = llm;
         this.clipFinder = clipFinder;
@@ -121,7 +127,7 @@ public class AssetsStage implements StageWorker {
     }
 
     /** Real photos and footage for the shots the director picked; anything not found falls back to AI images. */
-    private Map<String, RealMediaFinder.Found> realMedia(StageContext context, ShotList shots) {
+    private Map<String, RealMediaFinder.Found> realMedia(StageContext context, ShotList shots, Set<String> skip) {
         Map<String, RealMediaFinder.Found> found = new HashMap<>();
         if (!finder.enabled() || !context.files().exists(Stage.VISUAL_PLAN, VisualPlanStage.REAL_MEDIA)) {
             return found;
@@ -131,7 +137,7 @@ public class AssetsStage implements StageWorker {
         Set<String> used = new HashSet<>();
         for (Shot shot : shots.shots()) {
             RealMedia pick = picks.get(shot.id());
-            if (pick == null || shot.graphic()) {
+            if (pick == null || shot.graphic() || skip.contains(shot.id())) {
                 continue;
             }
             Path target = context.files().path(Stage.ASSETS, shot.id());
@@ -302,6 +308,20 @@ public class AssetsStage implements StageWorker {
         return prompt.startsWith(prefix) ? prompt.substring(prefix.length()) : prompt;
     }
 
+    /** The masked host's short "talking" moments (opinions, questions to the viewer), if the owner keeps it on. */
+    private Map<String, Path> hostMoments(StageContext context, ShotList shots, Set<String> taken) {
+        if (!preferences.get().hostEnabled() || !characterHost.available()) {
+            return Map.of();
+        }
+        try {
+            Alignment alignment = context.files().read(Stage.ALIGN, "alignment.json", Alignment.class);
+            return characterHost.moments(context, shots, alignment, taken);
+        } catch (RuntimeException e) {
+            log.warn("Run {}: host moments skipped: {}", context.run().id(), e.getMessage());
+            return Map.of();
+        }
+    }
+
     /** Fair-use trailer clips when the story is about a screen work and the owner has the mode on. */
     private Map<String, FilmClipFinder.Clip> clips(StageContext context, ShotList shots, Set<String> taken) {
         if (!clipFinder.enabled() || !preferences.get().fairUseClipsEnabled()) {
@@ -318,15 +338,18 @@ public class AssetsStage implements StageWorker {
         ShotList shots = context.files().read(Stage.VISUAL_PLAN, "shotlist.json", ShotList.class);
         FormatDefinition.Style style = formats.get(context.run().format()).style();
         List<Asset> assets = new ArrayList<>();
-        Map<String, RealMediaFinder.Found> real = realMedia(context, shots);
         Map<String, MapPin> maps = context.files().exists(Stage.VISUAL_PLAN, VisualPlanStage.MAPS)
                 ? context.files().read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS, new TypeReference<Map<String, MapPin>>() { })
                 : Map.of();
-        Set<String> taken = new HashSet<>(real.keySet());
-        taken.addAll(maps.keySet());
-        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, taken);
+        // The work's own footage first (film, series, anime), then real photos/footage, then AI pictures.
+        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, new HashSet<>(maps.keySet()));
+        Set<String> taken = new HashSet<>(maps.keySet());
+        taken.addAll(clips.keySet());
+        Map<String, Path> hostShots = hostMoments(context, shots, taken);
+        taken.addAll(hostShots.keySet());
+        Map<String, RealMediaFinder.Found> real = realMedia(context, shots, taken);
         Set<String> notAi = new HashSet<>(taken);
-        notAi.addAll(clips.keySet());
+        notAi.addAll(real.keySet());
         Set<String> allowedNew = budget(context, shots, style, notAi);
         Set<String> stockUsed = new HashSet<>(real.values().stream().map(RealMediaFinder.Found::key).toList());
         List<Shot> missing = new ArrayList<>();
@@ -339,6 +362,13 @@ public class AssetsStage implements StageWorker {
                 assets.add(new Asset(shot.id(), context.files().relative(file), shot.type(), "globe-map", "d3-geo",
                         pin.label(), shot.seed(), BigDecimal.ZERO, false, MAP_LICENSE, "map",
                         "Map: Natural Earth · Wikidata"));
+                continue;
+            }
+            Path hostFile = hostShots.get(shot.id());
+            if (hostFile != null) {
+                context.usage().provider(HOST);
+                assets.add(new Asset(shot.id(), context.files().relative(hostFile), shot.type(), HOST, "character",
+                        null, shot.seed(), BigDecimal.ZERO, true, HOST_LICENSE, "host", null));
                 continue;
             }
             FilmClipFinder.Clip clip = clips.get(shot.id());

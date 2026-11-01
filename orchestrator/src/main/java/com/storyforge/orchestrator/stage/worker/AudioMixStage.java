@@ -10,6 +10,7 @@ import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.LoudnessStats;
 import com.storyforge.orchestrator.media.WavAudio;
 import com.storyforge.orchestrator.model.Alignment;
+import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.LicenseRecord;
 import com.storyforge.orchestrator.model.NarrationManifest;
@@ -17,7 +18,9 @@ import com.storyforge.orchestrator.model.Outline;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.sound.MusicLibrary;
+import com.storyforge.orchestrator.sound.AmbiencePlanner;
 import com.storyforge.orchestrator.sound.SfxLibrary;
+import com.storyforge.orchestrator.sound.SoundBank;
 import com.storyforge.orchestrator.sound.SoundDesigner;
 import com.storyforge.orchestrator.sound.SoundMixer;
 import com.storyforge.orchestrator.sound.SoundPlan;
@@ -29,6 +32,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,16 +50,39 @@ public class AudioMixStage implements StageWorker {
     private static final double PEAK_MARGIN_DB = 0.5;
     private static final Logger log = LoggerFactory.getLogger(AudioMixStage.class);
 
+    /** One library sound layered on a transition: its category, level against the transition's, and whether it
+     *  builds up to the cut (risers, reverse cymbals) instead of hitting on it. */
+    private record Layer(String category, double gainOffset) {
+    }
+
+    private static final Map<String, List<Layer>> LAYERS = Map.of(
+            "film_burn", List.of(new Layer("whoosh", 0), new Layer("boom", -5)),
+            "zoom_in", List.of(new Layer("whoosh", 0), new Layer("impact", -7)),
+            "whip", List.of(new Layer("whoosh_fast", 0)),
+            "whoosh", List.of(new Layer("swoosh_soft", 0)),
+            "swoosh_soft", List.of(new Layer("swoosh_soft", 0)),
+            "glitch", List.of(new Layer("glitch", 0)),
+            "flash_hit", List.of(new Layer("impact", 0)),
+            "boom", List.of(new Layer("boom", 0), new Layer("riser", -5)),
+            "sub_drop", List.of(new Layer("sub_drop", 0), new Layer("reverse", -4)),
+            "shutter", List.of(new Layer("shutter", 0)));
+    /** Synthesized presets peak at about -3 dBFS; library sounds are levelled to the same reference. */
+    private static final double PRESET_PEAK_DB = -3;
+    private static final double AMBIENCE_MEAN_DB = -40;
+    private static final double CUE_PEAK_DB = -17;
+
     private final FfmpegService ffmpeg;
     private final MusicLibrary music;
     private final SfxLibrary sfx;
+    private final SoundBank bank;
     private final SoundMixer mixer;
     private final StoryForgeProperties.Qa qa;
     private final boolean soundEnabled;
     private final PreferencesService preferences;
 
     public AudioMixStage(FfmpegService ffmpeg, MusicLibrary music, SfxLibrary sfx, SoundMixer mixer,
-                         StoryForgeProperties properties, PreferencesService preferences) {
+                         StoryForgeProperties properties, PreferencesService preferences, SoundBank bank) {
+        this.bank = bank;
         this.preferences = preferences;
         this.ffmpeg = ffmpeg;
         this.music = music;
@@ -120,24 +147,50 @@ public class AudioMixStage implements StageWorker {
                         ? files.read(Stage.VISUAL_PLAN, VisualPlanStage.MAPS,
                                 new TypeReference<Map<String, Object>>() { }).keySet()
                         : Set.of();
-                transitions.stream().filter(t -> t.sfx() != null && sfxAvailable(t.sfx()))
-                        .forEach(t -> transitionCues.add(new SoundPlan.SfxCue(t.sfx(), sfx.file(t.sfx()),
-                                Math.max(0, Math.round((t.at() - t.lead()) * 1000) / 1000.0), t.gainDb(),
-                                "transition " + t.kind() + " " + t.shotId())));
-                TransitionPlanner.punches(shotList, maps, transitions).stream()
-                        .filter(p -> p.sfx() != null && sfxAvailable(p.sfx()))
-                        .forEach(p -> transitionCues.add(new SoundPlan.SfxCue(p.sfx(), sfx.file(p.sfx()),
-                                p.at(), p.gainDb(), "punch-in " + p.shotId())));
+                for (TransitionPlanner.Transition t : transitions) {
+                    if (t.sfx() == null) {
+                        continue;
+                    }
+                    String reason = "transition " + t.kind() + " " + t.shotId();
+                    List<SoundPlan.SfxCue> layered = layered(t.sfx(), t.at(), t.gainDb(), t.shotId(), reason);
+                    if (!layered.isEmpty()) {
+                        transitionCues.addAll(layered);
+                    } else if (sfxAvailable(t.sfx())) {
+                        transitionCues.add(new SoundPlan.SfxCue(t.sfx(), sfx.file(t.sfx()),
+                                Math.max(0, Math.round((t.at() - t.lead()) * 1000) / 1000.0), t.gainDb(), reason));
+                    }
+                }
+                for (TransitionPlanner.Punch p : TransitionPlanner.punches(shotList, maps, transitions)) {
+                    if (p.sfx() == null) {
+                        continue;
+                    }
+                    String reason = "punch-in " + p.shotId();
+                    List<SoundPlan.SfxCue> layered = layered(p.sfx(), p.at(), p.gainDb(), p.shotId(), reason);
+                    if (!layered.isEmpty()) {
+                        transitionCues.addAll(layered);
+                    } else if (sfxAvailable(p.sfx())) {
+                        transitionCues.add(new SoundPlan.SfxCue(p.sfx(), sfx.file(p.sfx()), p.at(), p.gainDb(),
+                                reason));
+                    }
+                }
             }
-            SoundPlan plan = SoundDesigner.plan(scenes, alignment, chapters, library, context.run().id(), sfx::file,
-                    Double.isInfinite(musicOffset) ? 0 : musicOffset, transitionCues);
+            long runSeed = context.run().id();
+            SoundPlan designed = SoundDesigner.plan(scenes, alignment, chapters, library, runSeed, sfx::file,
+                    Double.isInfinite(musicOffset) ? 0 : musicOffset, transitionCues,
+                    name -> bank.cue(name, runSeed).map(s -> new SoundDesigner.CueSound(s.file(),
+                            s.gainForPeak(CUE_PEAK_DB), s.peak())).orElse(null));
+            List<SoundPlan.SfxCue> all = new ArrayList<>(designed.sfx());
+            all.addAll(ambience(scenes, alignment, runSeed));
+            all.addAll(hostFoley(files, runSeed));
+            all.sort((a, b) -> Double.compare(a.start(), b.start()));
+            SoundPlan plan = new SoundPlan(designed.music(), all);
             if (plan.music().isEmpty()) {
                 log.warn("Run {}: no music in {}, mixing voice and SFX only", context.run().id(), music.root());
             }
             files.write(Stage.AUDIO_MIX, PLAN, plan);
             loudnessInput = files.path(Stage.AUDIO_MIX, "premix.wav");
             mixer.mix(voice, plan, loudnessInput);
-            tracks.addAll(soundTracks(plan, library));
+            tracks.addAll(soundTracks(plan, library, bank));
             context.usage().provider("sound-designer");
         }
         LoudnessStats stats = ffmpeg.normalizeLoudness(loudnessInput, mix, qa.loudnessTarget(),
@@ -149,7 +202,70 @@ public class AudioMixStage implements StageWorker {
                 WavAudio.durationSec(mix), passed, tracks));
     }
 
-    private static List<AudioQa.Track> soundTracks(SoundPlan plan, Map<String, List<MusicLibrary.Track>> library) {
+    /**
+     * Recorded library sounds for one transition, each levelled and aligned so its loudest moment lands on the cut
+     * (a riser's loudest moment is its end). Empty when the bank has nothing, so the synthesized preset plays.
+     */
+    private List<SoundPlan.SfxCue> layered(String preset, double at, double gainDb, String shotId, String reason) {
+        List<Layer> layers = LAYERS.get(preset);
+        List<SoundPlan.SfxCue> cues = new ArrayList<>();
+        if (layers == null) {
+            return cues;
+        }
+        for (int i = 0; i < layers.size(); i++) {
+            Layer layer = layers.get(i);
+            Optional<SoundBank.Sound> sound = bank.pick(layer.category(), (shotId + layer.category()).hashCode());
+            if (sound.isEmpty()) {
+                if (i == 0) {
+                    return cues;
+                }
+                continue;
+            }
+            SoundBank.Sound s = sound.get();
+            double start = Math.max(0, Math.round((at - s.peak()) * 1000) / 1000.0);
+            cues.add(new SoundPlan.SfxCue(layer.category(), s.file(), start,
+                    s.gainForPeak(gainDb + PRESET_PEAK_DB + layer.gainOffset()), reason + " / " + layer.category()));
+        }
+        return cues;
+    }
+
+    /** A soft chair or cloth sound when the masked host appears, as if the camera cut to a real person. */
+    private List<SoundPlan.SfxCue> hostFoley(com.storyforge.orchestrator.artifact.RunFiles files, long seed) {
+        List<SoundPlan.SfxCue> cues = new ArrayList<>();
+        if (!files.exists(Stage.ASSETS, "assets.json") || !files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)) {
+            return cues;
+        }
+        Map<String, Double> starts = new LinkedHashMap<>();
+        files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class).shots()
+                .forEach(shot -> starts.put(shot.id(), shot.start()));
+        for (AssetManifest.Asset asset : files.read(Stage.ASSETS, "assets.json", AssetManifest.class).assets()) {
+            Double start = starts.get(asset.shotId());
+            if (!"host".equals(asset.media()) || start == null) {
+                continue;
+            }
+            bank.pick("chair", seed + asset.shotId().hashCode()).ifPresent(s -> cues.add(new SoundPlan.SfxCue(
+                    "chair", s.file(), Math.max(0, start - 0.05), s.gainForPeak(-28), "host " + asset.shotId())));
+        }
+        return cues;
+    }
+
+    /** A quiet bed of room tone, city, rain or crowd under every scene, levelled to the same average loudness. */
+    private List<SoundPlan.SfxCue> ambience(List<Scene> scenes, Alignment alignment, long seed) {
+        Map<String, Alignment.SceneSpan> spans = new LinkedHashMap<>();
+        alignment.scenes().forEach(span -> spans.put(span.sceneId(), span));
+        List<SoundPlan.SfxCue> beds = new ArrayList<>();
+        for (AmbiencePlanner.Bed bed : AmbiencePlanner.plan(scenes, spans)) {
+            Optional<SoundBank.Sound> sound = bank.pick(bed.category(), seed + bed.category().hashCode())
+                    .or(() -> bank.pick(AmbiencePlanner.DEFAULT, seed));
+            sound.ifPresent(s -> beds.add(new SoundPlan.SfxCue("ambience", s.file(),
+                    Math.round(bed.start() * 1000) / 1000.0, s.gainForMean(AMBIENCE_MEAN_DB),
+                    "ambience " + s.category(), bed.length())));
+        }
+        return beds;
+    }
+
+    private static List<AudioQa.Track> soundTracks(SoundPlan plan, Map<String, List<MusicLibrary.Track>> library,
+                                                   SoundBank bank) {
         Map<String, AudioQa.Track> unique = new LinkedHashMap<>();
         Map<String, MusicLibrary.Track> byFile = new LinkedHashMap<>();
         library.values().forEach(list -> list.forEach(track -> byFile.put(track.file().toString(), track)));
@@ -158,8 +274,9 @@ public class AudioMixStage implements StageWorker {
             unique.putIfAbsent(segment.file(), new AudioQa.Track("music", segment.track(), segment.track(),
                     track == null ? null : track.license()));
         });
-        plan.sfx().forEach(cue -> unique.putIfAbsent(cue.file(), new AudioQa.Track("sfx", cue.preset() + ".wav",
-                cue.preset(), SfxLibrary.LICENSE)));
+        plan.sfx().forEach(cue -> unique.putIfAbsent(cue.file(), new AudioQa.Track("sfx",
+                Path.of(cue.file()).getFileName().toString(), cue.preset(),
+                bank.license(cue.file()).orElse(SfxLibrary.LICENSE))));
         return new ArrayList<>(unique.values());
     }
 }
