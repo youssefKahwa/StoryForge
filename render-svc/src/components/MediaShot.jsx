@@ -75,7 +75,6 @@ const FilmClip = ({ shot, src, durationInFrames }) => {
         width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
         filter: 'contrast(1.08) saturate(0.95)',
       }} />
-      <AbsoluteFill style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.45) 100%)' }} />
       <Credit text={shot.credit} />
     </AbsoluteFill>
   );

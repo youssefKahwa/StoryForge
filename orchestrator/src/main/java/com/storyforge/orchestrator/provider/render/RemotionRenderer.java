@@ -2,6 +2,7 @@ package com.storyforge.orchestrator.provider.render;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.run.PowerStatus;
+import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.MediaException;
 import com.storyforge.orchestrator.model.Edl;
 import java.io.IOException;
@@ -37,10 +38,16 @@ public class RemotionRenderer implements RenderProvider {
     private final Path sourceDir;
     private final JsonMapper json;
     private final PowerStatus power;
+    private final FfmpegService ffmpeg;
+    private final boolean fastLane;
 
-    public RemotionRenderer(StoryForgeProperties properties, JsonMapper json, PowerStatus power) {
+    public RemotionRenderer(StoryForgeProperties properties, JsonMapper json, PowerStatus power, FfmpegService ffmpeg,
+                            @org.springframework.beans.factory.annotation.Value("${storyforge.render-svc.fast-lane:true}")
+                            boolean fastLane) {
         this.json = json;
         this.power = power;
+        this.ffmpeg = ffmpeg;
+        this.fastLane = fastLane;
         this.config = properties.renderSvc();
         this.installDir = Path.of(config.dir()).toAbsolutePath();
         this.sourceDir = Path.of(config.source()).toAbsolutePath();
@@ -48,6 +55,16 @@ public class RemotionRenderer implements RenderProvider {
 
     private static final double GB_PER_TAB = 0.9;
     private static final int SAFE_TABS = 2;
+    /**
+     * The fast lane's film look, drawn into every piece: the vignette only. Moving grain is new random noise on every
+     * frame, the worst case for H.264: the join took 35 minutes and the file ballooned, and YouTube's own encode
+     * smears it into blocks anyway.
+     */
+    private static final String FILM_LOOK = "vignette=angle=PI/5,format=yuv420p";
+    /** Final quality: the pieces are joined without re-encoding. */
+    private static final String PIECE_CRF = "19";
+    /** FFmpeg pieces drawn at the same time in the fast lane. */
+    private static final int PIECE_THREADS = 3;
 
     /**
      * Parallel browser tabs for this render: the configured number, but no more than free memory allows (~0.9 GB a
@@ -87,6 +104,15 @@ public class RemotionRenderer implements RenderProvider {
                     + ". Run scripts/render-svc.ps1 -Install once.");
         }
         int tabs = concurrency();
+        if (fastLane) {
+            try {
+                renderFastLane(edl, runRoot, outputMp4, tabs);
+                return;
+            } catch (MediaException | UncheckedIOException e) {
+                log.warn("Fast-lane render failed ({}); rendering the whole video with Remotion",
+                        e.getMessage() == null ? "?" : e.getMessage().lines().findFirst().orElse("?"));
+            }
+        }
         try {
             // The Intel GPU (ANGLE) renders about 12 frames/s here, 3x Chrome's default.
             renderOnce(edl, runRoot, outputMp4, tabs, "angle");
@@ -96,6 +122,266 @@ public class RemotionRenderer implements RenderProvider {
                     tabs, e.getMessage() == null ? "?" : e.getMessage().lines().findFirst().orElse("?"),
                     Math.min(tabs, SAFE_TABS));
             renderOnce(edl, runRoot, outputMp4, Math.min(tabs, SAFE_TABS), "default");
+        }
+    }
+
+    /**
+     * Fast lane (see {@link FastLane}): Remotion draws only the designed ranges, FFmpeg the plain shots (several at
+     * once), then one FFmpeg pass joins them, adds the film look and the soundtrack.
+     */
+    private void renderFastLane(Edl edl, Path runRoot, Path outputMp4, int tabs) {
+        long started = System.currentTimeMillis();
+        if (edl.audio() == null || edl.audio().size() != 1 || edl.audio().get(0).start() != 0
+                || edl.audio().get(0).gainDb() != 0) {
+            throw new MediaException("the fast lane needs the soundtrack as one finished mix");
+        }
+        List<FastLane.Range> ranges = FastLane.plan(edl);
+        Path work = outputMp4.resolveSibling("fastlane");
+        Path logFile = outputMp4.resolveSibling("render.log");
+        try {
+            if (Files.isDirectory(work)) {
+                try (Stream<Path> old = Files.list(work)) {
+                    for (Path file : old.toList()) {
+                        Files.deleteIfExists(file);
+                    }
+                }
+            }
+            Files.createDirectories(work);
+            Files.writeString(logFile, "Fast lane\n", StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        int width = edl.width();
+        int height = edl.height();
+        int fps = edl.fps();
+        int total = ranges.stream().mapToInt(FastLane.Range::frames).sum();
+        int designed = ranges.stream().filter(FastLane.Range::designed).mapToInt(FastLane.Range::frames).sum();
+        // Work units: a designed frame costs ~6 plain ones; the final join (a copy) next to nothing.
+        double units = designed * 6.0 + (total - designed) + total * 0.02;
+        log.info("Fast lane: {} of {} frames designed (Remotion), the rest by FFmpeg", designed, total);
+        List<int[]> designedRanges = new ArrayList<>();
+        List<Path> designedFiles = new ArrayList<>();
+        List<Path> order = new ArrayList<>();
+        List<FastLane.Piece> plain = new ArrayList<>();
+        List<Path> plainFiles = new ArrayList<>();
+        for (FastLane.Range range : ranges) {
+            if (range.designed()) {
+                Path file = work.resolve(String.format("d_%06d.mp4", range.from()));
+                designedRanges.add(new int[] {range.from(), range.to()});
+                designedFiles.add(file);
+                order.add(file);
+            } else {
+                for (FastLane.Piece piece : FastLane.pieces(edl, range)) {
+                    Path file = work.resolve(String.format("p_%06d.mp4", piece.from()));
+                    plain.add(piece);
+                    plainFiles.add(file);
+                    order.add(file);
+                }
+            }
+        }
+        Path designedFile = work.resolve("designed.mp4");
+        Path designedLog = work.resolve("designed.log");
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(PIECE_THREADS);
+        java.util.concurrent.ScheduledExecutorService reporter =
+                java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+        java.util.concurrent.atomic.AtomicInteger doneFrames = new java.util.concurrent.atomic.AtomicInteger();
+        try {
+            Files.writeString(designedLog, "", StandardCharsets.UTF_8);
+            // FFmpeg draws the plain pieces while Remotion draws the designed ranges (the browser leaves CPU free).
+            List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < plain.size(); i++) {
+                FastLane.Piece piece = plain.get(i);
+                Path file = plainFiles.get(i);
+                futures.add(pool.submit(() -> {
+                    plainPiece(piece, runRoot, file, width, height, fps, work);
+                    doneFrames.addAndGet(piece.frames());
+                }));
+            }
+            reporter.scheduleAtFixedRate(() -> appendProgress(logFile,
+                    (designed * 6.0 * lastProgress(designedLog) + doneFrames.get()) / units), 5, 5, TimeUnit.SECONDS);
+            if (!designedRanges.isEmpty()) {
+                // One Remotion render of all designed ranges back to back (the "Designed" composition): a render
+                // per range cost ~15 s of browser start-up each.
+                Path jobs = work.resolve("ranges.json");
+                Files.writeString(jobs, json.writeValueAsString(designedRanges), StandardCharsets.UTF_8);
+                runNode(List.of(config.node(), installDir.resolve("render.mjs").toString(),
+                        outputMp4.resolveSibling("edl.json").toString(), runRoot.toAbsolutePath().toString(),
+                        designedFile.toString()),
+                        Map.of("RENDER_CONCURRENCY", String.valueOf(tabs), "RENDER_GL", "angle", "RENDER_RANGES",
+                                jobs.toString()), designedLog, designedFile);
+            }
+            int at = 0;
+            for (int i = 0; i < designedRanges.size(); i++) {
+                int first = at;
+                int frames = designedRanges.get(i)[1] - designedRanges.get(i)[0];
+                Path file = designedFiles.get(i);
+                at += frames;
+                futures.add(pool.submit(() -> ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i",
+                        designedFile.toString(), "-vf", "trim=start_frame=" + first + ":end_frame=" + (first + frames)
+                                + ",setpts=PTS-STARTPTS,scale=out_range=tv," + FILM_LOOK, "-frames:v",
+                        String.valueOf(frames), "-an", "-r", String.valueOf(fps), "-c:v", "libx264", "-preset",
+                        "veryfast", "-crf", PIECE_CRF, "-bf", "0", file.toString()))));
+            }
+            for (java.util.concurrent.Future<?> future : futures) {
+                future.get();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw e.getCause() instanceof RuntimeException runtime ? runtime
+                    : new MediaException("Fast-lane piece failed: " + e.getCause(), e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new MediaException("Interrupted during the fast-lane render", e);
+        } finally {
+            reporter.shutdownNow();
+            pool.shutdownNow();
+        }
+        appendProgress(logFile, (designed * 6.0 + total - designed) / units);
+        join(edl, runRoot, order, work, outputMp4);
+        appendProgress(logFile, 1.0);
+        log.info("Fast lane: {} frames rendered in {} s", total, (System.currentTimeMillis() - started) / 1000);
+    }
+
+    /** One plain shot piece drawn by FFmpeg, exactly as long as its frame range. */
+    private void plainPiece(FastLane.Piece piece, Path runRoot, Path out, int width, int height, int fps, Path work) {
+        Edl.EdlShot shot = piece.shot();
+        Path asset = runRoot.resolve(shot.asset());
+        boolean video = !"ai".equals(shot.media());
+        List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
+        if (video) {
+            args.addAll(List.of("-ss", String.format(java.util.Locale.ROOT, "%.3f",
+                    (piece.from() - piece.shotFrom()) / (double) fps), "-i", asset.toString()));
+        } else {
+            args.addAll(List.of("-loop", "1", "-framerate", String.valueOf(fps), "-i", asset.toString()));
+        }
+        String filter = FastLane.filter(piece, width, height, fps);
+        String padded = filter.replaceFirst("^fps=" + fps + ",", "fps=" + fps + ",tpad=stop_mode=clone:stop_duration=3,");
+        boolean credit = shot.credit() != null && !shot.credit().isBlank()
+                && ("clip".equals(shot.media()) || "footage".equals(shot.media()));
+        if (credit) {
+            Path png = creditImage(shot.credit(), width, height, work);
+            args.addAll(List.of("-i", png.toString(), "-filter_complex",
+                    "[0:v]" + padded + "[v];[v][1:v]overlay=0:0:format=auto," + FILM_LOOK + "[o]", "-map", "[o]"));
+        } else {
+            args.addAll(List.of("-vf", padded + "," + FILM_LOOK));
+        }
+        args.addAll(List.of("-frames:v", String.valueOf(piece.frames()), "-an", "-r", String.valueOf(fps),
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", PIECE_CRF, "-bf", "0", out.toString()));
+        ffmpeg.ffmpeg(args);
+    }
+
+    /** The small credit line of a clip (MediaShot.jsx Credit), as a transparent full-frame PNG, made once. */
+    private static synchronized Path creditImage(String text, int width, int height, Path work) {
+        Path png = work.resolve("credit_" + Integer.toHexString(text.hashCode()) + ".png");
+        if (Files.isRegularFile(png)) {
+            return png;
+        }
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height,
+                java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setFont(new java.awt.Font("Segoe UI", java.awt.Font.PLAIN, 17));
+        int x = 44;
+        int y = height - 30 - 4;
+        g.setColor(new java.awt.Color(0, 0, 0, 200));
+        g.drawString(text, x + 1, y + 1);
+        g.setColor(new java.awt.Color(245, 240, 230, 190));
+        g.drawString(text, x, y);
+        g.dispose();
+        try {
+            javax.imageio.ImageIO.write(image, "png", png.toFile());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return png;
+    }
+
+    /** All pieces in order (copied, no re-encode) with the soundtrack. */
+    private void join(Edl edl, Path runRoot, List<Path> order, Path work, Path outputMp4) {
+        Path list = work.resolve("join.txt");
+        try {
+            Files.writeString(list, String.join("\n", order.stream()
+                    .map(p -> "file '" + p.toString().replace("\\", "/") + "'").toList()), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+                "-i", list.toString()));
+        boolean audio = edl.audio() != null && edl.audio().size() == 1;
+        if (audio) {
+            args.addAll(List.of("-i", runRoot.resolve(edl.audio().get(0).file()).toString()));
+        }
+        args.addAll(List.of("-map", "0:v:0"));
+        if (audio) {
+            args.addAll(List.of("-map", "1:a:0", "-c:a", "aac", "-b:a", "192k", "-shortest"));
+        }
+        // Every piece is encoded the same way and without B-frames: B-frames start a file at a negative DTS and
+        // the concat demuxer then left gaps (12 s too long over 200 pieces, the voice out of sync). Re-encoding
+        // the whole film here took ~12 minutes; the look is already in the pieces, so this is a copy.
+        args.addAll(List.of("-c:v", "copy", "-movflags", "+faststart", outputMp4.toString()));
+        ffmpeg.ffmpeg(args);
+        if (!Files.isRegularFile(outputMp4)) {
+            throw new MediaException("Fast-lane join wrote no video");
+        }
+    }
+
+    /** The last "progress N%" of a Remotion log, as 0..1. */
+    private static double lastProgress(Path log) {
+        try {
+            List<String> lines = Files.readAllLines(log, StandardCharsets.UTF_8);
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("progress (\\d+)%").matcher(lines.get(i));
+                if (m.find()) {
+                    return Math.min(1, Integer.parseInt(m.group(1)) / 100.0);
+                }
+                if (lines.get(i).contains("Ranges done")) {
+                    return 1;
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            return 0;
+        }
+        return 0;
+    }
+
+    private static synchronized void appendProgress(Path logFile, double fraction) {
+        try {
+            Files.writeString(logFile, "progress " + (int) Math.min(100, Math.floor(fraction * 100)) + "%\n",
+                    StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            log.debug("Progress not written: {}", e.getMessage());
+        }
+    }
+
+    /** Runs render.mjs with the stall watchdog; {@code expected}: the file it must write (null: checked by caller). */
+    private void runNode(List<String> command, Map<String, String> env, Path logFile, Path expected) {
+        try {
+            ProcessBuilder builder = new ProcessBuilder(command).directory(installDir.toFile())
+                    .redirectErrorStream(true).redirectOutput(java.lang.ProcessBuilder.Redirect.appendTo(logFile.toFile()));
+            builder.environment().putAll(env);
+            Process process = builder.start();
+            long deadline = System.currentTimeMillis() + config.timeoutSeconds() * 1000L;
+            while (!process.waitFor(15, TimeUnit.SECONDS)) {
+                long quiet = System.currentTimeMillis() - Files.getLastModifiedTime(logFile).toMillis();
+                if (quiet > STALL_MS || System.currentTimeMillis() > deadline) {
+                    process.descendants().forEach(ProcessHandle::destroyForcibly);
+                    process.destroyForcibly();
+                    throw new MediaException(quiet > STALL_MS ? "Remotion render stalled" : "Remotion render timed out");
+                }
+            }
+            if (process.exitValue() != 0 || expected != null && !Files.isRegularFile(expected)) {
+                String output = Files.readString(logFile, StandardCharsets.UTF_8);
+                throw new MediaException("Remotion render failed (exit " + process.exitValue() + "): "
+                        + output.substring(Math.max(0, output.length() - TAIL)));
+            }
+        } catch (IOException e) {
+            throw new MediaException("Cannot start node for Remotion (is Node.js on PATH?)", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new MediaException("Interrupted during Remotion render", e);
         }
     }
 

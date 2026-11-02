@@ -99,6 +99,8 @@ public class CharacterHost {
     private final JsonMapper json;
     private final Path characterDir;
     private final Path cache;
+    private final Object masterLock = new Object();
+    private static final int PREPARE_THREADS = 3;
     private final Path claudeWork;
     private final StoryForgeProperties.Upscaler upscaler;
 
@@ -269,20 +271,17 @@ public class CharacterHost {
 
     /** Usable, tagged segments of every gesture clip (prepared once and cached). */
     private List<Segment> segments(StageContext context) {
+        prepareNew(context);
         List<Segment> segments = new ArrayList<>();
         for (Path clip : clips()) {
             try {
                 String id = id(clip);
                 Path master = cache.resolve(id + ".mp4");
-                if (!Files.isRegularFile(master)) {
-                    master(clip, master);
-                }
                 Path tagsFile = cache.resolve(id + ".tags.json");
-                Tags tags = Files.isRegularFile(tagsFile) ? json.readValue(tagsFile.toFile(), Tags.class) : null;
-                if (tags == null) {
-                    tags = tag(context, id, master);
-                    json.writerWithDefaultPrettyPrinter().writeValue(tagsFile.toFile(), tags);
+                if (!Files.isRegularFile(master) || !Files.isRegularFile(tagsFile)) {
+                    continue;
                 }
+                Tags tags = json.readValue(tagsFile.toFile(), Tags.class);
                 java.util.regex.Matcher named = NAMED.matcher(clip.getFileName().toString().replaceAll("\\.[^.]+$", ""));
                 String situation = named.matches() ? named.group(1).toLowerCase(Locale.ROOT) : null;
                 String camera = named.matches() ? named.group(3).toLowerCase(Locale.ROOT) : null;
@@ -299,6 +298,53 @@ public class CharacterHost {
             }
         }
         return segments;
+    }
+
+    /** New gesture clips are mastered and tagged once, three at a time (each tag is a slow LLM call). */
+    private void prepareNew(StageContext context) {
+        List<Path> fresh = clips().stream()
+                .filter(clip -> {
+                    try {
+                        return !Files.isRegularFile(cache.resolve(id(clip) + ".tags.json"));
+                    } catch (IOException e) {
+                        return false;
+                    }
+                }).toList();
+        if (fresh.isEmpty()) {
+            return;
+        }
+        log.info("Preparing {} new host clip(s)", fresh.size());
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(PREPARE_THREADS);
+        try {
+            List<java.util.concurrent.Future<?>> jobs = new ArrayList<>();
+            for (Path clip : fresh) {
+                jobs.add(pool.submit(() -> {
+                    try {
+                        String id = id(clip);
+                        Path master = cache.resolve(id + ".mp4");
+                        synchronized (masterLock) {
+                            // One master at a time: Real-ESRGAN and FFmpeg already use the whole GPU / CPU.
+                            if (!Files.isRegularFile(master)) {
+                                master(clip, master);
+                            }
+                        }
+                        Tags tags = tag(context, id, master);
+                        json.writerWithDefaultPrettyPrinter().writeValue(cache.resolve(id + ".tags.json").toFile(), tags);
+                    } catch (IOException | RuntimeException e) {
+                        log.warn("Host clip {} skipped: {}", clip.getFileName(), e.getMessage());
+                    }
+                }));
+            }
+            for (java.util.concurrent.Future<?> job : jobs) {
+                job.get();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (java.util.concurrent.ExecutionException e) {
+            log.warn("Host clip preparation failed: {}", e.getCause().getMessage());
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     /** A 1080p, 30 fps, silent master of a gesture clip; small AI clips are upscaled with Real-ESRGAN first. */

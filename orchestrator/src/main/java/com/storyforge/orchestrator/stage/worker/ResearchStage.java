@@ -82,10 +82,16 @@ public class ResearchStage implements StageWorker {
         }
         context.files().write(Stage.RESEARCH, "dossier.json", dossier);
         context.files().write(Stage.RESEARCH, "sources.json", dossier.sources());
-        if (dossier.sources().size() < minSources) {
+        int required = requiredSources(minSources, context.run().inspirationId() != null);
+        if (dossier.sources().size() < required) {
             throw new StageBlockedException("Research gate: " + dossier.sources().size() + " sources, needs at least "
-                    + minSources);
+                    + required);
         }
+    }
+
+    /** The owner's inspiration videos are sources too: with them, two fewer web sources are enough. */
+    public static int requiredSources(int minSources, boolean inspiration) {
+        return inspiration ? Math.max(4, minSources - 2) : minSources;
     }
 
     private String leads(StageContext context) {

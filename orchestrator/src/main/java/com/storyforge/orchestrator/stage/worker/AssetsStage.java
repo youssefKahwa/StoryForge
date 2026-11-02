@@ -63,6 +63,8 @@ public class AssetsStage implements StageWorker {
             "Natural Earth (public domain) + Wikidata coordinates (CC0)", "https://www.naturalearthdata.com/about/terms-of-use/",
             "Map drawn by StoryForge from Natural Earth data (public domain) and Wikidata coordinates (CC0)", null);
     private static final Logger log = LoggerFactory.getLogger(AssetsStage.class);
+    /** AI pictures made at the same time (Cloudflare answers each in ~5 s; more would only queue there). */
+    private static final int IMAGE_THREADS = 3;
 
     private final ImageProvider images;
     private final FormatRegistry formats;
@@ -117,6 +119,17 @@ public class AssetsStage implements StageWorker {
         log.warn("Run {}: {} new images needed but only {} left in today's free quota; spreading them and reusing "
                 + "the rest", context.run().id(), misses.size(), remaining);
         return allowed;
+    }
+
+    private static ImageResult picture(java.util.concurrent.Future<ImageResult> picture) {
+        try {
+            return picture.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while making pictures", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw e.getCause() instanceof RuntimeException runtime ? runtime : new IllegalStateException(e.getCause());
+        }
     }
 
     /** One AI picture; if the free quota runs out mid-way (used elsewhere today), waits for the reset once. */
@@ -402,6 +415,20 @@ public class AssetsStage implements StageWorker {
         Set<String> allowedNew = budget(context, shots, style, notAi);
         Set<String> stockUsed = new HashSet<>(real.values().stream().map(RealMediaFinder.Found::key).toList());
         List<Shot> missing = new ArrayList<>();
+        // The AI pictures are made a few at a time (each is a ~5 s network call), then placed in shot order.
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(IMAGE_THREADS);
+        Map<String, java.util.concurrent.Future<ImageResult>> pictures = new HashMap<>();
+        for (Shot shot : shots.shots()) {
+            if (notAi.contains(shot.id()) || shot.graphic()) {
+                continue;
+            }
+            ImageRequest request = request(shot, style);
+            if (allowedNew.contains(shot.id()) || images.isCached(request)) {
+                Path file = context.files().path(Stage.ASSETS, shot.id() + ".png");
+                pictures.put(shot.id(), pool.submit(() -> generate(context, request, file)));
+            }
+        }
+        pool.shutdown();
         for (Shot shot : shots.shots()) {
             MapPin pin = maps.get(shot.id());
             if (pin != null) {
@@ -449,10 +476,11 @@ public class AssetsStage implements StageWorker {
             ImageResult result;
             ImageRequest request = request(shot, style);
             try {
-                if (!allowedNew.contains(shot.id()) && !images.isCached(request)) {
+                java.util.concurrent.Future<ImageResult> picture = pictures.get(shot.id());
+                if (picture == null) {
                     throw new IllegalStateException("over today's free image budget, reusing on purpose");
                 }
-                result = generate(context, request, file);
+                result = picture(picture);
             } catch (RuntimeException e) {
                 // No AI picture (free quota used up or provider down): handled together after the loop.
                 missing.add(shot);

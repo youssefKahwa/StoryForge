@@ -1,5 +1,5 @@
 import React from 'react';
-import { Composition, Still } from 'remotion';
+import { Composition, Freeze, Still, useCurrentFrame } from 'remotion';
 import { LongForm } from './LongForm';
 import { Short } from './Short';
 import { Thumbnail } from './Thumbnail';
@@ -19,8 +19,48 @@ const SAMPLE_EDL = {
   style: { fonts: ['Cinzel', 'Inter'], palette: ['#1f2a36', '#7a5c3e', '#c9a46b', '#e8dcc4'], burnCaptions: false },
 };
 
+/**
+ * The fast lane's Remotion part: only the designed frame ranges of the long video ([[from, to), ...]), back to back.
+ * Output frame i shows timeline frame ranges-mapped(i) (Freeze), so one render covers every range. The duration
+ * stays the whole video's, so the timeline maths inside LongForm (outro fade, sequence lengths) is unchanged.
+ */
+const Designed = ({ edl, assetBase, ranges }) => {
+  let index = useCurrentFrame();
+  let frame = 0;
+  for (const [from, to] of ranges) {
+    if (index < to - from) {
+      frame = from + index;
+      break;
+    }
+    index -= to - from;
+    frame = to - 1;
+  }
+  return (
+    <Freeze frame={frame}>
+      <LongForm edl={edl} assetBase={assetBase} filmLook={false} />
+    </Freeze>
+  );
+};
+
+const longFormMetadata = ({ props }) => ({
+  durationInFrames: Math.max(1, Math.round(props.edl.durationSec * props.edl.fps)),
+  fps: props.edl.fps,
+  width: props.edl.width,
+  height: props.edl.height,
+});
+
 export const Root = () => (
   <>
+    <Composition
+      id="Designed"
+      component={Designed}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={180}
+      defaultProps={{ edl: SAMPLE_EDL, assetBase: '', ranges: [[0, 180]] }}
+      calculateMetadata={longFormMetadata}
+    />
     <Composition
       id="LongForm"
       component={LongForm}

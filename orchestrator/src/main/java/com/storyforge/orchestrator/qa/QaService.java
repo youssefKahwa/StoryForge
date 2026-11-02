@@ -137,7 +137,7 @@ public class QaService {
                             : "no background music (library empty or music volume off): voice and SFX only"));
         }
 
-        checks.addAll(factual(scenes, dossier, critique));
+        checks.addAll(factual(scenes, dossier, critique, run.inspirationId() != null));
         checks.addAll(legal(assets, audio, edl));
         checks.add(originality(run, scenes));
 
@@ -182,8 +182,9 @@ public class QaService {
                 problems.isEmpty() ? edl.shots().size() + " shot(s), contiguous" : String.join("; ", problems));
     }
 
-    private List<Check> factual(List<Scene> scenes, Dossier dossier, Critique critique) {
-        int minSources = properties.qa().minSources();
+    private List<Check> factual(List<Scene> scenes, Dossier dossier, Critique critique, boolean inspiration) {
+        int minSources = com.storyforge.orchestrator.stage.worker.ResearchStage.requiredSources(
+                properties.qa().minSources(), inspiration);
         List<String> problems = new ArrayList<>();
         for (Scene scene : scenes) {
             for (String claimId : scene.claims()) {

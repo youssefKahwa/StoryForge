@@ -15,24 +15,24 @@ public final class StageUsage {
     private final Set<String> providers = new LinkedHashSet<>();
     private String promptVersion;
 
-    public void provider(String provider) {
+    public synchronized void provider(String provider) {
         providers.add(provider);
     }
 
-    public void call(String provider, long inputTokens, long outputTokens, BigDecimal costUsd) {
+    public synchronized void call(String provider, long inputTokens, long outputTokens, BigDecimal costUsd) {
         providers.add(provider);
         calls.add(new Call(provider, inputTokens, outputTokens, costUsd));
     }
 
-    public void promptVersion(String promptVersion) {
+    public synchronized void promptVersion(String promptVersion) {
         this.promptVersion = promptVersion;
     }
 
-    public List<Call> calls() {
-        return calls;
+    public synchronized List<Call> calls() {
+        return List.copyOf(calls);
     }
 
-    public String providers() {
+    public synchronized String providers() {
         return providers.isEmpty() ? null : String.join(",", providers);
     }
 
@@ -40,15 +40,15 @@ public final class StageUsage {
         return promptVersion;
     }
 
-    public long inputTokens() {
+    public synchronized long inputTokens() {
         return calls.stream().mapToLong(Call::inputTokens).sum();
     }
 
-    public long outputTokens() {
+    public synchronized long outputTokens() {
         return calls.stream().mapToLong(Call::outputTokens).sum();
     }
 
-    public BigDecimal costUsd() {
+    public synchronized BigDecimal costUsd() {
         return calls.stream().map(Call::costUsd).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

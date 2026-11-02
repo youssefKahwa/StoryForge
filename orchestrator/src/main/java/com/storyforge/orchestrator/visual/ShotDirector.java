@@ -47,6 +47,7 @@ public class ShotDirector {
     }
 
     private static final double MAX_REAL_SHARE = 0.5;
+    private static final int PARALLEL_CHUNKS = 3;
     private static final int MAX_MAPS = 2;
     private static final double MIN_MAP_GAP_SECONDS = 60;
 
@@ -114,15 +115,27 @@ public class ShotDirector {
         List<Shot> images = plan.shots().stream().filter(shot -> !shot.graphic())
                 .filter(shot -> !rememberedIds.contains(shot.id())).toList();
         String bibleJson = json.writeValueAsString(bible);
+        // The chunks are independent: they are directed at the same time (each call takes 1-3 minutes).
+        List<List<Shot>> chunks = new ArrayList<>();
         for (int from = 0; from < images.size(); from += chunkSize) {
-            List<Shot> chunk = images.subList(from, Math.min(images.size(), from + chunkSize));
+            chunks.add(images.subList(from, Math.min(images.size(), from + chunkSize)));
+        }
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(
+                Math.max(1, Math.min(PARALLEL_CHUNKS, chunks.size())));
+        List<java.util.concurrent.Future<ShotDirection>> directions = new ArrayList<>();
+        for (List<Shot> chunk : chunks) {
             String lines = chunk.stream().map(shot -> String.join(" | ", shot.id(), shot.type(),
                             "scene " + shot.sceneId(), "\"" + spoken(alignment, shot) + "\"",
                             nullToEmpty(sceneById.get(shot.sceneId()).visual())))
                     .collect(Collectors.joining("\n"));
+            directions.add(pool.submit(() -> llm.json(context, Stage.VISUAL_PLAN, "direct_shots",
+                    Map.of("bible", bibleJson, "shots", lines), ShotDirection.class)));
+        }
+        pool.shutdown();
+        for (int c = 0; c < chunks.size(); c++) {
+            List<Shot> chunk = chunks.get(c);
             try {
-                ShotDirection direction = llm.json(context, Stage.VISUAL_PLAN, "direct_shots",
-                        Map.of("bible", bibleJson, "shots", lines), ShotDirection.class);
+                ShotDirection direction = direction(directions.get(c));
                 if (direction.shots() != null) {
                     direction.shots().stream().filter(p -> p.id() != null && p.prompt() != null
                             && !p.prompt().isBlank()).forEach(p -> {
@@ -154,6 +167,20 @@ public class ShotDirector {
                 prompts.size(), rememberedIds.size(), drafts.size());
         ShotList shots = new ShotList(plan.durationSec(), directed);
         return new Result(shots, overlays(drafts, shots, scenes), bible, real);
+    }
+
+    private static ShotDirection direction(java.util.concurrent.Future<ShotDirection> future) {
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new LlmException("interrupted", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            if (e.getCause() instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            throw new LlmException(String.valueOf(e.getCause()), e.getCause());
+        }
     }
 
     /** Globe maps: only where the narration names the place, at most two per video, a minute apart. */

@@ -59,7 +59,7 @@ const OutroFade = () => {
   return <AbsoluteFill style={{ backgroundColor: '#000', opacity }} />;
 };
 
-export const LongForm = ({ edl, assetBase }) => {
+export const LongForm = ({ edl, assetBase, filmLook = true }) => {
   const { fps, durationInFrames } = useVideoConfig();
   const palette = (edl.style && edl.style.palette) || [];
   const shots = edl.shots || [];
@@ -81,7 +81,7 @@ export const LongForm = ({ edl, assetBase }) => {
           </Sequence>
         );
       })}
-      <FilmLook />
+      {filmLook && <FilmLook />}
       {(edl.chapters || []).map((chapter, index) => {
         if (index === 0) return null;
         const from = Math.round(chapter.start * fps);

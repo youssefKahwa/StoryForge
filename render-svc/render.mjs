@@ -7,7 +7,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [edlPath, runDir, outPath, compositionId = 'LongForm'] = process.argv.slice(2);
+const [edlPath, runDir, outPath, requestedId = 'LongForm'] = process.argv.slice(2);
 if (!edlPath || !runDir || !outPath) {
   console.error('Usage: node render.mjs <edl.json> <runDir> <out.mp4>');
   process.exit(2);
@@ -23,9 +23,14 @@ const glMode = process.env.RENDER_GL || 'angle';
 const chromiumOptions = glMode === 'default' ? {} : { gl: glMode };
 // The long video's soundtrack is one finished mix: every render tab downloading it (100+ MB) stalled the asset
 // server, so the picture is rendered silent and the mix is added afterwards with FFmpeg (seconds, no re-encode).
+// Fast lane: only these frame ranges ([[from, to (exclusive)], ...]) of the long video, back to back in one silent
+// file (the "Designed" composition), film look added later by FFmpeg.
+const ranges = process.env.RENDER_RANGES ? JSON.parse(fs.readFileSync(process.env.RENDER_RANGES, 'utf8')) : null;
+const compositionId = ranges ? 'Designed' : requestedId;
 const tracks = edl.audio || [];
 const muxAfter = compositionId === 'LongForm' && tracks.length === 1 && !tracks[0].start && !tracks[0].gainDb;
 const renderEdl = muxAfter ? { ...edl, audio: [] } : edl;
+const progressScale = Number(process.env.RENDER_PROGRESS_SCALE || 1);
 const videoOut = muxAfter ? outPath.replace(/\.mp4$/i, '') + '.video.mp4' : outPath;
 
 const TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg' };
@@ -67,10 +72,27 @@ try {
   await ensureBrowser();
   console.log('Bundling...');
   const serveUrl = await bundle({ entryPoint: path.join(here, 'src', 'index.jsx') });
-  const inputProps = { edl: renderEdl, assetBase };
+  const inputProps = ranges ? { edl: { ...edl, audio: [] }, assetBase, ranges } : { edl: renderEdl, assetBase };
   const composition = await selectComposition({ serveUrl, id: compositionId, inputProps, chromiumOptions });
   console.log(`Rendering ${composition.durationInFrames} frames at ${composition.fps} fps`);
   let lastReported = -1;
+  if (ranges) {
+    const totalFrames = ranges.reduce((sum, [from, to]) => sum + (to - from), 0);
+    await renderMedia({
+      composition, serveUrl, codec: 'h264', crf: 16, outputLocation: outPath, inputProps, concurrency,
+      chromiumOptions, muted: true, frameRange: [0, totalFrames - 1],
+      timeoutInMilliseconds: Number(process.env.RENDER_TIMEOUT_MS || 120000),
+      onProgress: ({ progress }) => {
+        const pct = Math.floor(progress * 100 * progressScale);
+        if (pct >= lastReported + 2) {
+          lastReported = pct;
+          console.log(`progress ${pct}%`);
+        }
+      },
+    });
+    console.log('Ranges done');
+    process.exit(0);
+  }
   await renderMedia({
     composition,
     serveUrl,
