@@ -52,7 +52,12 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class CharacterHost {
 
-    public record Segment(String clip, String file, double from, double to, String gesture) {
+    /**
+     * situation/camera: from the clip's file name when the owner saved it as the Veo prompt said
+     * (BP0001_shock_dramatic_wide.mp4), else null; gesture: Claude's tag for this part of the clip.
+     */
+    public record Segment(String clip, String file, double from, double to, String gesture, String situation,
+                          String camera) {
         double length() {
             return to - from;
         }
@@ -72,6 +77,14 @@ public class CharacterHost {
     }
 
     private static final Logger log = LoggerFactory.getLogger(CharacterHost.class);
+    private static final java.util.regex.Pattern NAMED = java.util.regex.Pattern.compile(
+            "(?i)^bp\\d+_([a-z]+)_([a-z]+)_([a-z]+)$");
+    /** The closest gesture tag when no clip has the exact situation. */
+    private static final Map<String, String> GESTURE_FOR = Map.ofEntries(
+            Map.entry("secret", "lean"), Map.entry("question", "shrug"), Map.entry("realize", "think"),
+            Map.entry("intro", "wave"), Map.entry("cta", "point"), Map.entry("stop", "point"),
+            Map.entry("shock", "think"), Map.entry("unimpressed", "nod"), Map.entry("disagree", "shrug"),
+            Map.entry("laugh", "laugh"), Map.entry("count", "count"), Map.entry("point", "point"));
     private static final double[] ZOOMS = {1.0, 1.17, 1.36};
     /** Where the mask and hands sit in the owner's framing (fraction of the frame), for the closer framings. */
     private static final double FOCUS_X = 0.58;
@@ -174,6 +187,9 @@ public class CharacterHost {
             double zoom = ZOOMS[(framing + i) % ZOOMS.length];
             double speed = 0.94 + Math.floorMod(seed * 31 + i, 13) / 100.0;
             Segment pick = choose(segments, moment.intent(), usage, previous, seed + i);
+            if (pick != null && ("closeup".equals(pick.camera()) || "pushin".equals(pick.camera()))) {
+                zoom = 1.0;
+            }
             if (pick != null) {
                 usage.merge(pick.key(), 1, Integer::sum);
                 pieces.add(new Piece(pick, null, length, speed, zoom));
@@ -193,12 +209,18 @@ public class CharacterHost {
         return pieces;
     }
 
-    /** Same gesture first, then the least used segments; never the segment just shown. */
-    private static Segment choose(List<Segment> segments, String intent, Map<String, Integer> usage, Segment previous,
-                                  long seed) {
+    /**
+     * A clip made for this situation first (its file name says so), then a part whose gesture fits, then neutral
+     * explaining; a different clip than the piece before (a real cut), then the least used; never the same part twice.
+     */
+    static Segment choose(List<Segment> segments, String intent, Map<String, Integer> usage, Segment previous,
+                          long seed) {
+        String gesture = GESTURE_FOR.getOrDefault(intent, "explain");
         return segments.stream().filter(s -> previous == null || !s.key().equals(previous.key()))
-                .min(Comparator.<Segment>comparingInt(s -> s.gesture().equals(intent) ? 0
-                                : "explain".equals(s.gesture()) || "neutral".equals(s.gesture()) ? 1 : 2)
+                .min(Comparator.<Segment>comparingInt(s -> intent.equals(s.situation()) ? 0
+                                : s.gesture().equals(gesture) || s.gesture().equals(intent) ? 1
+                                : "explain".equals(s.gesture()) || "neutral".equals(s.gesture()) ? 2 : 3)
+                        .thenComparingInt(s -> previous != null && s.clip().equals(previous.clip()) ? 1 : 0)
                         .thenComparingInt(s -> usage.getOrDefault(s.key(), 0))
                         .thenComparingLong(s -> Math.floorMod((s.key().hashCode() * 31L) ^ seed, 1000)))
                 .orElse(null);
@@ -261,11 +283,15 @@ public class CharacterHost {
                     tags = tag(context, id, master);
                     json.writerWithDefaultPrettyPrinter().writeValue(tagsFile.toFile(), tags);
                 }
+                java.util.regex.Matcher named = NAMED.matcher(clip.getFileName().toString().replaceAll("\\.[^.]+$", ""));
+                String situation = named.matches() ? named.group(1).toLowerCase(Locale.ROOT) : null;
+                String camera = named.matches() ? named.group(3).toLowerCase(Locale.ROOT) : null;
                 for (Tag tag : tags.segments() == null ? List.<Tag>of() : tags.segments()) {
                     if (tag.from() != null && tag.to() != null && tag.to() - tag.from() >= MIN_SEGMENT
                             && !Boolean.FALSE.equals(tag.usable())) {
                         segments.add(new Segment(id, master.toString(), tag.from(), tag.to(),
-                                tag.gesture() == null ? "explain" : tag.gesture().toLowerCase(Locale.ROOT)));
+                                tag.gesture() == null ? "explain" : tag.gesture().toLowerCase(Locale.ROOT),
+                                situation, camera));
                     }
                 }
             } catch (IOException | RuntimeException e) {

@@ -40,15 +40,16 @@ class HostMomentsTest {
         List<HostMoments.Moment> moments = HostMoments.pick(new ShotList(120, shots), alignment, Set.of());
 
         assertThat(moments).extracting(HostMoments.Moment::shotId).containsExactly("shot_003", "shot_007");
-        assertThat(moments.get(1).intent()).isEqualTo("point");
+        assertThat(moments.get(1).intent()).isEqualTo("cta");
         assertThat(moments.stream().mapToDouble(HostMoments.Moment::length).sum()).isLessThanOrEqualTo(12);
     }
 
     @Test
     void footageShotsAreNeverTakenAndTheIntentFollowsTheWords() {
-        assertThat(HostMoments.intent("here's the real reason")).isEqualTo("lean");
-        assertThat(HostMoments.intent("why would he do that")).isEqualTo("think");
-        assertThat(HostMoments.intent("would you join?")).isEqualTo("shrug");
+        assertThat(HostMoments.intent("here's the real reason")).isEqualTo("secret");
+        assertThat(HostMoments.intent("why would he do that")).isEqualTo("realize");
+        assertThat(HostMoments.intent("would you join?")).isEqualTo("question");
+        assertThat(HostMoments.intent("and then the twist hits")).isEqualTo("shock");
         assertThat(HostMoments.score("the building falls.")).isZero();
         assertThat(HostMoments.score("did you see it?")).isGreaterThan(HostMoments.score("did it fall?"));
     }

@@ -38,9 +38,14 @@ public final class HostMoments {
             "\\b(i|i'm|i've|i'd|i'll|my|me|honestly|personally|let me|here's my|i think|i guess)\\b");
     private static final Pattern YOU = Pattern.compile("\\b(you|you're|your|you'd|you'll)\\b");
     private static final Pattern CALL = Pattern.compile("\\b(subscribe|comment|comments|let me know|tell me)\\b");
-    private static final Pattern SECRET = Pattern.compile("\\b(secret|truth|twist|actually|reveal|hidden|real reason)\\b");
+    private static final Pattern SECRET = Pattern.compile("\\b(secret|truth|hidden|real reason|between us)\\b");
+    private static final Pattern TWIST = Pattern.compile("\\b(twist|reveal|actually|realize|realise|shock|insane)\\b");
     private static final Pattern COUNT = Pattern.compile("\\b(first|second|third|one|two|three|number)\\b");
     private static final Pattern THINK = Pattern.compile("\\b(why|wonder|think about|what if|how come|imagine)\\b");
+    private static final Pattern COMPARE = Pattern.compile("\\b(compare|versus|vs|than|both|either)\\b");
+    private static final Pattern EXCITED = Pattern.compile("\\b(favorite|favourite|love|best|amazing|genius|perfect)\\b");
+    private static final Pattern FIGHT = Pattern.compile("\\b(fight|fights|punch|punches|hit|brawl)\\b");
+    private static final Pattern DISAGREE = Pattern.compile("\\b(wrong|overrated|disagree|no way|not true)\\b");
 
     private HostMoments() {
     }
@@ -99,21 +104,37 @@ public final class HostMoments {
         return score;
     }
 
+    /** The situation a sentence calls for, in the words the owner's Veo clip names use (BP0001_shock_...). */
     static String intent(String spoken) {
         if (CALL.matcher(spoken).find()) {
-            return "point";
+            return "cta";
         }
         if (SECRET.matcher(spoken).find()) {
-            return "lean";
+            return "secret";
+        }
+        if (TWIST.matcher(spoken).find()) {
+            return "shock";
+        }
+        if (DISAGREE.matcher(spoken).find()) {
+            return "disagree";
+        }
+        if (FIGHT.matcher(spoken).find()) {
+            return "fight";
+        }
+        if (COMPARE.matcher(spoken).find()) {
+            return "compare";
         }
         if (COUNT.matcher(spoken).find()) {
             return "count";
         }
         if (THINK.matcher(spoken).find()) {
-            return "think";
+            return "realize";
         }
         if (spoken.contains("?")) {
-            return "shrug";
+            return "question";
+        }
+        if (EXCITED.matcher(spoken).find()) {
+            return "excited";
         }
         if (FIRST_PERSON.matcher(spoken).find()) {
             return "point";
