@@ -50,7 +50,8 @@ public class AudioMixStage implements StageWorker {
     /** Owner revision "no music at all" is stored as a music gain at or below this. */
     public static final double MUSIC_OFF_DB = -40;
     private static final int SAMPLE_RATE = 48_000;
-    private static final double PEAK_MARGIN_DB = 0.5;
+    /** Loudness normalisation overshoots the true-peak target by up to ~0.8 dB (run 132: -0.73 for -1.5). */
+    private static final double PEAK_MARGIN_DB = 1.2;
     private static final Logger log = LoggerFactory.getLogger(AudioMixStage.class);
 
     /** One library sound layered on a transition: its category, level against the transition's, and whether it

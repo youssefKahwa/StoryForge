@@ -364,16 +364,22 @@ public class FilmClipFinder {
     }
 
     /** True when more than a third of the clip is (near) black. */
+    private static final double DARK_STRETCH_SECONDS = 0.5;
+
     private boolean mostlyBlack(Path clip, double length) {
         try {
             String output = ffmpeg.ffmpeg(List.of("-i", clip.toString(), "-an", "-vf",
                     "blackdetect=d=0.2:pix_th=0.10", "-f", "null", "-"));
             Matcher matcher = BLACK.matcher(output);
             double black = 0;
+            double longest = 0;
             while (matcher.find()) {
-                black += Double.parseDouble(matcher.group(1));
+                double segment = Double.parseDouble(matcher.group(1));
+                black += segment;
+                longest = Math.max(longest, segment);
             }
-            return black > length / 3;
+            // QA blocks any black stretch of half a second (video.black_frames), so one such moment is enough.
+            return black > length / 3 || longest >= DARK_STRETCH_SECONDS;
         } catch (RuntimeException e) {
             return false;
         }
