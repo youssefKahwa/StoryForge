@@ -8,6 +8,7 @@ import com.storyforge.orchestrator.edl.CaptionBuilder;
 import com.storyforge.orchestrator.edl.EdlBuilder;
 import com.storyforge.orchestrator.host.HostMascot;
 import com.storyforge.orchestrator.host.HostPlanner;
+import com.storyforge.orchestrator.host.SubscribeNudge;
 import com.storyforge.orchestrator.format.FormatDefinition;
 import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
@@ -46,9 +47,11 @@ public class AssembleStage implements StageWorker {
     private final StoryForgeProperties.Video video;
     private final PreferencesService preferences;
     private final HostMascot host;
+    private final SubscribeNudge subscribe;
 
     public AssembleStage(RenderProvider renderer, FormatRegistry formats, StoryForgeProperties properties,
-                         PreferencesService preferences, HostMascot host) {
+                         PreferencesService preferences, HostMascot host, SubscribeNudge subscribe) {
+        this.subscribe = subscribe;
         this.host = host;
         this.renderer = renderer;
         this.formats = formats;
@@ -93,6 +96,31 @@ public class AssembleStage implements StageWorker {
         }
     }
 
+    /** The subscribe pop-ups at the times the audio mix planned (and gave their sounds). */
+    private Edl withSubscribe(StageContext context, Edl edl) {
+        var files = context.files();
+        if (!subscribe.available() || !files.exists(Stage.AUDIO_MIX, SubscribeNudge.PLAN)) {
+            return edl;
+        }
+        try {
+            List<Double> starts = files.read(Stage.AUDIO_MIX, SubscribeNudge.PLAN, SubscribeNudge.Plan.class).starts();
+            if (starts == null || starts.isEmpty()) {
+                return edl;
+            }
+            Path logo = files.path(Stage.ASSEMBLE, SubscribeNudge.LOGO);
+            java.nio.file.Files.copy(subscribe.logo(), logo, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            List<Overlay> overlays = new java.util.ArrayList<>(edl.overlays() == null ? List.of() : edl.overlays());
+            for (double start : starts) {
+                overlays.add(new Overlay(SubscribeNudge.KIND, null, start, start + SubscribeNudge.SECONDS,
+                        files.relative(logo), null));
+            }
+            return edl.withOverlays(overlays);
+        } catch (java.io.IOException | RuntimeException e) {
+            log.warn("Run {}: subscribe pop-up skipped: {}", context.run().id(), e.getMessage());
+            return edl;
+        }
+    }
+
     @Override
     public void execute(StageContext context) {
         var files = context.files();
@@ -126,6 +154,7 @@ public class AssembleStage implements StageWorker {
                 maps.get(shot.id()), punches.get(shot.id()))).toList());
 
         edl = withHost(context, edl, alignment);
+        edl = withSubscribe(context, edl);
         files.write(Stage.ASSEMBLE, "edl.json", edl);
         files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions));
         renderer.render(edl, files.root(), files.path(Stage.ASSEMBLE, QaService.VIDEO));

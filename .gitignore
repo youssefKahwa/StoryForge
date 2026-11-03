@@ -21,3 +21,6 @@ linkexempletoseetest.txt
 
 # Owner media (character images and clips), like ChannelAssets: kept out of git
 charachterBipath/
+
+# Subscribe animation previews (local media)
+subscribe-examples/

@@ -7,6 +7,7 @@ import { ChapterCard } from './components/ChapterCard';
 import { FilmLook } from './components/FilmLook';
 import { Captions } from './components/Captions';
 import { OverlayLayer } from './components/Overlays';
+import { SubscribeNudge } from './components/SubscribeNudge';
 import { HostBubble } from './components/HostBubble';
 import { OVERLAP_FRAMES, PunchIn, TransitionOverlay, enterStyle, exitStyle } from './components/Transitions';
 
@@ -96,7 +97,9 @@ export const LongForm = ({ edl, assetBase, filmLook = true }) => {
         const length = Math.max(1, Math.min(Math.round((overlay.end - overlay.start) * fps), durationInFrames - from));
         return (
           <Sequence key={`overlay-${index}`} from={from} durationInFrames={length}>
-            <OverlayLayer overlay={overlay} palette={palette} durationInFrames={length} />
+            {overlay.kind === 'subscribe'
+              ? <SubscribeNudge variant="glass" logo={assetUrl(assetBase, overlay.title)} />
+              : <OverlayLayer overlay={overlay} palette={palette} durationInFrames={length} />}
           </Sequence>
         );
       })}

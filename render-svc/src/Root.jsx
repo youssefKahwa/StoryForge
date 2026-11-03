@@ -1,6 +1,7 @@
 import React from 'react';
 import { Composition, Freeze, Still, useCurrentFrame } from 'remotion';
 import { LongForm } from './LongForm';
+import { NUDGE_FRAMES, SubscribeDemo } from './components/SubscribeNudge';
 import { Short } from './Short';
 import { Thumbnail } from './Thumbnail';
 
@@ -88,6 +89,15 @@ export const Root = () => (
         durationInFrames: Math.max(1, Math.round(props.edl.durationSec * props.edl.fps)),
         fps: props.edl.fps,
       })}
+    />
+    <Composition
+      id="SubscribeDemo"
+      component={SubscribeDemo}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={NUDGE_FRAMES + 20}
+      defaultProps={{ variant: 'glass', bg: null, face: null, logo: null }}
     />
     <Still
       id="Thumbnail"

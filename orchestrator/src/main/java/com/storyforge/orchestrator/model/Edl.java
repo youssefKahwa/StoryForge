@@ -22,6 +22,11 @@ public record Edl(
                 overlays, host);
     }
 
+    public Edl withOverlays(List<Overlay> newOverlays) {
+        return new Edl(version, width, height, fps, durationSec, lut, shots, audio, captions, chapters, style,
+                newOverlays, host);
+    }
+
     /** Same EDL with the talking host added (or removed with null). */
     public Edl withHost(HostTrack track) {
         return new Edl(version, width, height, fps, durationSec, lut, shots, audio, captions, chapters, style,

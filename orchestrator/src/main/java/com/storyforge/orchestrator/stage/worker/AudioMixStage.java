@@ -6,6 +6,9 @@ import com.storyforge.orchestrator.edl.TransitionPlanner;
 import com.storyforge.orchestrator.artifact.RunOverrides;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.edl.EdlBuilder;
+import com.storyforge.orchestrator.host.HostPlanner;
+import com.storyforge.orchestrator.host.SubscribeNudge;
+import com.storyforge.orchestrator.model.Overlay;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.LoudnessStats;
 import com.storyforge.orchestrator.media.WavAudio;
@@ -70,6 +73,8 @@ public class AudioMixStage implements StageWorker {
     private static final double PRESET_PEAK_DB = -3;
     private static final double AMBIENCE_MEAN_DB = -40;
     private static final double CUE_PEAK_DB = -17;
+    /** Chapter card on screen (LongForm CHAPTER_FRAMES at 30 fps). */
+    private static final double CHAPTER_SECONDS = 3.5;
 
     private final FfmpegService ffmpeg;
     private final MusicLibrary music;
@@ -79,9 +84,12 @@ public class AudioMixStage implements StageWorker {
     private final StoryForgeProperties.Qa qa;
     private final boolean soundEnabled;
     private final PreferencesService preferences;
+    private final SubscribeNudge subscribe;
 
     public AudioMixStage(FfmpegService ffmpeg, MusicLibrary music, SfxLibrary sfx, SoundMixer mixer,
-                         StoryForgeProperties properties, PreferencesService preferences, SoundBank bank) {
+                         StoryForgeProperties properties, PreferencesService preferences, SoundBank bank,
+                         SubscribeNudge subscribe) {
+        this.subscribe = subscribe;
         this.bank = bank;
         this.preferences = preferences;
         this.ffmpeg = ffmpeg;
@@ -123,6 +131,8 @@ public class AudioMixStage implements StageWorker {
         List<AudioQa.Track> tracks = new ArrayList<>(List.of(new AudioQa.Track("narration", narration.file(),
                 "Narration", LicenseRecord.generated(narration.provider()))));
         Path loudnessInput = voice;
+        List<Double> subscribeAt = subscribePlan(files, WavAudio.durationSec(voice));
+        files.write(Stage.AUDIO_MIX, SubscribeNudge.PLAN, new SubscribeNudge.Plan(subscribeAt));
         if (soundEnabled) {
             List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
             Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
@@ -182,6 +192,7 @@ public class AudioMixStage implements StageWorker {
             List<SoundPlan.SfxCue> all = new ArrayList<>(designed.sfx());
             all.addAll(ambience(scenes, alignment, runSeed));
             all.addAll(hostFoley(files, runSeed));
+            all.addAll(subscribeSounds(subscribeAt, runSeed));
             all.sort((a, b) -> Double.compare(a.start(), b.start()));
             SoundPlan plan = new SoundPlan(designed.music(), all);
             if (plan.music().isEmpty()) {
@@ -227,6 +238,71 @@ public class AudioMixStage implements StageWorker {
                     s.gainForPeak(gainDb + PRESET_PEAK_DB + layer.gainOffset()), reason + " / " + layer.category()));
         }
         return cues;
+    }
+
+    /**
+     * When the subscribe pop-up appears (see {@link SubscribeNudge}): clear of the masked host, full-screen text,
+     * chapter titles, other overlays and the talking logo. Empty when switched off or the logo is missing.
+     */
+    private List<Double> subscribePlan(com.storyforge.orchestrator.artifact.RunFiles files, double duration) {
+        if (!subscribe.available()) {
+            return List.of();
+        }
+        try {
+            List<double[]> busy = new ArrayList<>();
+            Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
+            busy.addAll(HostPlanner.appearances(alignment.words(), duration));
+            if (files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)) {
+                List<ShotList.Shot> shots = files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class)
+                        .shots();
+                Set<String> host = files.exists(Stage.ASSETS, "assets.json")
+                        ? new java.util.HashSet<>(files.read(Stage.ASSETS, "assets.json", AssetManifest.class).assets()
+                                .stream().filter(a -> "host".equals(a.media())).map(AssetManifest.Asset::shotId).toList())
+                        : Set.of();
+                shots.stream().filter(s -> s.graphic() || host.contains(s.id()))
+                        .forEach(s -> busy.add(new double[] {s.start(), s.end()}));
+            }
+            if (files.exists(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS)) {
+                files.read(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS, new TypeReference<List<Overlay>>() { })
+                        .forEach(o -> busy.add(new double[] {o.start(), o.end()}));
+            }
+            List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
+            Outline outline = files.read(Stage.OUTLINE, "outline.json", Outline.class);
+            EdlBuilder.chapters(scenes, alignment, outline).stream().skip(1)
+                    .forEach(c -> busy.add(new double[] {c.start(), c.start() + CHAPTER_SECONDS}));
+            return SubscribeNudge.plan(duration, busy);
+        } catch (RuntimeException e) {
+            log.warn("Subscribe pop-up skipped: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * The pop-up's sounds, each aligned so its loudest moment lands on the animation: a soft swoosh as it slides
+     * in, a mouse click on the button, the bell ding, a quieter swoosh as it leaves. The click falls back to the
+     * synthesized shutter when the bank has no click.
+     */
+    private List<SoundPlan.SfxCue> subscribeSounds(List<Double> starts, long seed) {
+        List<SoundPlan.SfxCue> cues = new ArrayList<>();
+        for (double t : starts) {
+            String reason = "subscribe pop-up " + t;
+            addSound(cues, "swoosh_soft", seed, t + SubscribeNudge.ENTER_AT, -22, reason);
+            if (!addSound(cues, "click", seed, t + SubscribeNudge.CLICK_AT, -16, reason) && sfxAvailable("shutter")) {
+                cues.add(new SoundPlan.SfxCue("shutter", sfx.file("shutter"), t + SubscribeNudge.CLICK_AT, -16, reason));
+            }
+            addSound(cues, "bell", seed, t + SubscribeNudge.BELL_AT, -18, reason);
+            addSound(cues, "swoosh_soft", seed + 1, t + SubscribeNudge.EXIT_AT, -27, reason);
+        }
+        return cues;
+    }
+
+    private boolean addSound(List<SoundPlan.SfxCue> cues, String category, long seed, double at, double peakDb,
+                             String reason) {
+        Optional<SoundBank.Sound> sound = bank.pick(category, seed);
+        sound.ifPresent(s -> cues.add(new SoundPlan.SfxCue(category, s.file(),
+                Math.max(0, Math.round((at - s.peak()) * 1000) / 1000.0), s.gainForPeak(peakDb),
+                reason + " / " + category)));
+        return sound.isPresent();
     }
 
     /** A soft chair or cloth sound when the masked host appears, as if the camera cut to a real person. */
