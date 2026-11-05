@@ -12,6 +12,7 @@ import usePolling from '../hooks/usePolling';
 const QuickStartCard = () => {
   const intl = useIntl();
   const t = (id, values) => intl.formatMessage({ id }, values);
+  const [mainUrl, setMainUrl] = useState('');
   const [urls, setUrls] = useState(['', '', '']);
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
@@ -46,6 +47,7 @@ const QuickStartCard = () => {
     try {
       const result = await http.post(ApiRoutes.quickStart(), {
         urls: urls.filter((u) => u.trim()), topic: topic.trim() || null, notes: notes.trim() || null,
+        mainUrl: mainUrl.trim() || null,
       });
       message.success(result.message, 6);
       if (result.runId) {
@@ -79,6 +81,9 @@ const QuickStartCard = () => {
             )}
           />
         )}
+        <Input value={mainUrl} onChange={(e) => setMainUrl(e.target.value)} maxLength={300}
+          placeholder={t('quick.mainLink')} addonBefore={t('quick.mainLabel')} />
+        <Typography.Text type="secondary">{t('quick.mainHelp')}</Typography.Text>
         <Row gutter={8}>
           {urls.map((url, i) => (
             <Col xs={24} md={8} key={`url-${i}`}>

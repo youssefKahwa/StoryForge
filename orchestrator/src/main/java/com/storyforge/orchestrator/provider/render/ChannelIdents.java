@@ -82,7 +82,7 @@ public class ChannelIdents {
 
     public ChannelIdents(RemotionRenderer renderer, MediaSvcClient media, SoundBank bank, MusicLibrary music,
                          FfmpegService ffmpeg, JsonMapper json, SubscribeNudge subscribe, StoryForgeProperties properties,
-                         @Value("${storyforge.idents.enabled:true}") boolean enabled) {
+                         @Value("${storyforge.idents.enabled:false}") boolean enabled) {
         this.renderer = renderer;
         this.media = media;
         this.bank = bank;
@@ -111,25 +111,43 @@ public class ChannelIdents {
         double at = introAt > 0.05 ? introAt : 0;
         String norm = ",fps=30,scale=1920:1080,setsar=1,format=yuv420p";
         String anorm = ",aformat=sample_rates=48000:channel_layouts=stereo";
-        StringBuilder graph = new StringBuilder();
-        graph.append("[1:v]setpts=PTS-STARTPTS").append(norm).append("[vi];[1:a]asetpts=PTS-STARTPTS").append(anorm)
-                .append("[ai];[2:v]setpts=PTS-STARTPTS").append(norm).append("[vo];[2:a]asetpts=PTS-STARTPTS")
-                .append(anorm).append("[ao];");
+        // The content is opened twice (before / after the intro) so each half streams on its own: cutting one input
+        // in two inside the filter made FFmpeg hold the whole second half in memory and crawl.
         String a = f("%.3f", at);
+        List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
+        int n = 0;
         if (at > 0) {
-            graph.append("[0:v]trim=0:").append(a).append(",setpts=PTS-STARTPTS").append(norm).append("[v0];")
-                    .append("[0:a]atrim=0:").append(a).append(",asetpts=PTS-STARTPTS").append(anorm).append("[a0];")
-                    .append("[0:v]trim=start=").append(a).append(",setpts=PTS-STARTPTS").append(norm).append("[v1];")
-                    .append("[0:a]atrim=start=").append(a).append(",asetpts=PTS-STARTPTS").append(anorm).append("[a1];")
-                    .append("[v0][a0][vi][ai][v1][a1][vo][ao]concat=n=4:v=1:a=1[v][a]");
-        } else {
-            graph.append("[0:v]setpts=PTS-STARTPTS").append(norm).append("[v1];[0:a]asetpts=PTS-STARTPTS")
-                    .append(anorm).append("[a1];[vi][ai][v1][a1][vo][ao]concat=n=3:v=1:a=1[v][a]");
+            args.addAll(List.of("-t", a, "-i", content.toString()));
+            n++;
         }
-        ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", content.toString(), "-i", intro.toString(),
-                "-i", outro.toString(), "-filter_complex", graph.toString(), "-map", "[v]", "-map", "[a]",
+        int introIndex = n++;
+        args.addAll(List.of("-i", intro.toString()));
+        if (at > 0) {
+            args.addAll(List.of("-ss", a, "-i", content.toString()));
+        } else {
+            args.addAll(List.of("-i", content.toString()));
+        }
+        int restIndex = n++;
+        int outroIndex = n++;
+        args.addAll(List.of("-i", outro.toString()));
+        List<Integer> order = new ArrayList<>();
+        if (at > 0) {
+            order.add(0);
+        }
+        order.add(introIndex);
+        order.add(restIndex);
+        order.add(outroIndex);
+        StringBuilder graph = new StringBuilder();
+        StringBuilder pads = new StringBuilder();
+        for (int i : order) {
+            graph.append(f("[%d:v]setpts=PTS-STARTPTS%s[v%d];[%d:a]asetpts=PTS-STARTPTS%s[a%d];", i, norm, i, i, anorm, i));
+            pads.append(f("[v%d][a%d]", i, i));
+        }
+        graph.append(pads).append(f("concat=n=%d:v=1:a=1[v][a]", order.size()));
+        args.addAll(List.of("-filter_complex", graph.toString(), "-map", "[v]", "-map", "[a]",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", "30",
                 "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", output.toString()));
+        ffmpeg.ffmpeg(args);
         if (!Files.isRegularFile(output)) {
             throw new MediaException("Adding the intro and outro wrote no video");
         }

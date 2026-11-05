@@ -1,5 +1,5 @@
 ---
-version: 0.2.0
+version: 0.3.0
 tier: high
 ---
 ## system
@@ -13,6 +13,13 @@ wording: no translated sentences, no catchphrases. Treat every fact as an unveri
 ## user
 Transcripts of the owner's inspiration videos:
 {{transcripts}}
+
+Main video: {{main}}
+When a main video is named (its transcript has "main": true), the blueprint IS that video: its parts in its exact
+order, each part's share matching how much of the main video it takes, and every point it makes in that part (the
+story moments, examples, comparisons, opinions, jokes, questions to the viewer, reveals). The other videos only add
+facts, examples or takes inside those parts; never add a part the main video does not have. The voice is the main
+video's voice.
 
 Return:
 {"topic": "short neutral name of the story, event, person or film",

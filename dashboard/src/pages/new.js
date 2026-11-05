@@ -26,6 +26,7 @@ const NewVideoPage = ({ location }) => {
   const inspiration = useSelector(selectInspiration);
   const voices = useSelector(selectVoices);
   const [step, setStep] = useState(0);
+  const [mainUrl, setMainUrl] = useState('');
   const [urls, setUrls] = useState(['', '', '']);
   const [pasted, setPasted] = useState('');
   const [busy, setBusy] = useState(false);
@@ -76,7 +77,7 @@ const NewVideoPage = ({ location }) => {
   const analyze = () => {
     setBusy(true);
     dispatch(createInspiration({
-      body: { urls: urls.filter((u) => u.trim()), pastedText: pasted.trim() || null },
+      body: { urls: urls.filter((u) => u.trim()), pastedText: pasted.trim() || null, mainUrl: mainUrl.trim() || null },
       onSuccess: () => setBusy(false),
       onFail: (e) => { setBusy(false); onFail(e); },
     }));
@@ -110,6 +111,15 @@ const NewVideoPage = ({ location }) => {
     <Card>
       <Typography.Paragraph type="secondary"><FormattedMessage id="wizard.inspiration.help" /></Typography.Paragraph>
       <Space direction="vertical" className="full-width">
+        <Input
+          value={mainUrl}
+          disabled={pending}
+          maxLength={300}
+          addonBefore={intl.formatMessage({ id: 'quick.mainLabel' })}
+          placeholder={intl.formatMessage({ id: 'quick.mainLink' })}
+          onChange={(e) => setMainUrl(e.target.value)}
+        />
+        <Typography.Text type="secondary"><FormattedMessage id="quick.mainHelp" /></Typography.Text>
         {urls.map((url, i) => (
           <Input
             key={i}
@@ -130,7 +140,7 @@ const NewVideoPage = ({ location }) => {
           <Alert type="error" showIcon message={<FormattedMessage id="wizard.inspiration.failed" />} description={inspiration.error} />
         )}
         <Space>
-          <Button type="primary" loading={busy || pending} disabled={!urls.some((u) => u.trim()) && !pasted.trim()} onClick={analyze}>
+          <Button type="primary" loading={busy || pending} disabled={!mainUrl.trim() && !urls.some((u) => u.trim()) && !pasted.trim()} onClick={analyze}>
             <FormattedMessage id="wizard.inspiration.analyze" />
           </Button>
           <Button disabled={pending} onClick={() => setStep(1)}><FormattedMessage id="wizard.inspiration.skip" /></Button>

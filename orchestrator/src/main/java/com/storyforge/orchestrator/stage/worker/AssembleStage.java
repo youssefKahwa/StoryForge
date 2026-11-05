@@ -39,6 +39,9 @@ public class AssembleStage implements StageWorker {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AssembleStage.class);
     private static final String HOST_DIR = "host";
     private static final String HOST_LOGO = "host_logo.jpg";
+    /** The rendered video before the intro/outro, and the fingerprint of the edit it was rendered from. */
+    private static final String CONTENT = "content_16x9.mp4";
+    private static final String CONTENT_EDL = "content_16x9.edl.sha";
     /** The intro goes after the first scene (the hook) when it ends in this window, else at the very start. */
     private static final double INTRO_MIN_AT = 5;
     private static final double INTRO_MAX_AT = 60;
@@ -127,16 +130,22 @@ public class AssembleStage implements StageWorker {
      * video; the uploaded captions move with them (ident.json tells the package stage how to move the chapters).
      * Any problem leaves the video as rendered.
      */
-    private void withIdents(StageContext context, List<EdlCaption> captions) {
-        var channel = idents.getIfAvailable();
-        if (channel == null || !channel.available()) {
-            return;
-        }
+    private void withIdents(StageContext context, List<EdlCaption> captions, boolean reuse, String fingerprint) {
         var files = context.files();
         Path video = files.path(Stage.ASSEMBLE, QaService.VIDEO);
-        Path content = files.path(Stage.ASSEMBLE, "content_16x9.mp4");
+        Path content = contentCache(files).resolve(CONTENT);
+        var channel = idents.getIfAvailable();
+        if (channel == null || !channel.available()) {
+            if (reuse) {
+                copy(content, video);
+            }
+            return;
+        }
         try {
-            java.nio.file.Files.move(video, content, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            if (!reuse) {
+                java.nio.file.Files.move(video, content, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                java.nio.file.Files.writeString(contentCache(files).resolve(CONTENT_EDL), fingerprint);
+            }
             NarrationManifest narration = files.read(Stage.NARRATE, "narration.json", NarrationManifest.class);
             double introAt = 0;
             if (narration.scenes() != null && !narration.scenes().isEmpty()) {
@@ -148,18 +157,50 @@ public class AssembleStage implements StageWorker {
             files.write(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE, timeline);
             files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions.stream()
                     .map(c -> new EdlCaption(timeline.shift(c.start()), timeline.shift(c.end()), c.text())).toList()));
-            java.nio.file.Files.deleteIfExists(content);
             log.info("Run {}: intro at {} s ({} s), outro ({} s) added", context.run().id(), timeline.introAt(),
                     timeline.introSeconds(), timeline.outroSeconds());
         } catch (java.io.IOException | RuntimeException e) {
             log.warn("Run {}: intro/outro skipped: {}", context.run().id(), e.getMessage());
-            try {
-                if (!java.nio.file.Files.isRegularFile(video) && java.nio.file.Files.isRegularFile(content)) {
-                    java.nio.file.Files.move(content, video);
-                }
-            } catch (java.io.IOException moveFailed) {
-                throw new java.io.UncheckedIOException(moveFailed);
+            if (java.nio.file.Files.isRegularFile(content)) {
+                copy(content, video);
             }
+        }
+    }
+
+    /** Outside the assemble folder, which a re-run of the stage empties. */
+    private static Path contentCache(com.storyforge.orchestrator.artifact.RunFiles files) {
+        Path dir = files.root().resolve("render-cache");
+        try {
+            java.nio.file.Files.createDirectories(dir);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return dir;
+    }
+
+    private static String readQuietly(Path file) {
+        try {
+            return java.nio.file.Files.readString(file).strip();
+        } catch (java.io.IOException e) {
+            return "";
+        }
+    }
+
+    private static void copy(Path from, Path to) {
+        try {
+            java.nio.file.Files.copy(from, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    /** SHA-256 of the edit (edl.json as written). */
+    static String fingerprint(String edlJson) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(edlJson.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -230,8 +271,19 @@ public class AssembleStage implements StageWorker {
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
-        renderer.render(edl, files.root(), files.path(Stage.ASSEMBLE, QaService.VIDEO));
+        // The rendered video before the intro/outro is kept with a fingerprint of its edit: the same edit again
+        // (a re-run after an intro/outro problem) skips the long render.
+        Path content = contentCache(files).resolve(CONTENT);
+        String fingerprint = fingerprint(files.readText(Stage.ASSEMBLE, "edl.json"));
+        Path stamp = contentCache(files).resolve(CONTENT_EDL);
+        boolean reuse = java.nio.file.Files.isRegularFile(content) && java.nio.file.Files.isRegularFile(stamp)
+                && fingerprint.equals(readQuietly(stamp));
+        if (reuse) {
+            log.info("Run {}: same edit as the last render, reusing it", context.run().id());
+        } else {
+            renderer.render(edl, files.root(), files.path(Stage.ASSEMBLE, QaService.VIDEO));
+        }
         context.usage().provider(renderer.name());
-        withIdents(context, captions);
+        withIdents(context, captions, reuse, fingerprint);
     }
 }

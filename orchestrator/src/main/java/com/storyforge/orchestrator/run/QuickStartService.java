@@ -46,12 +46,17 @@ public class QuickStartService {
     }
 
     public Result start(List<String> urls, String pastedText, String topic, String notes) {
+        return start(urls, pastedText, topic, notes, null);
+    }
+
+    /** mainUrl: the owner's main video, whose script the new one follows part by part. */
+    public Result start(List<String> urls, String pastedText, String topic, String notes, String mainUrl) {
         List<String> links = urls == null ? List.of() : urls.stream().filter(u -> u != null && !u.isBlank()).toList();
         boolean pasted = pastedText != null && !pastedText.isBlank();
-        if (!links.isEmpty() || pasted) {
+        if (!links.isEmpty() || pasted || !blank(mainUrl)) {
             String ownerNotes = join(blank(topic) ? null : "Focus on: " + topic.strip(), notes);
-            Inspiration inspiration = inspirations.create(new CreateInspirationRequest(links, pastedText), true,
-                    ownerNotes);
+            Inspiration inspiration = inspirations.create(new CreateInspirationRequest(links, pastedText, mainUrl),
+                    true, ownerNotes);
             return new Result(null, inspiration.getId(), "Reading the videos. The run starts by itself when the "
                     + "analysis is ready (a few minutes).");
         }

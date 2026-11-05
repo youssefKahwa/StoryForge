@@ -41,6 +41,10 @@ public class Inspiration {
     @Column(name = "owner_notes")
     private String ownerNotes;
 
+    /** The owner's main video (also the first of the urls): the script follows it part by part. */
+    @Column(name = "main_url")
+    private String mainUrl;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -86,6 +90,14 @@ public class Inspiration {
 
     public String getOwnerNotes() {
         return ownerNotes;
+    }
+
+    public String getMainUrl() {
+        return mainUrl;
+    }
+
+    public void setMainUrl(String mainUrl) {
+        this.mainUrl = mainUrl;
     }
 
     public void setOwnerNotes(String ownerNotes) {

@@ -25,12 +25,17 @@ public class NarrationStyle {
     /** Enough of each inspiration video for the writer to follow it closely without flooding the prompt. */
     private static final int SOURCE_CHARS_PER_VIDEO = 9000;
     private static final int SOURCE_CHARS_TOTAL = 18000;
+    /** The owner's main video gets room for its whole script (a 10-20 minute video). */
+    private static final int MAIN_CHARS = 24000;
 
     private final PreferencesService preferences;
     private final JsonMapper json;
     private final InspirationFiles inspirations;
+    private final com.storyforge.orchestrator.inspiration.InspirationRepository inspirationRows;
 
-    public NarrationStyle(PreferencesService preferences, JsonMapper json, InspirationFiles inspirations) {
+    public NarrationStyle(PreferencesService preferences, JsonMapper json, InspirationFiles inspirations,
+                          com.storyforge.orchestrator.inspiration.InspirationRepository inspirationRows) {
+        this.inspirationRows = inspirationRows;
         this.preferences = preferences;
         this.json = json;
         this.inspirations = inspirations;
@@ -54,14 +59,18 @@ public class NarrationStyle {
             return "(none)";
         }
         List<VideoTranscript> transcripts = inspirations.transcripts(id);
+        String mainUrl = inspirationRows.findById(id).map(i -> i.getMainUrl()).orElse(null);
         StringBuilder out = new StringBuilder();
         for (VideoTranscript t : transcripts) {
-            if (t.transcript() == null || t.transcript().isBlank() || out.length() >= SOURCE_CHARS_TOTAL) {
+            boolean main = mainUrl != null && mainUrl.equals(t.url());
+            int limit = main ? MAIN_CHARS : SOURCE_CHARS_TOTAL;
+            if (t.transcript() == null || t.transcript().isBlank() || out.length() >= limit) {
                 continue;
             }
             String text = t.transcript().strip();
-            int room = Math.min(SOURCE_CHARS_PER_VIDEO, SOURCE_CHARS_TOTAL - out.length());
-            out.append("### ").append(t.title() == null ? "Video" : t.title()).append('\n')
+            int room = main ? MAIN_CHARS : Math.min(SOURCE_CHARS_PER_VIDEO, SOURCE_CHARS_TOTAL - out.length());
+            out.append(main ? "### MAIN VIDEO (follow it part by part): " : "### ")
+                    .append(t.title() == null ? "Video" : t.title()).append('\n')
                     .append(text.length() > room ? text.substring(0, room) + " [...]" : text).append("\n\n");
         }
         return out.length() == 0 ? "(none)" : out.toString();

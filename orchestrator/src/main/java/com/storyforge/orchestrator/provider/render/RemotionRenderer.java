@@ -28,6 +28,11 @@ public class RemotionRenderer implements RenderProvider {
 
     /** A render whose log shows no progress this long is stuck (a crashed browser that never came back). */
     private static final long STALL_MS = 10 * 60 * 1000L;
+    /** The fast lane's Remotion part prints progress every ~20 s; this long without any means it is stuck. */
+    private static final long DESIGNED_STALL_MS = 3 * 60 * 1000L;
+    private static final java.util.regex.Pattern PROGRESS = java.util.regex.Pattern.compile("progress (\\d+)%");
+    /** More "tab closed" errors than this in the log tail: the browser is gone, stop instead of waiting. */
+    private static final int CRASH_LINES = 20;
     private static final Logger log = LoggerFactory.getLogger(RemotionRenderer.class);
     private static final List<String> SYNCED = List.of("package.json", "render.mjs", "still.mjs", "ident.mjs", "src");
     private static final int TAIL = 3000;
@@ -64,7 +69,7 @@ public class RemotionRenderer implements RenderProvider {
     /** Final quality: the pieces are joined without re-encoding. */
     private static final String PIECE_CRF = "19";
     /** FFmpeg pieces drawn at the same time in the fast lane. */
-    private static final int PIECE_THREADS = 3;
+    private static final int PIECE_THREADS = 2;
 
     /**
      * Parallel browser tabs for this render: the configured number, but no more than free memory allows (~0.9 GB a
@@ -105,13 +110,19 @@ public class RemotionRenderer implements RenderProvider {
         }
         int tabs = concurrency();
         if (fastLane) {
-            try {
-                renderFastLane(edl, runRoot, outputMp4, tabs);
-                return;
-            } catch (MediaException | UncheckedIOException e) {
-                log.warn("Fast-lane render failed ({}); rendering the whole video with Remotion",
-                        e.getMessage() == null ? "?" : e.getMessage().lines().findFirst().orElse("?"));
+            // The GPU first; a Remotion hiccup (a crashed browser, a clip frame it could not read) gets one more fast
+            // try on Chrome's default GL with fewer tabs before the slow whole-video render.
+            String[][] tries = {{"angle", String.valueOf(tabs)}, {"default", String.valueOf(Math.min(tabs, SAFE_TABS))}};
+            for (String[] attempt : tries) {
+                try {
+                    renderFastLane(edl, runRoot, outputMp4, Integer.parseInt(attempt[1]), attempt[0]);
+                    return;
+                } catch (MediaException | UncheckedIOException e) {
+                    log.warn("Fast-lane render failed with GL {} ({})", attempt[0],
+                            e.getMessage() == null ? "?" : e.getMessage().lines().findFirst().orElse("?"));
+                }
             }
+            log.warn("Fast lane failed twice; rendering the whole video with Remotion");
         }
         try {
             // The Intel GPU (ANGLE) renders about 12 frames/s here, 3x Chrome's default.
@@ -129,7 +140,7 @@ public class RemotionRenderer implements RenderProvider {
      * Fast lane (see {@link FastLane}): Remotion draws only the designed ranges, FFmpeg the plain shots (several at
      * once), then one FFmpeg pass joins them, adds the film look and the soundtrack.
      */
-    private void renderFastLane(Edl edl, Path runRoot, Path outputMp4, int tabs) {
+    private void renderFastLane(Edl edl, Path runRoot, Path outputMp4, int tabs, String gl) {
         long started = System.currentTimeMillis();
         if (edl.audio() == null || edl.audio().size() != 1 || edl.audio().get(0).start() != 0
                 || edl.audio().get(0).gainDb() != 0) {
@@ -207,8 +218,8 @@ public class RemotionRenderer implements RenderProvider {
                 runNode(List.of(config.node(), installDir.resolve("render.mjs").toString(),
                         outputMp4.resolveSibling("edl.json").toString(), runRoot.toAbsolutePath().toString(),
                         designedFile.toString()),
-                        Map.of("RENDER_CONCURRENCY", String.valueOf(tabs), "RENDER_GL", "angle", "RENDER_RANGES",
-                                jobs.toString()), designedLog, designedFile);
+                        Map.of("RENDER_CONCURRENCY", String.valueOf(Math.max(1, tabs - 1)), "RENDER_GL", gl, "RENDER_RANGES",
+                                jobs.toString()), designedLog, designedFile, DESIGNED_STALL_MS);
             }
             int at = 0;
             for (int i = 0; i < designedRanges.size(); i++) {
@@ -372,18 +383,38 @@ public class RemotionRenderer implements RenderProvider {
 
     /** Runs render.mjs with the stall watchdog; {@code expected}: the file it must write (null: checked by caller). */
     private void runNode(List<String> command, Map<String, String> env, Path logFile, Path expected) {
+        runNode(command, env, logFile, expected, STALL_MS);
+    }
+
+    private void runNode(List<String> command, Map<String, String> env, Path logFile, Path expected, long stallMs) {
         try {
             ProcessBuilder builder = new ProcessBuilder(command).directory(installDir.toFile())
                     .redirectErrorStream(true).redirectOutput(java.lang.ProcessBuilder.Redirect.appendTo(logFile.toFile()));
             builder.environment().putAll(env);
             Process process = builder.start();
             long deadline = System.currentTimeMillis() + config.timeoutSeconds() * 1000L;
+            // Stuck = the progress number has not moved for stallMs (a crashed browser tab can keep writing errors,
+            // so a growing log is no proof of life), or Chrome keeps reporting closed tabs.
+            String lastProgress = "";
+            long progressedAt = System.currentTimeMillis();
             while (!process.waitFor(15, TimeUnit.SECONDS)) {
-                long quiet = System.currentTimeMillis() - Files.getLastModifiedTime(logFile).toMillis();
-                if (quiet > STALL_MS || System.currentTimeMillis() > deadline) {
+                String tail = tail(logFile);
+                java.util.regex.Matcher m = PROGRESS.matcher(tail);
+                String progress = "";
+                while (m.find()) {
+                    progress = m.group(1);
+                }
+                if (!progress.equals(lastProgress)) {
+                    lastProgress = progress;
+                    progressedAt = System.currentTimeMillis();
+                }
+                long quiet = System.currentTimeMillis() - progressedAt;
+                int crashed = tail.split("Session closed|Target closed", -1).length - 1;
+                if (quiet > stallMs || crashed > CRASH_LINES || System.currentTimeMillis() > deadline) {
                     process.descendants().forEach(ProcessHandle::destroyForcibly);
                     process.destroyForcibly();
-                    throw new MediaException(quiet > STALL_MS ? "Remotion render stalled" : "Remotion render timed out");
+                    throw new MediaException(crashed > CRASH_LINES ? "Remotion browser tabs crashed (low memory?)"
+                            : quiet > stallMs ? "Remotion render stalled" : "Remotion render timed out");
                 }
             }
             if (process.exitValue() != 0 || expected != null && !Files.isRegularFile(expected)) {
@@ -396,6 +427,20 @@ public class RemotionRenderer implements RenderProvider {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new MediaException("Interrupted during Remotion render", e);
+        }
+    }
+
+    /** The last 64 KB of a log. */
+    private static String tail(Path logFile) {
+        try (java.io.RandomAccessFile file = new java.io.RandomAccessFile(logFile.toFile(), "r")) {
+            long length = file.length();
+            int size = (int) Math.min(length, 64 * 1024);
+            byte[] bytes = new byte[size];
+            file.seek(length - size);
+            file.readFully(bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
         }
     }
 

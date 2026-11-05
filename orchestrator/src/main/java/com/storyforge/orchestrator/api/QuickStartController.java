@@ -26,7 +26,7 @@ public class QuickStartController {
     @PostMapping("/api/quick-start")
     public QuickStartDto start(@Valid @RequestBody QuickStartRequest request) {
         return QuickStartDto.from(quickStart.start(request.urls(), request.pastedText(), request.topic(),
-                request.notes()));
+                request.notes(), request.mainUrl()));
     }
 
     @PostMapping("/api/seed-topics/suggest")
