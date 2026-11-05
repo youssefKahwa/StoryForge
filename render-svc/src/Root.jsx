@@ -4,6 +4,8 @@ import { LongForm } from './LongForm';
 import { NUDGE_FRAMES, SubscribeDemo } from './components/SubscribeNudge';
 import { HostBubble } from './components/HostBubble';
 import { ChannelIdent } from './components/ChannelIdent';
+import { LogoMouth } from './components/LogoMouth';
+import { BRAND, Snow, body } from './brand';
 import { Short } from './Short';
 import { Thumbnail } from './Thumbnail';
 
@@ -60,6 +62,23 @@ const HostBubbleDemo = ({ bg, framePattern, frames }) => (
       frameUrl={(i) => framePattern.replace('%04d', String(i + 1).padStart(4, '0'))} />
   </AbsoluteFill>
 );
+
+/** Preview of a talking-mouth style: the logo big in the middle, open/shape per frame from the voice. */
+const MouthDemo = ({ style, logo, open, shape, label }) => {
+  const frame = useCurrentFrame();
+  const at = (list) => list[Math.max(0, Math.min(frame, list.length - 1))] || 0;
+  return (
+    <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 45%, #18263a 0%, ${BRAND.night} 62%, #05070b 100%)` }}>
+      <Snow count={50} opacity={0.5} />
+      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ borderRadius: '50%', boxShadow: `0 0 0 8px ${BRAND.sky}, 0 0 40px ${BRAND.sky}, 0 30px 80px rgba(0,0,0,0.6)`, marginTop: -50 }}>
+          <LogoMouth logo={logo} style={style} open={at(open)} shape={at(shape)} frame={frame} size={640} />
+        </div>
+      </AbsoluteFill>
+      <div style={{ position: 'absolute', bottom: 60, width: '100%', textAlign: 'center', fontFamily: body, fontWeight: 700, fontSize: 40, color: '#f0f0f0', letterSpacing: '0.12em' }}>{label}</div>
+    </AbsoluteFill>
+  );
+};
 
 export const Root = () => (
   <>
@@ -129,6 +148,16 @@ export const Root = () => (
       durationInFrames={150}
       defaultProps={{ kind: 'intro', variant: 'logo_reveal', logo: '', mouthPattern: '', mouth: [0], hostClip: '', durationInFrames: 150 }}
       calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.durationInFrames) })}
+    />
+    <Composition
+      id="MouthDemo"
+      component={MouthDemo}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={60}
+      defaultProps={{ style: 'classic', logo: '', open: [0], shape: [0], label: '' }}
+      calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.open.length) })}
     />
     <Still
       id="Thumbnail"
