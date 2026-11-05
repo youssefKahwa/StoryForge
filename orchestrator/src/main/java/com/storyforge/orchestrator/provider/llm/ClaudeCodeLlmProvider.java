@@ -64,7 +64,7 @@ public class ClaudeCodeLlmProvider implements LlmProvider {
             try (OutputStream in = process.getOutputStream()) {
                 in.write(request.user().getBytes(StandardCharsets.UTF_8));
             }
-            if (!process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS)) {
+            if (!com.storyforge.orchestrator.media.Processes.waitFor(process, config.timeoutSeconds(), TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new LlmException("claude timed out after " + config.timeoutSeconds() + "s");
             }

@@ -149,7 +149,7 @@ public class FfmpegService {
                     .redirectErrorStream(true)
                     .redirectOutput(log.toFile())
                     .start();
-            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+            if (!com.storyforge.orchestrator.media.Processes.waitFor(process, timeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new MediaException("Timed out after " + timeoutSeconds + "s: " + command.get(0));
             }

@@ -82,7 +82,7 @@ public class ChannelIdents {
 
     public ChannelIdents(RemotionRenderer renderer, MediaSvcClient media, SoundBank bank, MusicLibrary music,
                          FfmpegService ffmpeg, JsonMapper json, SubscribeNudge subscribe, StoryForgeProperties properties,
-                         @Value("${storyforge.idents.enabled:false}") boolean enabled) {
+                         @Value("${storyforge.idents.enabled:true}") boolean enabled) {
         this.renderer = renderer;
         this.media = media;
         this.bank = bank;
@@ -101,57 +101,87 @@ public class ChannelIdents {
 
     /**
      * The final video: content [0, introAt), the intro, the rest of the content, the outro. introAt 0 puts the
-     * intro first. One FFmpeg pass (a few minutes); the parts are made once per voice and cached.
+     * intro first. Each part is encoded on its own with the same settings (MPEG-TS, no B-frames), the hook and the
+     * rest at the same time, then they are joined by stream copy (seconds). One FFmpeg concat filter over all the
+     * parts stalled: it reads every input at once and jams when one queue fills.
      */
     public Timeline wrap(Path content, Path output, double introAt, String voice) {
-        Path intro = build("intro", voice);
-        Path outro = build("outro", voice);
-        double introSeconds = ffmpeg.probe(intro).durationSec();
-        double outroSeconds = ffmpeg.probe(outro).durationSec();
+        Path intro = part(build("intro", voice));
+        Path outro = part(build("outro", voice));
         double at = introAt > 0.05 ? introAt : 0;
-        String norm = ",fps=30,scale=1920:1080,setsar=1,format=yuv420p";
-        String anorm = ",aformat=sample_rates=48000:channel_layouts=stereo";
-        // The content is opened twice (before / after the intro) so each half streams on its own: cutting one input
-        // in two inside the filter made FFmpeg hold the whole second half in memory and crawl.
-        String a = f("%.3f", at);
+        Path work = output.resolveSibling("ident-parts");
+        try {
+            Files.createDirectories(work);
+            Path hook = work.resolve("hook.ts");
+            Path rest = work.resolve("rest.ts");
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+            try {
+                var restJob = pool.submit(() -> encode(at > 0 ? List.of("-ss", f("%.3f", at), "-i", content.toString())
+                        : List.of("-i", content.toString()), rest));
+                if (at > 0) {
+                    // -t after the input: as an input option FFmpeg let the audio run past it on this file.
+                    pool.submit(() -> encode(List.of("-i", content.toString(), "-t", f("%.3f", at)), hook)).get();
+                }
+                restJob.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new MediaException("Interrupted while adding the intro and outro", e);
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw e.getCause() instanceof RuntimeException runtime ? runtime
+                        : new MediaException("Encoding a part failed: " + e.getCause(), e.getCause());
+            } finally {
+                pool.shutdownNow();
+            }
+            List<Path> order = new ArrayList<>();
+            if (at > 0) {
+                order.add(hook);
+            }
+            order.addAll(List.of(intro, rest, outro));
+            Path list = work.resolve("parts.txt");
+            Files.writeString(list, String.join("\n", order.stream()
+                    .map(p -> "file '" + p.toAbsolutePath().toString().replace("\\", "/") + "'").toList()),
+                    StandardCharsets.UTF_8);
+            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list.toString(),
+                    "-c", "copy", "-bsf:a", "aac_adtstoasc", "-movflags", "+faststart", output.toString()));
+            if (!Files.isRegularFile(output)) {
+                throw new MediaException("Adding the intro and outro wrote no video");
+            }
+            return new Timeline(round(at), round(ffmpeg.probe(intro).durationSec()),
+                    round(ffmpeg.probe(outro).durationSec()));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } finally {
+            deleteQuietly(work);
+        }
+    }
+
+    /** A cached intro/outro as a join-ready part (same encoding as the content parts), made once. */
+    private synchronized Path part(Path clip) {
+        Path ts = clip.resolveSibling(clip.getFileName().toString().replaceAll("\\.mp4$", "") + ".ts");
+        if (!Files.isRegularFile(ts)) {
+            Path tmp = clip.resolveSibling(ts.getFileName() + ".part");
+            encode(List.of("-i", clip.toString()), tmp);
+            try {
+                Files.move(tmp, ts, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+        return ts;
+    }
+
+    /** One part: 1080p30 yuv420p H.264 without B-frames, AAC 48 kHz stereo, MPEG-TS (joins cleanly by copy). */
+    private void encode(List<String> input, Path out) {
         List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
-        int n = 0;
-        if (at > 0) {
-            args.addAll(List.of("-t", a, "-i", content.toString()));
-            n++;
-        }
-        int introIndex = n++;
-        args.addAll(List.of("-i", intro.toString()));
-        if (at > 0) {
-            args.addAll(List.of("-ss", a, "-i", content.toString()));
-        } else {
-            args.addAll(List.of("-i", content.toString()));
-        }
-        int restIndex = n++;
-        int outroIndex = n++;
-        args.addAll(List.of("-i", outro.toString()));
-        List<Integer> order = new ArrayList<>();
-        if (at > 0) {
-            order.add(0);
-        }
-        order.add(introIndex);
-        order.add(restIndex);
-        order.add(outroIndex);
-        StringBuilder graph = new StringBuilder();
-        StringBuilder pads = new StringBuilder();
-        for (int i : order) {
-            graph.append(f("[%d:v]setpts=PTS-STARTPTS%s[v%d];[%d:a]asetpts=PTS-STARTPTS%s[a%d];", i, norm, i, i, anorm, i));
-            pads.append(f("[v%d][a%d]", i, i));
-        }
-        graph.append(pads).append(f("concat=n=%d:v=1:a=1[v][a]", order.size()));
-        args.addAll(List.of("-filter_complex", graph.toString(), "-map", "[v]", "-map", "[a]",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", "30",
-                "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", output.toString()));
+        args.addAll(input);
+        args.addAll(List.of("-vf", "fps=30,scale=1920:1080,setsar=1,format=yuv420p",
+                "-af", "aformat=sample_rates=48000:channel_layouts=stereo", "-c:v", "libx264", "-preset", "veryfast",
+                "-crf", "19", "-bf", "0", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-f", "mpegts",
+                out.toString()));
         ffmpeg.ffmpeg(args);
-        if (!Files.isRegularFile(output)) {
-            throw new MediaException("Adding the intro and outro wrote no video");
+        if (!Files.isRegularFile(out)) {
+            throw new MediaException("FFmpeg wrote no " + out.getFileName());
         }
-        return new Timeline(round(at), round(introSeconds), round(outroSeconds));
     }
 
     /** The intro or outro for this voice, made once and cached. */

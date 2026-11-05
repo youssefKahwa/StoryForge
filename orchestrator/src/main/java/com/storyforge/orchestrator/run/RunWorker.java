@@ -26,6 +26,9 @@ public class RunWorker {
     private final boolean enabled;
     private final AtomicBoolean busy = new AtomicBoolean();
     private final ExecutorService executor = Executors.newSingleThreadExecutor(task -> new Thread(task, "run-worker"));
+    /** The run being worked on and its task, so a cancel can interrupt it (and the programs it waits for). */
+    private volatile Long currentRun;
+    private volatile java.util.concurrent.Future<?> current;
 
     public RunWorker(RunService runs, PipelineEngine engine, SettingsService settings, KeepAwake keepAwake,
                      StoryForgeProperties properties) {
@@ -55,13 +58,16 @@ public class RunWorker {
                 busy.set(false);
                 return;
             }
-            executor.submit(() -> {
+            currentRun = runId.get();
+            current = executor.submit(() -> {
                 keepAwake.acquire();
                 try {
                     engine.execute(runId.get());
                 } catch (Exception e) {
                     log.error("Run {} crashed", runId.get(), e);
                 } finally {
+                    currentRun = null;
+                    current = null;
                     keepAwake.release();
                     busy.set(false);
                 }
@@ -69,6 +75,15 @@ public class RunWorker {
         } catch (Exception e) {
             busy.set(false);
             log.error("Run worker poll failed", e);
+        }
+    }
+
+    /** Stops the work of a cancelled run now: its stage is interrupted and the programs it runs are killed. */
+    public void interrupt(long runId) {
+        java.util.concurrent.Future<?> task = current;
+        if (task != null && Long.valueOf(runId).equals(currentRun)) {
+            log.info("Run {} cancelled: stopping its current stage", runId);
+            task.cancel(true);
         }
     }
 

@@ -26,8 +26,11 @@ public class RunController {
     private final RunService runs;
     private final RunQueryService queries;
     private final PublicationService publications;
+    private final com.storyforge.orchestrator.run.RunWorker worker;
 
-    public RunController(RunService runs, RunQueryService queries, PublicationService publications) {
+    public RunController(RunService runs, RunQueryService queries, PublicationService publications,
+                         com.storyforge.orchestrator.run.RunWorker worker) {
+        this.worker = worker;
         this.runs = runs;
         this.queries = queries;
         this.publications = publications;
@@ -52,6 +55,7 @@ public class RunController {
     @PostMapping("/{id}/cancel")
     public RunDto cancel(@PathVariable long id) {
         runs.cancel(id);
+        worker.interrupt(id);
         return queries.summary(id);
     }
 

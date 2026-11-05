@@ -370,7 +370,7 @@ public class CharacterHost {
                         "-n", "realesr-animevideov3", "-s", String.valueOf(scale), "-f", "png")
                         .directory(exe.getParent().toFile()).redirectErrorStream(true)
                         .redirectOutput(work.resolve("esrgan.log").toFile()).start();
-                if (!process.waitFor(40, TimeUnit.MINUTES) || process.exitValue() != 0) {
+                if (!com.storyforge.orchestrator.media.Processes.waitFor(process, 40, TimeUnit.MINUTES) || process.exitValue() != 0) {
                     process.destroyForcibly();
                     throw new IOException("Real-ESRGAN failed on " + clip.getFileName());
                 }

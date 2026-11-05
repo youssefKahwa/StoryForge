@@ -23,6 +23,9 @@ import java.util.stream.Collectors;
 
 public final class ShotPlanner {
 
+    /** A shot may run up to this times the longest shot to end with its sentence instead of mid-sentence. */
+    static final double SENTENCE_STRETCH = 1.6;
+
     public record Rules(double minSeconds, double maxSeconds, int maxSameType, double interruptEverySeconds) {
     }
 
@@ -113,11 +116,15 @@ public final class ShotPlanner {
     }
 
     private List<Piece> cut(SceneSpan span, List<Word> words) {
+        List<Double> sentenceCuts = new ArrayList<>();
         List<Double> phraseCuts = new ArrayList<>();
         List<Double> wordCuts = new ArrayList<>();
         for (int i = 0; i < words.size() - 1; i++) {
             double cut = (words.get(i).end() + words.get(i + 1).start()) / 2;
             wordCuts.add(cut);
+            if (words.get(i).endsSentence()) {
+                sentenceCuts.add(cut);
+            }
             if (words.get(i).endsPhrase()) {
                 phraseCuts.add(cut);
             }
@@ -133,7 +140,16 @@ public final class ShotPlanner {
             if (hi < lo) {
                 hi = cursor + max;
             }
-            Double cut = closest(phraseCuts, lo, hi, cursor + target);
+            // The picture changes where an idea ends: a sentence end, even if the shot runs a little long; a comma or
+            // a word only when a sentence is very long. Cutting mid-sentence made pictures feel a beat off.
+            Double cut = closest(sentenceCuts, lo, hi, cursor + target);
+            if (cut == null) {
+                cut = closest(sentenceCuts, lo, Math.min(cursor + max * SENTENCE_STRETCH, span.end() - min),
+                        cursor + target);
+            }
+            if (cut == null) {
+                cut = closest(phraseCuts, lo, hi, cursor + target);
+            }
             if (cut == null) {
                 cut = closest(wordCuts, lo, hi, cursor + target);
             }

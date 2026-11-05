@@ -105,6 +105,13 @@ public class PipelineEngine {
             log.warn("Run {} stage {} blocked: {}", run.id(), stage, e.getMessage());
         } catch (Exception e) {
             costGuard.record(run.id(), stage, usage);
+            if (runs.get(run.id()).getStatus() == RunStatus.CANCELLED) {
+                // Stopped by the owner's cancel: the stage failing because of it must not turn the run into FAILED.
+                Thread.interrupted();
+                executions.finish(executionId, StageStatus.FAILED, usage, "Cancelled by owner");
+                log.info("Run {} stage {} stopped by cancel", run.id(), stage);
+                return false;
+            }
             String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             executions.finish(executionId, StageStatus.FAILED, usage, reason);
             runs.fail(run.id(), stage, reason);

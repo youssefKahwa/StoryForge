@@ -64,7 +64,7 @@ public class ImageFinisher {
                     .redirectErrorStream(true)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start();
-            if (!process.waitFor(UPSCALE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            if (!com.storyforge.orchestrator.media.Processes.waitFor(process, UPSCALE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 log.warn("Upscaler timed out; falling back to Lanczos for the rest of this session");
                 upscalerBroken = true;

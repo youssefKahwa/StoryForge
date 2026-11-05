@@ -1,5 +1,5 @@
 ---
-version: 0.3.0
+version: 0.4.0
 tier: high
 ---
 ## system
@@ -20,4 +20,8 @@ Pick footage for as many video shots as you can, up to {{max}}:
   or a scene with the same mood. Only skip a shot when nothing in the catalogue fits at all.
 - The first shots (the hook) should be strong, striking footage.
 - Prefer catalogue shots at least as long as the video shot; each catalogue shot at most once.
-Return {"matches": [{"shot": "shot_012", "tile": 7}]}
+- When the chosen catalogue shot is shorter than the video shot, add 1-2 more in "more" (played right after it, in
+  that order) that stay on the SAME idea: the same moment from another angle, the same character, or the same place.
+  Never pad with unrelated footage: if nothing else fits, leave "more" empty.
+- The picture must match what is said in THAT video shot, not the shot before or after it.
+Return {"matches": [{"shot": "shot_012", "tile": 7, "more": [8, 15]}]}

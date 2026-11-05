@@ -62,7 +62,8 @@ public class FilmClipFinder {
     public record Work(String work, Integer year, List<String> queries) {
     }
 
-    public record Match(String shot, Integer tile) {
+    /** more: extra catalogue shots (in order) that keep the same moment on screen when the first is too short. */
+    public record Match(String shot, Integer tile, List<Integer> more) {
     }
 
     public record Matches(List<Match> matches) {
@@ -98,6 +99,8 @@ public class FilmClipFinder {
     private static final Pattern BLACK = Pattern.compile("black_duration:([0-9.]+)");
     private static final Pattern VIDEO_FILE = Pattern.compile("(?i).+\\.(mp4|mkv|webm|mov|avi)");
     static final double SLOWEST = 0.8;
+    /** At most this many catalogue moments in one video shot. */
+    static final int MAX_MOMENTS = 3;
     static final double TYPICAL_SHOT_SECONDS = 4;
     private static final int MAX_QUERIES = 8;
     private static final int VIDEOS_PER_QUERY = 2;
@@ -216,22 +219,51 @@ public class FilmClipFinder {
                 continue;
             }
             double target = shot.duration() + 0.6;
-            // The scene and the shots that follow it in the source, as long as they are back to back.
-            List<Segment> run = run(segments, first, target);
-            double available = run.get(run.size() - 1).end() - first.start() - 0.1;
+            // The matched moment, then the editor's extra moments for the same idea; only without them do the shots
+            // that follow it in the source fill in (they can be a different scene, so they come last).
+            List<Segment> run = new ArrayList<>(List.of(first));
+            for (Integer extra : match.more() == null ? List.<Integer>of() : match.more()) {
+                Segment next = byTile.get(extra);
+                if (next != null && !usedTiles.contains(extra) && run.size() < MAX_MOMENTS
+                        && run.stream().mapToDouble(Segment::length).sum() < target) {
+                    run.add(next);
+                }
+            }
+            if (run.size() == 1) {
+                run = run(segments, first, target);
+            }
+            double available = run.stream().mapToDouble(r -> Math.max(0, r.length() - 0.1)).sum();
             double source = Math.min(available, target);
             double factor = Math.max(SLOWEST, source / target);
             double hold = Math.max(0, target - source / factor);
             Path out = context.files().path(Stage.ASSETS, shot.id() + ".clip.mp4");
-            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-ss", fmt(first.start() + 0.05), "-t", fmt(source),
-                    "-i", first.source().file().toString(), "-vf",
-                    bars(first.source(), library.resolve(slug(work.work()))) + watermark(first.source())
-                            + "setpts=PTS/" + fmt(factor)
-                            + ",scale=" + width + ":" + height
-                            + ":force_original_aspect_ratio=increase,crop=" + width + ":" + height + ",fps=30"
-                            + ",tpad=stop_mode=clone:stop_duration=" + fmt(hold + 0.1),
-                    "-map", "0:v:0", "-map_metadata", "-1", "-write_tmcd", "0", "-an", "-dn", "-t", fmt(target),
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", out.toString()));
+            List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
+            StringBuilder graph = new StringBuilder();
+            double left = source;
+            int inputs = 0;
+            for (Segment segment : run) {
+                if (left <= 0.05) {
+                    break;
+                }
+                double take = Math.min(left, Math.max(0.1, segment.length() - 0.1));
+                left -= take;
+                args.addAll(List.of("-ss", fmt(segment.start() + 0.05), "-t", fmt(take), "-i",
+                        segment.source().file().toString()));
+                graph.append(f("[%d:v]", inputs)).append(bars(segment.source(), library.resolve(slug(work.work()))))
+                        .append(watermark(segment.source())).append("scale=").append(width).append(':').append(height)
+                        .append(":force_original_aspect_ratio=increase,crop=").append(width).append(':').append(height)
+                        .append(",fps=30,setsar=1,setpts=PTS-STARTPTS").append(f("[m%d];", inputs));
+                inputs++;
+            }
+            for (int i = 0; i < inputs; i++) {
+                graph.append(f("[m%d]", i));
+            }
+            graph.append(f("concat=n=%d:v=1:a=0,setpts=PTS/%s,tpad=stop_mode=clone:stop_duration=%s[v]", inputs,
+                    fmt(factor), fmt(hold + 0.1)));
+            args.addAll(List.of("-filter_complex", graph.toString(), "-map", "[v]", "-map_metadata", "-1",
+                    "-write_tmcd", "0", "-an", "-dn", "-t", fmt(target), "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "20", "-pix_fmt", "yuv420p", out.toString()));
+            ffmpeg.ffmpeg(args);
             if (mostlyBlack(out, target)) {
                 // A fade-to-black or a night shot too dark to read: worse than any other picture.
                 log.info("Run {} {}: footage too dark, left for another picture", context.run().id(), shot.id());
@@ -529,6 +561,10 @@ public class FilmClipFinder {
 
     private static String fmt(double value) {
         return String.format(Locale.ROOT, "%.3f", value);
+    }
+
+    private static String f(String format, Object... values) {
+        return String.format(Locale.ROOT, format, values);
     }
 
     private static String fmt1(double value) {

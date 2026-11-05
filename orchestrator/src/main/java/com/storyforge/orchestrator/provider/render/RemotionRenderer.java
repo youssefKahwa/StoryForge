@@ -397,7 +397,7 @@ public class RemotionRenderer implements RenderProvider {
             // so a growing log is no proof of life), or Chrome keeps reporting closed tabs.
             String lastProgress = "";
             long progressedAt = System.currentTimeMillis();
-            while (!process.waitFor(15, TimeUnit.SECONDS)) {
+            while (!com.storyforge.orchestrator.media.Processes.waitFor(process, 15, TimeUnit.SECONDS)) {
                 String tail = tail(logFile);
                 java.util.regex.Matcher m = PROGRESS.matcher(tail);
                 String progress = "";
@@ -457,7 +457,7 @@ public class RemotionRenderer implements RenderProvider {
             log.info("Remotion render started: {} frames ({} GL)", Math.round(edl.durationSec() * edl.fps()), gl);
             Process process = builder.start();
             long deadline = System.currentTimeMillis() + config.timeoutSeconds() * 1000L;
-            while (!process.waitFor(15, TimeUnit.SECONDS)) {
+            while (!com.storyforge.orchestrator.media.Processes.waitFor(process, 15, TimeUnit.SECONDS)) {
                 long quiet = System.currentTimeMillis() - Files.getLastModifiedTime(logFile).toMillis();
                 if (quiet > STALL_MS || System.currentTimeMillis() > deadline) {
                     process.descendants().forEach(ProcessHandle::destroyForcibly);
@@ -497,7 +497,7 @@ public class RemotionRenderer implements RenderProvider {
                     "Short").directory(installDir.toFile()).redirectErrorStream(true).redirectOutput(logFile.toFile());
             builder.environment().put("RENDER_CONCURRENCY", String.valueOf(concurrency()));
             Process process = builder.start();
-            if (!process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS)) {
+            if (!com.storyforge.orchestrator.media.Processes.waitFor(process, config.timeoutSeconds(), TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new MediaException("Short render timed out");
             }
@@ -525,7 +525,7 @@ public class RemotionRenderer implements RenderProvider {
             Process process = new ProcessBuilder(config.node(), installDir.resolve("still.mjs").toString(),
                     props.toString(), outputPng.toAbsolutePath().toString())
                     .directory(installDir.toFile()).redirectErrorStream(true).redirectOutput(logFile.toFile()).start();
-            if (!process.waitFor(STILL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            if (!com.storyforge.orchestrator.media.Processes.waitFor(process, STILL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new MediaException("Thumbnail render timed out");
             }
