@@ -244,7 +244,7 @@
   "prefs.channelBrief": "Channel brief (used for AI topic ideas)",
   "prefs.channelBriefHelp": "Your niche, audience and tone in a few sentences. The autopilot and \"Suggest with AI\" pick topics that fit it.",
   "prefs.host": "Talking logo host",
-  "prefs.hostHelp": "Your channel logo (ChannelAssets/DownRightTalkingMouth.mp4) pops in at the opening, on the narrator's questions and at the outro, with its mouth moving to the voice.",
+  "prefs.hostHelp": "Your channel logo (assets/channel/DownRightTalkingMouth.mp4) pops in at the opening, on the narrator's questions and at the outro, with its mouth moving to the voice.",
   "prefs.clips": "Real footage of the work",
   "prefs.clipsHelp": "For videos about a film, series or anime: the app collects its trailers, teasers, TV spots and official clips (and any copy you put in storyforge-data\\library\\films), and shows the exact scene the narrator talks about, full screen and muted, under the commentary. A Content ID claim is still possible; QA lists every clip.",
   "prefs.clipShare": "Real footage, max share",

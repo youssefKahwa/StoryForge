@@ -139,7 +139,7 @@ enough to read as "he's talking", like a masked streamer.
   | 5. Counting on fingers | 11. Arms crossed, nodding |
   | 6. Slow "mind blown" | 12. Pointing to the side (at the footage) |
 
-- Save the results into `charachterBipath\Charachter\BiPathVideos`. The app picks them up by itself; if the folder
+- Save the results into `assets\character\BiPathVideos`. The app picks them up by itself; if the folder
   is empty, it uses the free still-pose method.
 - One generation session gives you a library that lasts for all future videos.
 - Check: if a clip has a visible watermark, crop it or regenerate it.

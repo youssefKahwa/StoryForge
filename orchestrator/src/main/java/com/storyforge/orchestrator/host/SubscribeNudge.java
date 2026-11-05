@@ -45,7 +45,7 @@ public class SubscribeNudge {
     private final Path logo;
 
     public SubscribeNudge(@Value("${storyforge.subscribe.enabled:true}") boolean enabled,
-                          @Value("${storyforge.character.dir:../charachterBipath/Charachter}") String characterDir) {
+                          @Value("${storyforge.character.dir:../assets/character}") String characterDir) {
         this.enabled = enabled;
         this.logo = Path.of(characterDir).toAbsolutePath().resolve("logochannel.jpg");
     }

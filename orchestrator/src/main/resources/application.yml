@@ -142,7 +142,7 @@ storyforge:
     pexels-api-key: ${PEXELS_API_KEY:}
     pixabay-api-key: ${PIXABAY_API_KEY:}
   host:
-    video: ../ChannelAssets/DownRightTalkingMouth.mp4
+    video: ../assets/channel/DownRightTalkingMouth.mp4
   clips:
     enabled: false
   youtube:

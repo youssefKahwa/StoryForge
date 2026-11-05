@@ -13,19 +13,8 @@ library/**/*.flac
 .vscode/
 *.stackdump
 
-# Owner's channel media (large binaries stay local)
-ChannelAssets/*.mp4
+# Owner media (channel logo, talking mouth, character pictures and clips, Veo prompts): large, kept local
+assets/
 
-# Owner notes
-linkexempletoseetest.txt
-
-# Owner media (character images and clips), like ChannelAssets: kept out of git
-charachterBipath/
-
-# Subscribe animation previews (local media)
-subscribe-examples/
-
-# Intro / outro previews (local media)
-intro-examples/
-outro-examples/
-mouth-examples/
+# Previews to choose from (intro, outro, mouth, subscribe, styles) and the owner's test links
+examples/

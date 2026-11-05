@@ -79,6 +79,9 @@ class TtsRequest(BaseModel):
     speed: float = Field(1.0, ge=0.5, le=2.0)
     lang: str = "en-us"
     out_path: str
+    # Talk, don't read: see natural_speech().
+    natural: bool = True
+    breaths: bool = False
 
 
 class AlignRequest(BaseModel):
@@ -467,12 +470,113 @@ def health():
     return {"status": "ok", "whisper_model": WHISPER_MODEL, "models_dir": str(MODELS_DIR)}
 
 
+SENTENCE = re.compile(r"[^.?!]+(?:\.\.\.|[.?!]+)?\s*")
+_breath = None
+
+
+def _quiet_runs(audio: np.ndarray, thr_db: float = -36, hop_ms: int = 10):
+    hop = int(SAMPLE_RATE * hop_ms / 1000)
+    n = len(audio) // hop
+    if n == 0:
+        return []
+    rms = np.sqrt(np.mean(audio[:n * hop].reshape(n, hop) ** 2, axis=1) + 1e-12)
+    quiet = 20 * np.log10(rms / (rms.max() + 1e-9)) < thr_db
+    runs, i = [], 0
+    while i < n:
+        if quiet[i]:
+            j = i
+            while j < n and quiet[j]:
+                j += 1
+            runs.append((i * hop, j * hop))
+            i = j
+        else:
+            i += 1
+    return runs
+
+
+def _tighten(audio: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Trim the ends, and shorten every pause inside the sentence (Kokoro stops 250-500 ms at each comma) to a
+    breath-length 60-110 ms."""
+    runs = _quiet_runs(audio)
+    if runs and runs[0][0] == 0:
+        audio = audio[max(0, runs[0][1] - int(0.03 * SAMPLE_RATE)):]
+        runs = _quiet_runs(audio)
+    if runs and runs[-1][1] >= len(audio) - int(0.011 * SAMPLE_RATE):
+        audio = audio[:runs[-1][0] + int(0.06 * SAMPLE_RATE)]
+        runs = _quiet_runs(audio)
+    out, pos = [], 0
+    for start, end in runs:
+        if end - start < int(0.09 * SAMPLE_RATE) or start == 0 or end >= len(audio):
+            continue
+        keep = int(rng.uniform(0.06, 0.11) * SAMPLE_RATE)
+        out.append(audio[pos:start + keep // 2])
+        pos = end - keep // 2
+    out.append(audio[pos:])
+    return np.concatenate(out)
+
+
+def breath_sample():
+    """A soft CC0 inhale (Freesound 151919 "Inhale" by carroll27), library/voice/breath.wav; None when missing."""
+    global _breath
+    if _breath is None:
+        path = DATA_DIR / "library" / "voice" / "breath.wav"
+        if not path.is_file():
+            return None
+        audio, rate = sf.read(str(path), dtype="float32", always_2d=True)
+        mono = audio.mean(axis=1)
+        if rate != SAMPLE_RATE:
+            t = np.arange(0, len(mono) * SAMPLE_RATE / rate) * rate / SAMPLE_RATE
+            mono = np.interp(t, np.arange(len(mono)), mono).astype(np.float32)
+        _breath = mono / (np.abs(mono).max() + 1e-9)
+    return _breath
+
+
+def natural_speech(text: str, style, speed: float, lang: str, breaths: bool) -> np.ndarray:
+    """Talking, not reading. Kokoro voices a whole paragraph with the same long stop at every comma and full stop,
+    which sounds read aloud. A YouTuber's voice-over is edited tight. So: each sentence is voiced on its own with a
+    slightly different pace (short punch lines a touch slower), one- or two-word fragments ("Okay.", "Sir.") flow
+    into the next sentence, pauses inside a sentence shrink to a breath, sentences follow each other after
+    110-190 ms (a little longer after a question or "..."), with a small loudness variation, and optionally a soft
+    breath before some sentences. The variations are seeded by the text, so a re-run keeps the same pacing."""
+    rng = np.random.default_rng(zlib.crc32(text.encode("utf-8")))
+    sentences = []
+    for part in (p.strip() for p in SENTENCE.findall(text)):
+        if not part:
+            continue
+        if sentences and len(sentences[-1].split()) <= 2 and not sentences[-1].endswith(("?", "...")):
+            sentences[-1] = sentences[-1] + " " + part
+        else:
+            sentences.append(part)
+    breath = breath_sample() if breaths else None
+    parts, previous = [], ""
+    for k, sentence in enumerate(sentences):
+        pace = speed * (0.97 if len(sentence.split()) <= 3 else rng.uniform(0.99, 1.07))
+        samples, rate = kokoro().create(sentence, voice=style, speed=pace, lang=lang)
+        if rate != SAMPLE_RATE:
+            raise HTTPException(status_code=500, detail=f"unexpected sample rate {rate}")
+        audio = _tighten(np.asarray(samples, dtype=np.float32), rng)
+        audio = audio / (np.abs(audio).max() + 1e-9) * 0.85 * rng.uniform(0.88, 1.0)
+        if k:
+            gap = rng.uniform(0.25, 0.32) if previous.endswith(("?", "...")) else rng.uniform(0.11, 0.19)
+            if breath is not None and rng.random() < 0.3:
+                parts.append(np.zeros(int(max(0.0, gap - len(breath) / SAMPLE_RATE) * SAMPLE_RATE), np.float32))
+                parts.append(breath * 0.06)
+            else:
+                parts.append(np.zeros(int(gap * SAMPLE_RATE), np.float32))
+        parts.append(audio)
+        previous = sentence
+    return np.concatenate(parts) if parts else np.zeros(1, dtype=np.float32)
+
+
 @app.post("/tts")
 def tts(request: TtsRequest):
     out = inside_data_dir(request.out_path)
     parts = []
     for segment in request.segments:
-        if segment.text and segment.text.strip():
+        if segment.text and segment.text.strip() and request.natural:
+            parts.append(natural_speech(segment.text.strip(), voice_style(request.voice), request.speed, request.lang,
+                                        request.breaths))
+        elif segment.text and segment.text.strip():
             samples, rate = kokoro().create(segment.text.strip(), voice=voice_style(request.voice), speed=request.speed,
                                             lang=request.lang)
             if rate != SAMPLE_RATE:

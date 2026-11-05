@@ -72,7 +72,7 @@ Fair-use trailer clips: Settings → Preferences → "Fair-use trailer clips" (o
 or anime the app picks a few short, muted moments from the official trailer. Before publishing, watch them (QA
 lists each one). A Content ID claim can still happen; it usually only moves that video's ad money to the studio.
 
-Your talking logo: `ChannelAssets/DownRightTalkingMouth.mp4` is used automatically (Settings → Preferences →
+Your talking logo: `assets/channel/DownRightTalkingMouth.mp4` is used automatically (Settings → Preferences →
 "Talking logo host" to switch it off). Replace the file with another logo video of the same layout to change it.
 
 ## 5. How the app runs: only when you open it

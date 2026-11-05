@@ -105,7 +105,7 @@ public class CharacterHost {
     private final StoryForgeProperties.Upscaler upscaler;
 
     public CharacterHost(FfmpegService ffmpeg, LlmRouter llm, JsonMapper json, StoryForgeProperties properties,
-                         @Value("${storyforge.character.dir:../charachterBipath/Charachter}") String characterDir) {
+                         @Value("${storyforge.character.dir:../assets/character}") String characterDir) {
         this.ffmpeg = ffmpeg;
         this.llm = llm;
         this.json = json;

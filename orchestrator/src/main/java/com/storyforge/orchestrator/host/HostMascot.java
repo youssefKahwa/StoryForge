@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * The channel's talking logo (ChannelAssets). Frames are cut out once (circle crop) and cached in the library with
+ * The channel's talking logo (assets/channel). Frames are cut out once (circle crop) and cached in the library with
  * a per-frame mouth openness score, measured from dark and red pixels in the mouth area.
  */
 @Component
@@ -40,7 +40,7 @@ public class HostMascot {
     private final int[] mouthBox;
 
     public HostMascot(FfmpegService ffmpeg, StoryForgeProperties properties,
-                      @Value("${storyforge.host.video:../ChannelAssets/DownRightTalkingMouth.mp4}") String video,
+                      @Value("${storyforge.host.video:../assets/channel/DownRightTalkingMouth.mp4}") String video,
                       @Value("${storyforge.host.crop:760:760:620:160}") String crop,
                       @Value("${storyforge.host.size:300}") int size,
                       @Value("${storyforge.host.mouth-box:110,150,80,55}") String mouthBox) {

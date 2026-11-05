@@ -199,7 +199,7 @@ tones), so there are no copyright problems.
 - Captions can be burned in (Settings). A captions file (`captions.srt`) is always exported.
 
 ### 7.4 The talking logo (host)
-Your `ChannelAssets\DownRightTalkingMouth.mp4` logo appears in a circle at the bottom right at chosen moments
+Your `assets\channel\DownRightTalkingMouth.mp4` logo appears in a circle at the bottom right at chosen moments
 (questions, key lines). Its mouth moves with the loudness of the narration (lip-sync). It can be switched off in
 Settings.
 

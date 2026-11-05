@@ -75,10 +75,10 @@ public class AudioMixStage implements StageWorker {
     private static final double AMBIENCE_MEAN_DB = -40;
     private static final double CUE_PEAK_DB = -17;
     /** Sounds the owner picked by ear (Freesound ids, CC0): "FX - Swoosh - Slow", "Mouse Click",
-     *  "Reward Notification 3_1", "ppop". */
+     *  "Soft-Notifications - Bell - HighDing" (the classic one-strike notification ding most channels use), "ppop". */
     private static final long SWOOSH_ID = 475133;
     private static final long CLICK_ID = 825193;
-    private static final long CHIME_ID = 504784;
+    private static final long CHIME_ID = 571512;
     private static final long POP_ID = 527522;
     /** Chapter card on screen (LongForm CHAPTER_FRAMES at 30 fps). */
     private static final double CHAPTER_SECONDS = 3.5;

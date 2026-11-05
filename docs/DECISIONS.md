@@ -266,7 +266,7 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
     screen (corner caption) and in the description ("Photos and footage", compact form if over 5,000 chars).
     Photos render as prints over a blurred copy; footage is cut to the shot length, muted, graded.
   - Film/anime clips stay out of the automatic pipeline (`legal.no_film_material` remains CRITICAL).
-  - Talking logo host from `ChannelAssets/DownRightTalkingMouth.mp4`: circle-cropped frames cached once; mouth
+  - Talking logo host from `assets/channel/DownRightTalkingMouth.mp4`: circle-cropped frames cached once; mouth
     frame per video frame chosen from narration loudness (openness measured from dark/red mouth pixels); pops in at
     the opening, rhetorical questions (>= 45 s apart) and the outro, <= 20% of runtime. Preference `hostMascot`.
 - Consequences: more authentic, less "AI slop" risk; Commons photos are often small (600-1600 px), hence the print
