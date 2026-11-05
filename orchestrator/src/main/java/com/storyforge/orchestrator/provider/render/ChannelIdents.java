@@ -170,11 +170,13 @@ public class ChannelIdents {
         return ts;
     }
 
-    /** One part: 1080p30 yuv420p H.264 without B-frames, AAC 48 kHz stereo, MPEG-TS (joins cleanly by copy). */
+    /** One part: 1080p30 (CFR) yuv420p H.264 without B-frames, AAC 48 kHz stereo, MPEG-TS (joins cleanly by copy). */
     private void encode(List<String> input, Path out) {
         List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
         args.addAll(input);
-        args.addAll(List.of("-vf", "fps=30,scale=1920:1080,setsar=1,format=yuv420p",
+        // No video filter: the rendered video and the intro/outro already are 1080p, 30 fps, yuv420p. A filter here
+        // (fps=30, or setpts after a seek) lost frames: one every few seconds, or the last 1.4 s of a cut.
+        args.addAll(List.of("-pix_fmt", "yuv420p",
                 "-af", "aformat=sample_rates=48000:channel_layouts=stereo", "-c:v", "libx264", "-preset", "veryfast",
                 "-crf", "19", "-bf", "0", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-f", "mpegts",
                 out.toString()));
