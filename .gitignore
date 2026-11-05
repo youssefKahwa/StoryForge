@@ -24,3 +24,7 @@ charachterBipath/
 
 # Subscribe animation previews (local media)
 subscribe-examples/
+
+# Intro / outro previews (local media)
+intro-examples/
+outro-examples/

@@ -3,6 +3,7 @@ import { AbsoluteFill, Composition, Freeze, Img, Still, useCurrentFrame } from '
 import { LongForm } from './LongForm';
 import { NUDGE_FRAMES, SubscribeDemo } from './components/SubscribeNudge';
 import { HostBubble } from './components/HostBubble';
+import { ChannelIdent } from './components/ChannelIdent';
 import { Short } from './Short';
 import { Thumbnail } from './Thumbnail';
 
@@ -118,6 +119,16 @@ export const Root = () => (
       durationInFrames={60}
       defaultProps={{ bg: null, framePattern: '', frames: [0] }}
       calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.frames.length) })}
+    />
+    <Composition
+      id="IdentDemo"
+      component={ChannelIdent}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={150}
+      defaultProps={{ kind: 'intro', variant: 'logo_reveal', logo: '', mouthPattern: '', mouth: [0], hostClip: '', durationInFrames: 150 }}
+      calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.durationInFrames) })}
     />
     <Still
       id="Thumbnail"
