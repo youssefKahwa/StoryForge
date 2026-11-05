@@ -297,108 +297,96 @@ const EndScreenOutro = ({ logo }) => {
   );
 };
 
-/** "Which path would you take?": a comment card where a viewer types an answer (an illustration, no real user). */
-const CommentCard = ({ frame, fps, start, end }) => {
-  const s = spring({ frame: frame - start, fps, config: { damping: 15, stiffness: 120 } });
-  const out = interpolate(frame, [end - 12, end], [0, 1], clamp);
-  const answer = 'Path 2. No doubt.';
-  const typingFrom = start + 26;
-  const shown = Math.floor(interpolate(frame, [typingFrom, typingFrom + answer.length * 1.6], [0, answer.length], clamp));
-  const dots = frame < typingFrom && frame > start + 8;
-  return (
-    <div style={{
-      position: 'absolute', left: 1000, top: 405, width: 660, padding: '26px 30px', borderRadius: 22,
-      background: 'rgba(14,20,30,0.82)', border: '1px solid rgba(255,255,255,0.16)', boxShadow: '0 24px 60px rgba(0,0,0,0.55)',
-      backdropFilter: 'blur(14px)', opacity: s * (1 - out), transform: `translateX(${(1 - s) * 300 + out * 200}px)`,
-      fontFamily: body, color: '#fff',
-    }}>
-      <div style={{ fontSize: 16, letterSpacing: '0.22em', color: 'rgba(240,240,240,0.55)', fontWeight: 700 }}>COMMENTS</div>
-      <div style={{ fontSize: 30, fontWeight: 700, margin: '10px 0 18px' }}>Which path would you take?</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: 52, background: 'linear-gradient(135deg, #3a4a60, #1f2a38)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-          <svg width={30} height={30} viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="#9fb3c8" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="#9fb3c8" /></svg>
-        </div>
-        <div style={{
-          flex: 1, borderBottom: `2px solid ${BRAND.sky}`, paddingBottom: 8, fontSize: 28, fontWeight: 600, minHeight: 40,
-        }}>
-          {dots ? <span style={{ color: 'rgba(240,240,240,0.6)', letterSpacing: '0.2em' }}>{'.'.repeat(1 + (Math.floor(frame / 6) % 3))}</span>
-            : shown === 0 ? <span style={{ color: 'rgba(240,240,240,0.4)' }}>Add a comment...</span>
-              : <>{answer.slice(0, shown)}{shown < answer.length && <span style={{ color: BRAND.sky }}>|</span>}</>}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 /**
- * The talking logo acts out its outro: "that's it for today" (a line draws into it), "tell me in the comments which
- * path you would have taken" (two paths branch out of it, a viewer types an answer), "subscribe" (the channel's
- * subscribe pill is clicked), "see you on the next one" (it slides back and shrinks into the end-screen circle).
- * beats = video frames where the comment, the subscribe and the way back start (from the voice's sentences).
+ * The outro: the intro's two paths come back from the left and meet in one point, the meeting explodes (flash,
+ * shockwaves, sparks) and the logo is born from it; the subscribe pill is clicked under it; then the logo flies into
+ * the end-screen circle. No talking mouth. beats (video frames, from the voice): bang = the paths meet,
+ * subscribe = the pill comes in, fly = the logo goes to the end screen.
  */
-const TalkingOutro = ({ logo, mouthPattern, mouth, beats }) => {
+const PathsOutro = ({ logo, beats }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const talkEnd = mouth.length - 20;
-  // back: when the logo returns to the centre; by default it flies from the left straight into the end screen.
-  const b = { comment: Math.round(talkEnd * 0.2), subscribe: Math.round(talkEnd * 0.53), back: 100000, ...beats };
+  const b = { bang: 150, subscribe: 171, fly: 312, ...beats };
+  const M = [960, 450];
   const glide = { ...clamp, easing: Easing.inOut(Easing.cubic) };
-  const left = interpolate(frame, [b.comment - 4, b.comment + 16], [0, 1], glide)
-    - interpolate(frame, [b.back, b.back + 20], [0, 1], glide);
-  const move = interpolate(frame, [talkEnd, talkEnd + 24], [0, 1], glide);
-  const talkSize = 440 - 80 * left;
-  const size = talkSize - (talkSize - SUB.r * 2) * move;
-  const baseX = 960 - 440 * left;
-  const cx = baseX + (SUB.x - baseX) * move;
-  const cy = 500 + (SUB.y - 500) * move;
-  // The paths: a trunk draws into the logo, then two branches grow out of it while the comment question is asked.
-  const trunk = interpolate(frame, [4, 30], [0, 1], glide);
-  const branch = interpolate(frame, [b.comment + 6, b.comment + 34], [0, 1], glide);
-  const pathsOut = interpolate(frame, [b.subscribe - 12, b.subscribe + 4], [1, 0], clamp);
-  const upper = `M ${baseX} 500 C ${baseX + 380} 500, ${baseX + 520} 175, 1960 165`;
-  const lower = `M ${baseX} 500 C ${baseX + 380} 500, ${baseX + 520} 825, 1960 835`;
-  const len = 1700;
-  const pulse = (phase) => 0.5 + 0.5 * Math.max(0, Math.sin((frame - b.comment) / 9 + phase));
-  const label = (text, y, glow, color) => (
-    <div style={{
-      position: 'absolute', right: 70, top: y, padding: '8px 20px', borderRadius: 999, fontFamily: headline, fontSize: 30,
-      color: '#0b0f17', background: color, opacity: branch * pathsOut,
-      boxShadow: `0 0 ${10 + 26 * glow}px ${color}`, transform: `scale(${0.92 + 0.12 * glow})`,
-    }}>{text}</div>
-  );
+  // The paths draw in two moves: halfway while "that's it for today", the rest into the meeting point.
+  const draw = interpolate(frame, [4, 48], [0, 0.55], glide) + interpolate(frame, [b.bang - 48, b.bang - 6], [0, 0.45], glide);
+  const len = 1250;
+  const upper = `M -40 170 C 420 170, 640 ${M[1]}, ${M[0]} ${M[1]}`;
+  const lower = `M -40 910 C 420 910, 640 ${M[1]}, ${M[0]} ${M[1]}`;
+  const pathsOut = interpolate(frame, [b.bang, b.bang + 10], [1, 0], clamp);
+  const pulse = (phase) => 0.5 + 0.5 * Math.max(0, Math.sin(frame / 9 + phase));
+  const labels = interpolate(frame, [56, 70], [0, 1], clamp) * pathsOut;
+  // Light gathers where the paths meet, then the bang.
+  const charge = interpolate(frame, [b.bang - 14, b.bang], [0, 1], { ...clamp, easing: Easing.in(Easing.quad) }) * pathsOut;
+  const t = frame - b.bang;
+  const flash = interpolate(t, [0, 2, 14], [0, 0.95, 0], clamp);
+  const shake = t >= 0 && t < 12 ? (random(`k${frame}`) - 0.5) * 34 * (1 - t / 12) : 0;
+  const born = spring({ frame: t - 2, fps, config: { damping: 9, stiffness: 120, mass: 0.8 } });
+  const fly = interpolate(frame, [b.fly, b.fly + 24], [0, 1], glide);
+  const logoSize = 340 - (340 - SUB.r * 2) * fly;
+  const lx = M[0];
+  const ly = M[1] + (SUB.y - M[1]) * fly;
+  const float = Math.sin(frame / 14) * 5 * (1 - fly);
   return (
     <AbsoluteFill style={{ opacity: fadeOut(frame, durationInFrames, 20) }}>
       <Night snow={80} />
-      <svg width={1920} height={1080} style={{ position: 'absolute', inset: 0, opacity: move < 1 ? 1 - move : 0 }}>
-        <line x1={-20} y1={500} x2={-20 + (baseX + 20) * trunk} y2={500} stroke="#fff" strokeWidth={7} strokeLinecap="round"
-          style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.8))' }} />
-        <g opacity={pathsOut}>
-          <path d={upper} fill="none" stroke={BRAND.sky} strokeWidth={7} strokeLinecap="round" strokeDasharray={len}
-            strokeDashoffset={(1 - branch) * len} style={{ filter: `drop-shadow(0 0 ${8 + 14 * pulse(0)}px ${BRAND.sky})` }} />
-          <path d={lower} fill="none" stroke="#fff" strokeWidth={7} strokeLinecap="round" strokeDasharray={len}
-            strokeDashoffset={(1 - branch) * len}
-            style={{ filter: `drop-shadow(0 0 ${8 + 14 * pulse(Math.PI)}px rgba(255,255,255,0.9))` }} />
-        </g>
-      </svg>
-      {label('PATH 1', 120, pulse(0), BRAND.sky)}
-      {label('PATH 2', 880, pulse(Math.PI), '#f0f0f0')}
-      <CommentCard frame={frame} fps={fps} start={b.comment + 12} end={b.subscribe - 2} />
+      <AbsoluteFill style={{ transform: `translate(${shake}px, ${shake * 0.6}px)` }}>
+        <svg width={1920} height={1080} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+          <g opacity={pathsOut}>
+            <path d={upper} fill="none" stroke={BRAND.sky} strokeWidth={8} strokeLinecap="round" strokeDasharray={len}
+              strokeDashoffset={(1 - draw) * len} style={{ filter: `drop-shadow(0 0 ${8 + 16 * pulse(0)}px ${BRAND.sky})` }} />
+            <path d={lower} fill="none" stroke="#fff" strokeWidth={8} strokeLinecap="round" strokeDasharray={len}
+              strokeDashoffset={(1 - draw) * len}
+              style={{ filter: `drop-shadow(0 0 ${8 + 16 * pulse(Math.PI)}px rgba(255,255,255,0.9))` }} />
+          </g>
+          {charge > 0 && (
+            <circle cx={M[0]} cy={M[1]} r={10 + 60 * charge} fill="#fff" opacity={0.9 * charge}
+              style={{ filter: `drop-shadow(0 0 ${30 * charge}px ${BRAND.sky}) drop-shadow(0 0 ${60 * charge}px #fff)` }} />
+          )}
+          {[0, 5, 11].map((delay, i) => {
+            const k = interpolate(t - delay, [0, 34], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
+            return t - delay >= 0 && k < 1 ? (
+              <circle key={i} cx={M[0]} cy={M[1]} r={40 + 1000 * k} fill="none"
+                stroke={i === 1 ? BRAND.sky : '#fff'} strokeWidth={14 * (1 - k) + 1} opacity={0.85 * (1 - k)} />
+            ) : null;
+          })}
+          {Array.from({ length: 46 }).map((_, i) => {
+            const angle = random(`a${i}`) * Math.PI * 2;
+            const speed = 300 + random(`v${i}`) * 700;
+            const k = interpolate(t, [0, 40], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
+            const r = 2 + random(`r${i}`) * 5;
+            return t >= 0 && k < 1 ? (
+              <circle key={`p${i}`} cx={M[0] + Math.cos(angle) * speed * k} cy={M[1] + Math.sin(angle) * speed * k}
+                r={r * (1 - 0.6 * k)} fill={i % 3 === 0 ? BRAND.sky : '#fff'} opacity={1 - k} />
+            ) : null;
+          })}
+        </svg>
+        {['PATH 1', 'PATH 2'].map((text, i) => (
+          <div key={text} style={{
+            position: 'absolute', left: 70, top: i === 0 ? 92 : 945, padding: '8px 20px', borderRadius: 999,
+            fontFamily: headline, fontSize: 30, color: '#0b0f17', background: i === 0 ? BRAND.sky : '#f0f0f0',
+            opacity: labels, boxShadow: `0 0 ${10 + 24 * pulse(i * Math.PI)}px ${i === 0 ? BRAND.sky : '#ffffff'}`,
+          }}>{text}</div>
+        ))}
+        {t >= 0 && fly < 1 && (
+          <div style={{
+            position: 'absolute', left: lx - logoSize / 2 - 22, top: ly - logoSize / 2 - 22 + float,
+            transform: `scale(${born})`,
+          }}>
+            <LogoDisc logo={logo} size={logoSize} frame={frame} glow={1 - fly * 0.6} />
+          </div>
+        )}
+      </AbsoluteFill>
       <Sequence from={b.subscribe} durationInFrames={NUDGE_FRAMES} layout="none">
-        <AbsoluteFill style={{ transform: 'translate(-250px, -400px) scale(1.15)', transformOrigin: '100% 100%' }}>
+        <AbsoluteFill style={{ transform: 'translate(-500px, -175px)' }}>
           <SubscribeNudge variant="glass" logo={logo} />
         </AbsoluteFill>
       </Sequence>
-      {frame >= talkEnd && (
-        <EndLayout logo={logo} frame={frame} fps={fps} start={talkEnd + 10} heading="See you on the next path" />
+      {frame >= b.fly && (
+        <EndLayout logo={logo} frame={frame} fps={fps} start={b.fly + 10} heading="See you on the next path" />
       )}
-      {move < 1 && (
-        <div style={{ position: 'absolute', left: cx - size / 2 - 22, top: cy - size / 2 - 22 }}>
-          <BigTalker mouthPattern={mouthPattern} mouth={mouth} frame={frame} fps={fps} size={size} />
-        </div>
-      )}
+      <AbsoluteFill style={{ backgroundColor: '#fff', opacity: flash, pointerEvents: 'none' }} />
     </AbsoluteFill>
   );
 };
@@ -454,7 +442,7 @@ const CinematicOutro = ({ logo }) => {
 };
 
 const INTROS = { logo_reveal: LogoReveal, two_paths: TwoPaths, talking_logo: TalkingIntro, masked_host: MaskedHostIntro, glitch: GlitchIntro };
-const OUTROS = { end_screen: EndScreenOutro, talking_logo: TalkingOutro, masked_host: MaskedHostOutro, cinematic: CinematicOutro };
+const OUTROS = { end_screen: EndScreenOutro, paths: PathsOutro, masked_host: MaskedHostOutro, cinematic: CinematicOutro };
 
 export const ChannelIdent = ({ kind = 'intro', variant, ...props }) => {
   const Variant = (kind === 'outro' ? OUTROS : INTROS)[variant] || (kind === 'outro' ? EndScreenOutro : LogoReveal);
