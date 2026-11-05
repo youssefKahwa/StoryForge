@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.2.0
 tier: fast
 ---
 ## system
@@ -15,7 +15,9 @@ Narration:
 
 Return:
 {"era": "<period, region and material culture in one sentence: clothing, technology, architecture>",
- "look": "<one sentence: lighting, colour mood and lens feel shared by every image>",
+ "look": "<one sentence: lighting, colour mood and lens feel shared by every image; when the video is about a film
+          or series, match that work's own colour palette and lighting so the pictures sit between its clips; always
+          with a visible light source, never murky>",
  "characters": [{"id": "<short id>", "name": "<who in the story>", "look": "<15-25 words: age range, build, clothing, colours, one distinctive item; anonymous, no face details>"}],
  "places": [{"id": "<short id>", "name": "<place in the story>", "look": "<15-25 words: landscape or interior, materials, weather, time of day>"}]}
 

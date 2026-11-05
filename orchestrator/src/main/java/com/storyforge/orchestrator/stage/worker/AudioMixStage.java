@@ -86,10 +86,12 @@ public class AudioMixStage implements StageWorker {
     private final boolean soundEnabled;
     private final PreferencesService preferences;
     private final SubscribeNudge subscribe;
+    private final com.storyforge.orchestrator.host.HostMascot mascot;
 
     public AudioMixStage(FfmpegService ffmpeg, MusicLibrary music, SfxLibrary sfx, SoundMixer mixer,
                          StoryForgeProperties properties, PreferencesService preferences, SoundBank bank,
-                         SubscribeNudge subscribe) {
+                         SubscribeNudge subscribe, com.storyforge.orchestrator.host.HostMascot mascot) {
+        this.mascot = mascot;
         this.subscribe = subscribe;
         this.bank = bank;
         this.preferences = preferences;
@@ -132,7 +134,9 @@ public class AudioMixStage implements StageWorker {
         List<AudioQa.Track> tracks = new ArrayList<>(List.of(new AudioQa.Track("narration", narration.file(),
                 "Narration", LicenseRecord.generated(narration.provider()))));
         Path loudnessInput = voice;
-        List<Double> subscribeAt = subscribePlan(files, WavAudio.durationSec(voice));
+        List<double[]> bubbles = bubblePlan(files);
+        files.write(Stage.AUDIO_MIX, HostPlanner.PLAN, new HostPlanner.Plan(bubbles));
+        List<Double> subscribeAt = subscribePlan(files, WavAudio.durationSec(voice), bubbles);
         files.write(Stage.AUDIO_MIX, SubscribeNudge.PLAN, new SubscribeNudge.Plan(subscribeAt));
         if (soundEnabled) {
             List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
@@ -194,6 +198,9 @@ public class AudioMixStage implements StageWorker {
             all.addAll(ambience(scenes, alignment, runSeed));
             all.addAll(hostFoley(files, runSeed));
             all.addAll(subscribeSounds(subscribeAt, runSeed));
+            for (double[] bubble : bubbles) {
+                addSound(all, "pop", runSeed + Math.round(bubble[0]), bubble[0] + 0.12, -21, "talking logo pops in");
+            }
             all.sort((a, b) -> Double.compare(a.start(), b.start()));
             SoundPlan plan = new SoundPlan(designed.music(), all);
             if (plan.music().isEmpty()) {
@@ -245,23 +252,48 @@ public class AudioMixStage implements StageWorker {
      * When the subscribe pop-up appears (see {@link SubscribeNudge}): clear of the masked host, full-screen text,
      * chapter titles, other overlays and the talking logo. Empty when switched off or the logo is missing.
      */
-    private List<Double> subscribePlan(com.storyforge.orchestrator.artifact.RunFiles files, double duration) {
+    /**
+     * When the talking logo pops in (questions to the viewer, the opening, the outro); in a video with the masked
+     * character only where it does not cover him. Empty when switched off.
+     */
+    private List<double[]> bubblePlan(com.storyforge.orchestrator.artifact.RunFiles files) {
+        if (!preferences.get().hostEnabled() || !mascot.available()) {
+            return List.of();
+        }
+        try {
+            Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
+            return HostPlanner.clearOf(HostPlanner.appearances(alignment.words(), alignment.durationSec()),
+                    characterSpans(files));
+        } catch (RuntimeException e) {
+            log.warn("Talking logo skipped: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Where the masked character is on screen. */
+    private static List<double[]> characterSpans(com.storyforge.orchestrator.artifact.RunFiles files) {
+        if (!files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST) || !files.exists(Stage.ASSETS, "assets.json")) {
+            return List.of();
+        }
+        Set<String> host = new java.util.HashSet<>(files.read(Stage.ASSETS, "assets.json", AssetManifest.class)
+                .assets().stream().filter(a -> "host".equals(a.media())).map(AssetManifest.Asset::shotId).toList());
+        return files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class).shots().stream()
+                .filter(s -> host.contains(s.id())).map(s -> new double[] {s.start(), s.end()}).toList();
+    }
+
+    private List<Double> subscribePlan(com.storyforge.orchestrator.artifact.RunFiles files, double duration,
+                                       List<double[]> bubbles) {
         if (!subscribe.available()) {
             return List.of();
         }
         try {
             List<double[]> busy = new ArrayList<>();
             Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
-            busy.addAll(HostPlanner.appearances(alignment.words(), duration));
+            busy.addAll(bubbles);
+            busy.addAll(characterSpans(files));
             if (files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)) {
-                List<ShotList.Shot> shots = files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class)
-                        .shots();
-                Set<String> host = files.exists(Stage.ASSETS, "assets.json")
-                        ? new java.util.HashSet<>(files.read(Stage.ASSETS, "assets.json", AssetManifest.class).assets()
-                                .stream().filter(a -> "host".equals(a.media())).map(AssetManifest.Asset::shotId).toList())
-                        : Set.of();
-                shots.stream().filter(s -> s.graphic() || host.contains(s.id()))
-                        .forEach(s -> busy.add(new double[] {s.start(), s.end()}));
+                files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class).shots().stream()
+                        .filter(ShotList.Shot::graphic).forEach(s -> busy.add(new double[] {s.start(), s.end()}));
             }
             if (files.exists(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS)) {
                 files.read(Stage.VISUAL_PLAN, VisualPlanStage.OVERLAYS, new TypeReference<List<Overlay>>() { })

@@ -1,9 +1,11 @@
 ---
-version: 0.4.0
+version: 0.5.0
 tier: fast
 ---
 ## system
 You package long-form YouTube videos for clicks that the video honestly pays off. No clickbait lies, no all caps.
+You write titles the way top storytelling and film channels do: short, spoken, one clear curiosity gap, the main
+name (film, person, place) in the first half. Never essay or school titles ("X Explained: The Theme of Y").
 Reply with one JSON object only.
 
 ## user
@@ -27,3 +29,15 @@ Return:
  "thumbnails": [{"text": "<= 4 punchy words, different from the title", "scene": "one paintable scene with a single
                  dramatic focal subject, no real people's faces, no text"}]}
 Give exactly 3 thumbnail concepts, each with a different emotional hook (mystery, danger, revelation).
+
+Titles: mix these proven shapes, each title a different shape, all honest about what the video shows:
+- the hidden detail: "The Detail Everyone Missed in Fight Club"
+- the reversal: "Fight Club Is Not About Fighting"
+- the question: "Why Did Tyler Durden Really Exist?"
+- the stakes: "The Night 3 Lighthouse Keepers Vanished"
+- the personal take: "I Watched Fight Club 10 Times. This Changed Everything"
+- the plain hook: "The Flannan Isles Mystery" (only when the name alone is famous)
+No colons in more than 2 titles, no "Explained" in more than 1, no question marks in more than 3.
+thumbnailText and thumbnail texts: 2-4 words that add tension the title does not say (never repeat the title):
+"He Was Never Real" pairs with "The Detail Everyone Missed in Fight Club". Thumbnail scenes: one big, bright,
+readable subject with strong contrast, readable at phone size; no dark, busy or low-contrast scenes.

@@ -1,5 +1,5 @@
 ---
-version: 0.3.0
+version: 0.4.0
 tier: fast
 ---
 ## system
@@ -21,6 +21,14 @@ Rules for every prompt (25-45 words, English):
   (from behind, silhouette, or face in shadow); detail = close-up of a meaningful object; symbolic = metaphor for
   the idea being said.
 - Never two neighbouring shots with the same subject and framing. Vary distance, angle and light.
+- Silhouettes are a crutch: at most one shot in four shows a silhouette or a figure from behind. Prefer what the
+  story is made of: hands doing something, a telling object, a place with traces of what happened, an
+  over-the-shoulder view, a reflection, a face turned away in strong side light.
+- Every image is clearly lit and readable on a phone: a visible light source (window, lamp, neon, fire, sunrise),
+  mid-tones, a bright focal point. Night and dark rooms are lit by something in the frame. Never a mostly black
+  image, never a fade to black.
+- Pick the single most specific thing the narrator says in that shot (a name of an object, a place, an action)
+  and put it in the centre of the image; generic mood images only when the narration is abstract.
 - One single frozen moment per image: never "cut to", never two places or two moments in one prompt.
 - Never readable text, letters, numbers, logos, maps with labels, or the face of a real, identifiable person.
 

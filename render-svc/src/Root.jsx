@@ -1,7 +1,8 @@
 import React from 'react';
-import { Composition, Freeze, Still, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Composition, Freeze, Img, Still, useCurrentFrame } from 'remotion';
 import { LongForm } from './LongForm';
 import { NUDGE_FRAMES, SubscribeDemo } from './components/SubscribeNudge';
+import { HostBubble } from './components/HostBubble';
 import { Short } from './Short';
 import { Thumbnail } from './Thumbnail';
 
@@ -49,6 +50,15 @@ const longFormMetadata = ({ props }) => ({
   width: props.edl.width,
   height: props.edl.height,
 });
+
+/** Preview of the talking logo over a still: props.framePattern is a URL with %04d, props.frames the mouth frames. */
+const HostBubbleDemo = ({ bg, framePattern, frames }) => (
+  <AbsoluteFill style={{ backgroundColor: '#000' }}>
+    {bg ? <Img src={bg} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+    <HostBubble appearance={{ frames }} durationInFrames={frames.length}
+      frameUrl={(i) => framePattern.replace('%04d', String(i + 1).padStart(4, '0'))} />
+  </AbsoluteFill>
+);
 
 export const Root = () => (
   <>
@@ -98,6 +108,16 @@ export const Root = () => (
       fps={30}
       durationInFrames={NUDGE_FRAMES + 20}
       defaultProps={{ variant: 'glass', bg: null, face: null, logo: null }}
+    />
+    <Composition
+      id="HostBubbleDemo"
+      component={HostBubbleDemo}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={60}
+      defaultProps={{ bg: null, framePattern: '', frames: [0] }}
+      calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.frames.length) })}
     />
     <Still
       id="Thumbnail"

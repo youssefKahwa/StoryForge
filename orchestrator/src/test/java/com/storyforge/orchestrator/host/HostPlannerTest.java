@@ -55,4 +55,14 @@ class HostPlannerTest {
         assertThat(frames.subList(35, 60)).doesNotContain(1);
         assertThat(frames.subList(35, 60)).contains(2);
     }
+
+    @Test
+    void talkingLogoNeverCoversTheMaskedCharacter() {
+        List<double[]> ranges = List.of(new double[] {5, 10}, new double[] {100, 106}, new double[] {588, 599.6});
+        List<double[]> character = List.of(new double[] {3, 8}, new double[] {106.5, 112});
+        List<double[]> kept = HostPlanner.clearOf(ranges, character);
+        assertThat(kept).hasSize(1);
+        assertThat(kept.get(0)[0]).isEqualTo(588);
+        assertThat(HostPlanner.clearOf(ranges, List.of())).hasSize(3);
+    }
 }

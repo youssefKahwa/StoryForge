@@ -292,6 +292,7 @@ public class SoundBank {
         map.put("film_burn", new Category(List.of("film projector", "projector start"), 0.8, 6, 2));
         map.put("click", new Category(List.of("mouse click", "button click"), 0.05, 1.0, 3));
         map.put("bell", new Category(List.of("reward notification", "crystal bell"), 0.3, 3, 3));
+        map.put("pop", new Category(List.of("bubble pop", "cartoon pop"), 0.05, 1.0, 3));
         map.put("chair", new Category(List.of("office chair creak", "cloth rustle"), 0.3, 3, 2));
         map.put("amb_room", new Category(List.of("room tone"), 20, 300, 3));
         map.put("amb_city", new Category(List.of("city ambience", "street traffic ambience"), 20, 300, 3));

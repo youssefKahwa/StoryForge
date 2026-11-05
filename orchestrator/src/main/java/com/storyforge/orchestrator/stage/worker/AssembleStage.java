@@ -69,14 +69,20 @@ public class AssembleStage implements StageWorker {
         return List.of("edl.json", "captions.srt", QaService.VIDEO);
     }
 
-    /** Adds the talking channel logo; any problem just leaves it out of this video. */
+    /**
+     * Adds the talking channel logo at the moments the audio mix planned (and gave a pop); in a video with the
+     * masked character only where it does not cover him. Any problem just leaves it out of this video.
+     */
     private Edl withHost(StageContext context, Edl edl, Alignment alignment) {
-        if (!preferences.get().hostEnabled() || !host.available()
-                || edl.shots().stream().anyMatch(shot -> "host".equals(shot.media()))) {
+        if (!preferences.get().hostEnabled() || !host.available()) {
             return edl;
         }
         try {
-            List<double[]> ranges = HostPlanner.appearances(alignment.words(), alignment.durationSec());
+            List<double[]> ranges = context.files().exists(Stage.AUDIO_MIX, HostPlanner.PLAN)
+                    ? context.files().read(Stage.AUDIO_MIX, HostPlanner.PLAN, HostPlanner.Plan.class).ranges()
+                    : HostPlanner.clearOf(HostPlanner.appearances(alignment.words(), alignment.durationSec()),
+                            edl.shots().stream().filter(shot -> "host".equals(shot.media()))
+                                    .map(shot -> new double[] {shot.start(), shot.end()}).toList());
             if (ranges.isEmpty()) {
                 return edl;
             }

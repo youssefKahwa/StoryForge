@@ -19,6 +19,12 @@ public final class HostPlanner {
     private static final double OUTRO_SECONDS = 12;
     private static final double SILENCE_DB = -42;
     private static final double FULL_OPEN_DB = -14;
+    private static final double CHARACTER_PAD = 1.5;
+    /** In audio_mix: the talking logo's moments, so assemble shows it exactly where the mix put its pop. */
+    public static final String PLAN = "host_bubbles.json";
+
+    public record Plan(List<double[]> ranges) {
+    }
 
     private HostPlanner() {
     }
@@ -109,6 +115,28 @@ public final class HostPlanner {
             }
         }
         return sentences;
+    }
+
+    /**
+     * The talking logo's moments in a video that also shows the masked character: the same moments as
+     * {@link #appearances}, minus any that would overlap the character on screen (with a second and a half to spare),
+     * so the logo keeps the questions to the viewer and the outro the character does not cover.
+     */
+    public static List<double[]> clearOf(List<double[]> ranges, List<double[]> character) {
+        List<double[]> kept = new ArrayList<>();
+        for (double[] range : ranges) {
+            boolean overlaps = false;
+            for (double[] shot : character) {
+                if (range[0] < shot[1] + CHARACTER_PAD && range[1] > shot[0] - CHARACTER_PAD) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (!overlaps) {
+                kept.add(range);
+            }
+        }
+        return kept;
     }
 
     private static double[] span(Sentence sentence, double duration) {

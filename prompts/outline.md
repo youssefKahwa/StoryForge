@@ -1,5 +1,5 @@
 ---
-version: 0.2.0
+version: 0.3.0
 tier: fast
 ---
 ## system
@@ -22,7 +22,13 @@ its points (merge or split parts to fit the runtime, give each beat a short id l
 taken from the strongest moment, keep plot recap under 40% of the runtime and spend the rest on the takes, the
 reactions and the analysis. Use the dossier to make the points precise. Without a blueprint, fill the beat sheet with
 dossier material.
+Every beat is built around ONE moment that the narrator will tell from the inside (a scene, an image, a choice,
+a line someone says): make it the first item of "points", starting with "MOMENT: ". The other points are what the
+narrator says about it (the take, the joke, the comparison, the question to the viewer), not a list of plot events;
+put at most three plot events in a beat. The hook beat's moment is the most striking image or line of the whole
+story, told cold, before any rating, spoiler warning or context.
 Chapter titles are curiosity-driven (never "Part 2"); not every beat needs one, but the first beat must have one.
+The rehook of a beat is a real open question that the next beat answers.
 Return:
 {"beats": [{"beat": "<beat id>", "chapterTitle": "... or null", "targetSeconds": 0, "summary": "...",
             "points": ["what this beat must say, in order"],
