@@ -1,9 +1,12 @@
 import React, { useCallback, useState } from 'react';
 import { Link } from 'gatsby';
 import {
-  Alert, Button, Card, Checkbox, Col, Descriptions, Empty, List, Row, Select, Space, Spin, Statistic, Tabs, Tag, Typography, message,
+  Alert, App, Button, Checkbox, Col, Dropdown, Empty, List, Modal, Row, Select, Space, Spin, Statistic, Tabs, Tag,
+  Typography,
 } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined, DownloadOutlined, MoreOutlined, PlayCircleOutlined, RedoOutlined, StopOutlined,
+} from '@ant-design/icons';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import ApiRoutes from '../api/ApiRoutes';
@@ -13,25 +16,71 @@ import PublishKitView from '../components/PublishKitView';
 import QaReportView from '../components/QaReportView';
 import RevisePanel from '../components/RevisePanel';
 import RunProgress from '../components/RunProgress';
-import RunStatusTag from '../components/RunStatusTag';
-import StageChips from '../components/StageChips';
+import StatusBadge from '../components/StatusBadge';
 import usePolling from '../hooks/usePolling';
+import useNotify from '../hooks/useNotify';
 import useRunFile from '../hooks/useRunFile';
 import {
   cancelRun, fetchRun, rerunStage, resumeRun, selectRunDetail, vetoRun,
 } from '../store/runs/runsSlice';
+import { minutes, relativeTime } from '../utils/time';
 
 const ACTIVE = ['QUEUED', 'RUNNING'];
 const RESUMABLE = ['FAILED', 'BLOCKED', 'CANCELLED'];
 
 const formatBytes = (bytes) => (bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
+/** Right of the player: thumbnails, title options and the description, each one click to copy. */
+const PublishPanel = ({ run, pkg, thumbnail }) => {
+  if (!pkg && !thumbnail) return null;
+  return (
+    <>
+      {thumbnail && (
+        <div className="sf-panel">
+          <div className="sf-panel-title"><FormattedMessage id="run.thumbnail" /></div>
+          <img className="thumbnail" alt="thumbnail" src={`${ApiRoutes.runFile(run.id, 'package', thumbnail.name)}?v=${thumbnail.sizeBytes}`} />
+          {pkg && (pkg.thumbnailAlternates || []).length > 0 && (
+            <Row gutter={8} className="thumb-alternates">
+              {pkg.thumbnailAlternates.map((path) => (
+                <Col span={12} key={path}>
+                  <img className="thumbnail" alt="alternate thumbnail" src={ApiRoutes.absolute(`/api/runs/${run.id}/files/${path}`)} />
+                </Col>
+              ))}
+            </Row>
+          )}
+        </div>
+      )}
+      {pkg && (
+        <div className="sf-panel">
+          <div className="sf-panel-title"><FormattedMessage id="run.titles" /></div>
+          {(pkg.titles || []).map((t) => (
+            <div className="sf-copy-row" key={t.title}>
+              <span className="sf-copy-text">{t.title}</span>
+              {t.score != null && <span className="sf-score">{t.score}</span>}
+              <Typography.Text copyable={{ text: t.title }} />
+            </div>
+          ))}
+          <div className="sf-panel-title" style={{ marginTop: 18 }}>
+            <FormattedMessage id="run.description" />
+            {' '}
+            <Typography.Text copyable={{ text: pkg.description }} />
+          </div>
+          <pre className="text-block" style={{ maxHeight: 260 }}>{pkg.description}</pre>
+        </div>
+      )}
+    </>
+  );
+};
+
 const RunPage = ({ location }) => {
   const intl = useIntl();
   const dispatch = useDispatch();
+  const notify = useNotify();
+  const { modal } = App.useApp();
   const id = Number(new URLSearchParams(location.search).get('id'));
   const stored = useSelector(selectRunDetail);
   const detail = stored && stored.run.id === id ? stored : null;
+  const [rerunOpen, setRerunOpen] = useState(false);
   const [rerunTarget, setRerunTarget] = useState(null);
   const [fresh, setFresh] = useState(false);
 
@@ -48,124 +97,96 @@ const RunPage = ({ location }) => {
   const publication = useRunFile(detail, 'publish', 'publication.json');
   const kit = useRunFile(detail, 'publish', 'kit.json');
 
-  const onFail = (error) => message.error(intl.formatMessage({ id: 'error.request' }, { message: error.message }));
+  const onFail = (error) => notify.error(intl.formatMessage({ id: 'error.request' }, { message: error.message }));
 
   if (!detail) {
     return (
       <AppLayout location={location}>
-        <Spin />
+        <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />
       </AppLayout>
     );
   }
 
   const { run } = detail;
+  const active = ACTIVE.includes(run.status);
   const video = detail.files.find((f) => f.stage === 'assemble' && f.name === 'final_16x9.mp4');
   const thumbnail = detail.files.find((f) => f.stage === 'package' && f.name === 'thumbnail.png');
+  const videoUrl = video ? `${ApiRoutes.runFile(run.id, 'assemble', video.name)}?v=${video.sizeBytes}` : null;
 
-  const overview = (
+  const cancel = () => modal.confirm({
+    title: intl.formatMessage({ id: 'run.cancelTitle' }),
+    content: intl.formatMessage({ id: 'run.cancelText' }),
+    okText: intl.formatMessage({ id: 'run.cancel' }),
+    okButtonProps: { danger: true },
+    onOk: () => dispatch(cancelRun({ id, onFail })),
+  });
+
+  const more = {
+    items: [
+      { key: 'rerun', icon: <RedoOutlined />, label: intl.formatMessage({ id: 'run.rerunMenu' }), disabled: run.status === 'RUNNING' },
+      ...(videoUrl ? [{ key: 'download', icon: <DownloadOutlined />, label: <a href={videoUrl} download><FormattedMessage id="kit.downloadVideo" /></a> }] : []),
+    ],
+    onClick: ({ key }) => { if (key === 'rerun') setRerunOpen(true); },
+  };
+
+  const details = (
     <>
       <Row gutter={16} className="stats-row">
-        <Col span={6}><Statistic title={intl.formatMessage({ id: 'run.cost' })} prefix="$" value={detail.totalCostUsd} precision={2} /></Col>
-        <Col span={6}><Statistic title={intl.formatMessage({ id: 'run.tokens' })} value={`${detail.totalInputTokens} / ${detail.totalOutputTokens}`} /></Col>
-        <Col span={6}><Statistic title={intl.formatMessage({ id: 'run.target' })} value={`${Math.round(run.targetSeconds / 6) / 10} min`} /></Col>
-        <Col span={6}><Statistic title={intl.formatMessage({ id: 'run.profile' })} value={run.profile} /></Col>
+        <Col xs={12} md={6}><Statistic title={intl.formatMessage({ id: 'run.cost' })} prefix="$" value={detail.totalCostUsd} precision={2} /></Col>
+        <Col xs={12} md={6}><Statistic title={intl.formatMessage({ id: 'run.tokens' })} value={`${detail.totalInputTokens} / ${detail.totalOutputTokens}`} /></Col>
+        <Col xs={12} md={6}><Statistic title={intl.formatMessage({ id: 'run.target' })} value={minutes(run.targetSeconds)} /></Col>
+        <Col xs={12} md={6}><Statistic title={intl.formatMessage({ id: 'run.profile' })} value={run.profile} /></Col>
       </Row>
       <ExecutionTable executions={detail.executions} />
+      <div className="sf-panel-title" style={{ marginTop: 24 }}><FormattedMessage id="run.tab.files" /></div>
+      <List
+        size="small"
+        dataSource={detail.files}
+        renderItem={(file) => (
+          <List.Item extra={formatBytes(file.sizeBytes)}>
+            <a href={ApiRoutes.absolute(file.url)} target="_blank" rel="noreferrer">{`${file.stage}/${file.name}`}</a>
+          </List.Item>
+        )}
+      />
     </>
   );
 
-  const videoTab = (
-    <Row gutter={24}>
-      <Col xs={24} xl={14}>
-        {video ? (
-          <video className="video-player" controls src={`${ApiRoutes.runFile(run.id, 'assemble', video.name)}?v=${video.sizeBytes}`} />
-        ) : <Empty description={<FormattedMessage id="run.noVideo" />} />}
-      </Col>
-      <Col xs={24} xl={10}>
-        {thumbnail && (
-          <Card size="small" title={<FormattedMessage id="run.thumbnail" />}>
-            <img className="thumbnail" alt="thumbnail" src={`${ApiRoutes.runFile(run.id, 'package', thumbnail.name)}?v=${thumbnail.sizeBytes}`} />
-            {pkg && (pkg.thumbnailAlternates || []).length > 0 && (
-              <Row gutter={8} className="thumb-alternates">
-                {pkg.thumbnailAlternates.map((path) => (
-                  <Col span={12} key={path}>
-                    <img className="thumbnail" alt="alternate thumbnail" src={ApiRoutes.absolute(`/api/runs/${run.id}/files/${path}`)} />
-                  </Col>
-                ))}
-              </Row>
-            )}
-          </Card>
-        )}
-        {pkg && (
-          <>
-            <Card size="small" title={<FormattedMessage id="run.titles" />}>
-              <List
-                size="small"
-                dataSource={pkg.titles}
-                renderItem={(t) => <List.Item extra={t.score}>{t.title}</List.Item>}
-              />
-            </Card>
-            <Card size="small" title={<FormattedMessage id="run.description" />}>
-              <pre className="text-block">{pkg.description}</pre>
-            </Card>
-          </>
-        )}
-      </Col>
-    </Row>
-  );
-
-  const filesTab = (
-    <List
-      size="small"
-      dataSource={detail.files}
-      renderItem={(file) => (
-        <List.Item extra={formatBytes(file.sizeBytes)}>
-          <a href={ApiRoutes.absolute(file.url)} target="_blank" rel="noreferrer">{`${file.stage}/${file.name}`}</a>
-        </List.Item>
-      )}
-    />
-  );
-
   return (
-    <AppLayout location={location}>
-      <Link to="/"><ArrowLeftOutlined /> <FormattedMessage id="run.back" /></Link>
-      <div className="page-header">
-        <Space direction="vertical" size={4}>
-          <Typography.Title level={3}>{`#${run.id} ${run.topicTitle}`}</Typography.Title>
-          <Space>
-            <RunStatusTag status={run.status} />
-            <Typography.Text type="secondary">{run.state}</Typography.Text>
-            {run.statusReason && <Typography.Text type="secondary">{run.statusReason}</Typography.Text>}
-          </Space>
-          <StageChips stages={run.stages} />
-        </Space>
+    <AppLayout location={location} title={run.topicTitle}>
+      <Link to="/" className="sf-back"><ArrowLeftOutlined /> <FormattedMessage id="run.back" /></Link>
+      <div className="sf-page-header">
+        <div style={{ minWidth: 0 }}>
+          <Typography.Title level={2} className="sf-page-title">{run.topicTitle}</Typography.Title>
+          <div className="sf-chips">
+            <StatusBadge status={run.status} inline />
+            <span className="sf-chip">{`#${run.id}`}</span>
+            <span className="sf-chip">{minutes(run.targetSeconds)}</span>
+            <span className="sf-chip">{intl.formatMessage({ id: `format.${run.format}` })}</span>
+            <span className="sf-chip">{relativeTime(run.createdAt)}</span>
+            {!active && <RunProgress run={run} />}
+          </div>
+          {run.statusReason && !active && run.status !== 'COMPLETED' && (
+            <Alert type={run.status === 'FAILED' ? 'error' : 'warning'} showIcon style={{ marginTop: 14 }} message={run.statusReason} />
+          )}
+        </div>
         <Space wrap>
-          {ACTIVE.includes(run.status) && (
-            <Button danger onClick={() => dispatch(cancelRun({ id, onFail }))}><FormattedMessage id="run.cancel" /></Button>
-          )}
+          {active && <Button danger icon={<StopOutlined />} onClick={cancel}><FormattedMessage id="run.cancel" /></Button>}
           {RESUMABLE.includes(run.status) && (
-            <Button type="primary" onClick={() => dispatch(resumeRun({ id, onFail }))}><FormattedMessage id="run.resume" /></Button>
+            <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => dispatch(resumeRun({ id, onFail }))}>
+              <FormattedMessage id="run.resume" />
+            </Button>
           )}
-          <Select
-            placeholder={intl.formatMessage({ id: 'run.rerun' })}
-            className="rerun-select"
-            value={rerunTarget}
-            onChange={setRerunTarget}
-            options={run.stages.map((s) => ({ value: s.stage, label: intl.formatMessage({ id: `stage.${s.stage}` }) }))}
-          />
-          <Checkbox checked={fresh} onChange={(e) => setFresh(e.target.checked)}><FormattedMessage id="run.fresh" /></Checkbox>
-          <Button
-            disabled={!rerunTarget || run.status === 'RUNNING'}
-            onClick={() => dispatch(rerunStage({ id, stage: rerunTarget, fresh, onFail }))}
-          >
-            <FormattedMessage id="run.rerun" />
-          </Button>
+          <Dropdown menu={more} trigger={['click']}>
+            <Button icon={<MoreOutlined />}><FormattedMessage id="run.more" /></Button>
+          </Dropdown>
         </Space>
       </div>
-      <RunProgress run={run} />
+
+      {active && <RunProgress run={run} />}
+
       {publication && (
         <Alert
-          className="run-meta"
+          style={{ marginTop: 16 }}
           type={publication.privacy === 'private-vetoed' ? 'warning' : 'info'}
           showIcon
           message={publication.privacy === 'private-vetoed'
@@ -184,41 +205,65 @@ const RunPage = ({ location }) => {
           )}
         />
       )}
-      <Descriptions size="small" column={3} className="run-meta">
-        <Descriptions.Item label="Format">{run.format}</Descriptions.Item>
-        <Descriptions.Item label="Language">{run.language}</Descriptions.Item>
-        <Descriptions.Item label="Created">{new Date(run.createdAt).toLocaleString()}</Descriptions.Item>
-      </Descriptions>
+
+      {videoUrl && (
+        <Row gutter={[24, 16]} style={{ marginTop: active ? 24 : 4 }}>
+          <Col xs={24} xl={15}>
+            <video className="sf-player" controls src={videoUrl} poster={thumbnail ? ApiRoutes.runFile(run.id, 'package', thumbnail.name) : undefined} />
+          </Col>
+          <Col xs={24} xl={9}>
+            <PublishPanel run={run} pkg={pkg} thumbnail={thumbnail} />
+          </Col>
+        </Row>
+      )}
+
       <Tabs
-        defaultActiveKey={kit ? 'kit' : 'overview'}
+        className="sf-tabs"
+        defaultActiveKey={kit ? 'kit' : (videoUrl ? 'revise' : 'script')}
         items={[
           { key: 'kit', label: intl.formatMessage({ id: 'run.tab.kit' }), children: <PublishKitView kit={kit} runId={run.id} /> },
           {
             key: 'revise',
             label: intl.formatMessage({ id: 'run.tab.revise' }),
-            children: (
-              <RevisePanel
-                run={run}
-                busy={ACTIVE.includes(run.status)}
-                videoUrl={video ? `${ApiRoutes.runFile(run.id, 'assemble', video.name)}?v=${video.sizeBytes}` : null}
-              />
-            ),
+            children: <RevisePanel run={run} busy={active} videoUrl={videoUrl} />,
           },
-          { key: 'overview', label: intl.formatMessage({ id: 'run.tab.overview' }), children: overview },
-          { key: 'video', label: intl.formatMessage({ id: 'run.tab.video' }), children: videoTab },
-          { key: 'qa', label: intl.formatMessage({ id: 'run.tab.qa' }), children: <QaReportView report={qaReport} /> },
           {
             key: 'script',
             label: intl.formatMessage({ id: 'run.tab.script' }),
             children: script ? <pre className="text-block">{script}</pre> : <Empty description={<FormattedMessage id="run.noScript" />} />,
           },
-          { key: 'files', label: intl.formatMessage({ id: 'run.tab.files' }), children: filesTab },
+          { key: 'qa', label: intl.formatMessage({ id: 'run.tab.qa' }), children: <QaReportView report={qaReport} /> },
+          { key: 'details', label: intl.formatMessage({ id: 'run.tab.details' }), children: details },
         ]}
       />
+
+      <Modal
+        open={rerunOpen}
+        title={intl.formatMessage({ id: 'run.rerunMenu' })}
+        okText={intl.formatMessage({ id: 'run.rerun' })}
+        okButtonProps={{ disabled: !rerunTarget }}
+        onCancel={() => setRerunOpen(false)}
+        onOk={() => {
+          dispatch(rerunStage({ id, stage: rerunTarget, fresh, onFail }));
+          setRerunOpen(false);
+        }}
+      >
+        <Space direction="vertical" className="full-width">
+          <Typography.Text type="secondary"><FormattedMessage id="run.rerunHelp" /></Typography.Text>
+          <Select
+            className="full-width"
+            placeholder={intl.formatMessage({ id: 'run.rerunPick' })}
+            value={rerunTarget}
+            onChange={setRerunTarget}
+            options={run.stages.map((s) => ({ value: s.stage, label: intl.formatMessage({ id: `stage.${s.stage}` }) }))}
+          />
+          <Checkbox checked={fresh} onChange={(e) => setFresh(e.target.checked)}><FormattedMessage id="run.fresh" /></Checkbox>
+        </Space>
+      </Modal>
     </AppLayout>
   );
 };
 
-export const Head = () => <title>Run · StoryForge</title>;
+export const Head = () => <title>Video · StoryForge</title>;
 
 export default RunPage;

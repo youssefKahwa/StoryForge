@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Button, Card, Col, Empty, Input, List, Popconfirm, Radio, Row, Select, Space, Spin, Tag, Typography, message,
+  Alert, Button, Card, Col, Empty, Input, List, Popconfirm, Radio, Row, Select, Space, Spin, Tag, Typography,
 } from 'antd';
+import useNotify from '../hooks/useNotify';
 import { AimOutlined, DeleteOutlined } from '@ant-design/icons';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
@@ -24,6 +25,7 @@ const clock = (seconds) => {
 
 const RevisePanel = ({ run, videoUrl, busy }) => {
   const intl = useIntl();
+  const message = useNotify();
   const dispatch = useDispatch();
   const t = (id, values) => intl.formatMessage({ id }, values);
   const player = useRef(null);

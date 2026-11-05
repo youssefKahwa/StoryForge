@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import {
-  Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Spin, Switch, message,
+  Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Spin, Switch,
 } from 'antd';
+import useNotify from '../hooks/useNotify';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -17,6 +18,7 @@ const ZONES = ['America/New_York', 'America/Los_Angeles', 'Europe/London', 'Euro
 
 const PreferencesCard = () => {
   const intl = useIntl();
+  const message = useNotify();
   const dispatch = useDispatch();
   const [form] = Form.useForm();
   const preferences = useSelector(selectPreferences);

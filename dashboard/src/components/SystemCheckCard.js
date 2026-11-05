@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, Button, Card, List, Space, Spin, Tag, Typography, message,
+  Alert, Button, Card, List, Space, Spin, Tag, Typography,
 } from 'antd';
+import useNotify from '../hooks/useNotify';
 import { ReloadOutlined } from '@ant-design/icons';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
@@ -13,6 +14,7 @@ const COLORS = {
 
 const SystemCheckCard = () => {
   const intl = useIntl();
+  const message = useNotify();
   const dispatch = useDispatch();
   const report = useSelector(selectSystemCheck);
   const [loading, setLoading] = useState(false);

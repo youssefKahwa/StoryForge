@@ -2,15 +2,19 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { navigate } from 'gatsby';
 import {
   Alert, Button, Card, Col, Collapse, Descriptions, Input, InputNumber, List, Radio, Row, Select, Space, Spin, Steps,
-  Tag, Typography, message,
+  Tag, Typography,
 } from 'antd';
-import { PlayCircleOutlined } from '@ant-design/icons';
+import {
+  BulbOutlined, CheckCircleFilled, PauseCircleOutlined, PlayCircleOutlined, YoutubeOutlined,
+} from '@ant-design/icons';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import ApiRoutes from '../api/ApiRoutes';
 import AppLayout from '../components/AppLayout';
+import PageHeader from '../components/PageHeader';
 import QuickStartCard from '../components/QuickStartCard';
 import usePolling from '../hooks/usePolling';
+import useNotify from '../hooks/useNotify';
 import { createRun } from '../store/runs/runsSlice';
 import { fetchPreferences } from '../store/settings/settingsSlice';
 import {
@@ -32,6 +36,8 @@ const NewVideoPage = ({ location }) => {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ topic: '', angle: '', minutes: 12, format: 'GREAT_STORIES', voice: null });
   const [playing, setPlaying] = useState(null);
+  const [mode, setMode] = useState('links');
+  const message = useNotify();
 
   const onFail = (error) => message.error(intl.formatMessage({ id: 'error.request' }, { message: error.message }));
   const pending = inspiration && inspiration.status === 'PENDING';
@@ -129,12 +135,19 @@ const NewVideoPage = ({ location }) => {
             onChange={(e) => setUrls(urls.map((u, j) => (j === i ? e.target.value : u)))}
           />
         ))}
-        <Collapse ghost>
-          <Collapse.Panel key="paste" header={intl.formatMessage({ id: 'wizard.inspiration.paste' })}>
-            <Typography.Text type="secondary"><FormattedMessage id="wizard.inspiration.pasteHint" /></Typography.Text>
-            <Input.TextArea rows={6} value={pasted} disabled={pending} onChange={(e) => setPasted(e.target.value)} />
-          </Collapse.Panel>
-        </Collapse>
+        <Collapse
+          ghost
+          items={[{
+            key: 'paste',
+            label: intl.formatMessage({ id: 'wizard.inspiration.paste' }),
+            children: (
+              <>
+                <Typography.Text type="secondary"><FormattedMessage id="wizard.inspiration.pasteHint" /></Typography.Text>
+                <Input.TextArea rows={6} value={pasted} disabled={pending} onChange={(e) => setPasted(e.target.value)} />
+              </>
+            ),
+          }]}
+        />
         {pending && <Alert type="info" showIcon icon={<Spin size="small" />} message={<FormattedMessage id="wizard.inspiration.working" />} />}
         {inspiration && inspiration.status === 'FAILED' && (
           <Alert type="error" showIcon message={<FormattedMessage id="wizard.inspiration.failed" />} description={inspiration.error} />
@@ -218,19 +231,34 @@ const NewVideoPage = ({ location }) => {
   const voiceStep = (
     <Card>
       <Typography.Paragraph type="secondary"><FormattedMessage id="wizard.voice.help" /></Typography.Paragraph>
-      <Radio.Group value={draft.voice} onChange={(e) => setDraft({ ...draft, voice: e.target.value })}>
-        <Space direction="vertical">
-          {voices.map((voice) => (
-            <Space key={voice.id}>
-              <Radio value={voice.id}>
-                {`${voice.label} · ${voice.gender} · ${voice.accent} · grade ${voice.grade}`}
-                {voice.isDefault && <Tag className="tag-gap"><FormattedMessage id="wizard.voice.default" /></Tag>}
-              </Radio>
-              <Button size="small" icon={<PlayCircleOutlined />} loading={playing === voice.id} onClick={() => play(voice.id)} />
-            </Space>
-          ))}
-        </Space>
-      </Radio.Group>
+      <Row gutter={[12, 12]}>
+        {voices.map((voice) => (
+          <Col xs={24} md={12} xl={8} key={voice.id}>
+            <div
+              role="button"
+              tabIndex={0}
+              className={`sf-voice-card${draft.voice === voice.id ? ' selected' : ''}`}
+              onClick={() => setDraft({ ...draft, voice: voice.id })}
+              onKeyDown={(e) => e.key === 'Enter' && setDraft({ ...draft, voice: voice.id })}
+            >
+              <Button
+                shape="circle"
+                type={playing === voice.id ? 'primary' : 'default'}
+                icon={playing === voice.id ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                onClick={(e) => { e.stopPropagation(); play(voice.id); }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="sf-voice-name">
+                  {voice.label}
+                  {voice.isDefault && <Tag className="tag-gap"><FormattedMessage id="wizard.voice.default" /></Tag>}
+                </div>
+                <div className="sf-voice-meta">{`${voice.gender} · ${voice.accent} · grade ${voice.grade}`}</div>
+              </div>
+              {draft.voice === voice.id && <CheckCircleFilled style={{ color: 'var(--sf-accent)', fontSize: 18 }} />}
+            </div>
+          </Col>
+        ))}
+      </Row>
     </Card>
   );
 
@@ -253,22 +281,54 @@ const NewVideoPage = ({ location }) => {
   const canNext = step === 1 ? draft.topic.trim().length > 0 : true;
 
   return (
-    <AppLayout location={location}>
-      <Typography.Title level={3}><FormattedMessage id="wizard.title" /></Typography.Title>
-      <QuickStartCard />
-      <Typography.Title level={5} className="wizard-advanced"><FormattedMessage id="quick.orWizard" /></Typography.Title>
-      <Steps current={step} className="wizard-steps" items={STEPS.map((s) => ({ title: intl.formatMessage({ id: `wizard.step.${s}` }) }))} />
-      {content}
-      {step > 0 && (
-        <Space className="wizard-nav">
-          <Button onClick={() => setStep(step - 1)}><FormattedMessage id="wizard.back" /></Button>
-          {step < 3 ? (
-            <Button type="primary" disabled={!canNext} onClick={() => setStep(step + 1)}><FormattedMessage id="wizard.next" /></Button>
-          ) : (
-            <Button type="primary" loading={busy} onClick={start}><FormattedMessage id="wizard.review.start" /></Button>
-          )}
-        </Space>
-      )}
+    <AppLayout location={location} title={intl.formatMessage({ id: 'nav.new' })}>
+      <PageHeader title={intl.formatMessage({ id: 'wizard.title' })} subtitle={intl.formatMessage({ id: 'new.subtitle' })} />
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        {[
+          { key: 'links', icon: <YoutubeOutlined /> },
+          { key: 'topic', icon: <BulbOutlined /> },
+        ].map((choice) => (
+          <Col xs={24} md={12} key={choice.key}>
+            <div
+              role="button"
+              tabIndex={0}
+              className={`sf-choice${mode === choice.key ? ' selected' : ''}`}
+              onClick={() => setMode(choice.key)}
+              onKeyDown={(e) => e.key === 'Enter' && setMode(choice.key)}
+            >
+              <div className="sf-choice-icon">{choice.icon}</div>
+              <div>
+                <h3><FormattedMessage id={`new.choice.${choice.key}`} /></h3>
+                <p><FormattedMessage id={`new.choice.${choice.key}.help`} /></p>
+              </div>
+            </div>
+          </Col>
+        ))}
+      </Row>
+      <QuickStartCard key={mode} variant="full" focus={mode} />
+      <Collapse
+        className="sf-tabs"
+        items={[{
+          key: 'wizard',
+          label: <strong><FormattedMessage id="quick.orWizard" /></strong>,
+          children: (
+            <>
+              <Steps current={step} className="wizard-steps" items={STEPS.map((s) => ({ title: intl.formatMessage({ id: `wizard.step.${s}` }) }))} />
+              {content}
+              {step > 0 && (
+                <Space className="wizard-nav">
+                  <Button onClick={() => setStep(step - 1)}><FormattedMessage id="wizard.back" /></Button>
+                  {step < 3 ? (
+                    <Button type="primary" disabled={!canNext} onClick={() => setStep(step + 1)}><FormattedMessage id="wizard.next" /></Button>
+                  ) : (
+                    <Button type="primary" loading={busy} onClick={start}><FormattedMessage id="wizard.review.start" /></Button>
+                  )}
+                </Space>
+              )}
+            </>
+          ),
+        }]}
+      />
     </AppLayout>
   );
 };

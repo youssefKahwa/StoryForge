@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Button, Card, Descriptions, InputNumber, Popconfirm, Space, Spin, Typography, message,
+  Button, Card, Descriptions, InputNumber, Popconfirm, Space, Spin, Typography,
 } from 'antd';
+import useNotify from '../hooks/useNotify';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useDispatch, useSelector } from 'react-redux';
 import { cleanupStorage, fetchStorage, selectStorage } from '../store/settings/settingsSlice';
 
 const StorageCard = () => {
   const intl = useIntl();
+  const message = useNotify();
   const dispatch = useDispatch();
   const storage = useSelector(selectStorage);
   const [days, setDays] = useState(14);

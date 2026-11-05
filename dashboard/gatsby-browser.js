@@ -1,4 +1,4 @@
-import 'antd/dist/antd.css';
+import 'antd/dist/reset.css';
 import './src/styles/global.css';
 import { wrapRoot } from './src/state/wrapRoot';
 
