@@ -89,9 +89,10 @@ public class ResearchStage implements StageWorker {
         }
     }
 
-    /** The owner's inspiration videos are sources too: with them, two fewer web sources are enough. */
+    /** The owner's inspiration videos are sources too: with them, three fewer web sources are enough. */
     public static int requiredSources(int minSources, boolean inspiration) {
-        return inspiration ? Math.max(4, minSources - 2) : minSources;
+        // With the owner's links the story comes from them; research only checks the facts (5 sources of 8).
+        return inspiration ? Math.max(4, minSources - 3) : minSources;
     }
 
     private String leads(StageContext context) {
