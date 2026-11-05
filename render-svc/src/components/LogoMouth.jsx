@@ -18,15 +18,16 @@ const SLIT = lens(640, 920, 916, 870, 924);
 
 /** The logo's white slit opens and closes: white inside, nothing else (the owner's choice). */
 const Classic = ({ o, s }) => {
-  const w = 1 + 0.1 * s;
+  // Closed it is exactly the logo's slit; the "oh"/"ee" width only changes while it is open.
+  const w = 1 + 0.08 * s * Math.min(1, o * 3);
   const tall = 1 - 0.25 * s;
-  const x1 = CX - (140 + 14 * o) * w;
-  const x2 = CX + (140 + 14 * o) * w;
-  const bottom = 924 + 190 * o * tall;
+  const x1 = CX - (140 + 4 * o) * w;
+  const x2 = CX + (140 + 4 * o) * w;
+  const bottom = 924 + 120 * o * tall;
   return (
     <>
-      <path d={beak(1090 + 80 * o * tall)} fill="#000" />
-      <path d={lens(x1, x2, 916, 870 - 20 * o, bottom)} fill="#fff" />
+      <path d={beak(1090 + 45 * o * tall)} fill="#000" />
+      <path d={lens(x1, x2, 916, 870 - 10 * o, bottom)} fill="#fff" />
     </>
   );
 };
