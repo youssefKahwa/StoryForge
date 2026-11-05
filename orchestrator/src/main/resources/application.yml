@@ -113,6 +113,12 @@ storyforge:
     lang: en-us
     max-wer: 0.15
     retry-speed-factor: 0.92
+    # Human delivery (media-svc /speak): the Kokoro voice used when Magpie is unavailable, the pause pace, breaths,
+    # and room tone + mic chain on the finished narration
+    fallback-voice: am_michael:60+am_fenrir:40
+    pace: 0.9
+    breaths: true
+    polish: true
   cloudflare:
     account-id: ${CLOUDFLARE_ACCOUNT_ID:}
     api-token: ${CLOUDFLARE_API_TOKEN:}

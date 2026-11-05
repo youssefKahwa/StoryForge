@@ -20,6 +20,10 @@ public final class SfmParser {
     private static final Pattern TAG = Pattern.compile("\\[(/?)([A-Za-z_]+)(?::\\s*([^\\]]*))?]");
     private static final Pattern DIRECTIVE = Pattern.compile("^@([a-zA-Z_]+):\\s*(.*)$");
     private static final Pattern SFX = Pattern.compile("^([^@]+?)(?:\\s*@\\s*\"?([^\"]*)\"?)?$");
+    /** *word* = a hit: the word the voice and the edit land on. */
+    private static final Pattern HIT = Pattern.compile("\\*([^*]+)\\*");
+    private static final Set<String> MOODS = Set.of("hype", "neutral", "serious", "angry");
+    private static final Pattern LEADING_PUNCTUATION = Pattern.compile("^([.,!?;:…]+)\\s*(.*)$");
 
     private SfmParser() {
     }
@@ -149,9 +153,28 @@ public final class SfmParser {
         }
 
         private void addText(String chunk) {
-            String text = chunk.replaceAll("\\s+", " ").strip();
+            Matcher hit = HIT.matcher(chunk);
+            int cursor = 0;
+            while (hit.find()) {
+                addPlain(chunk.substring(cursor, hit.start()), emphasis);
+                addPlain(hit.group(1), true);
+                cursor = hit.end();
+            }
+            addPlain(chunk.substring(cursor), emphasis);
+        }
+
+        private void addPlain(String chunk, boolean stressed) {
+            String text = chunk.replace("*", "").replaceAll("\\s+", " ").strip();
+            // punctuation right after a hit ("*lot*.") belongs to the hit, not to a new segment
+            Matcher lead = LEADING_PUNCTUATION.matcher(text);
+            int last = segments.size() - 1;
+            if (lead.matches() && last >= 0 && segments.get(last).spoken()) {
+                Segment previous = segments.get(last);
+                segments.set(last, Segment.text(previous.text() + lead.group(1), previous.emphasis()));
+                text = lead.group(2);
+            }
             if (!text.isEmpty()) {
-                segments.add(Segment.text(text, emphasis));
+                segments.add(Segment.text(text, stressed));
             }
         }
 
@@ -160,6 +183,15 @@ public final class SfmParser {
                 switch (name) {
                     case "EMPHASIS" -> emphasis = !closing;
                     case "PAUSE" -> segments.add(Segment.pause(parseMillis(value)));
+                    case "BEAT" -> segments.add(Segment.beat(value == null || value.isBlank() ? 0 : parseMillis(value)));
+                    case "MOOD" -> {
+                        String mood = value.strip().toLowerCase(Locale.ROOT);
+                        if (!MOODS.contains(mood)) {
+                            warnings.add("Unknown mood '" + mood + "' (hype, neutral, serious, angry): neutral");
+                            mood = "neutral";
+                        }
+                        segments.add(Segment.mood(mood));
+                    }
                     case "VOICE" -> voice = value.strip();
                     case "TONE" -> tone = value.strip();
                     case "PACE" -> pace = value.strip();
@@ -185,6 +217,13 @@ public final class SfmParser {
                 }
                 case "music" -> music = parseMusic(value);
                 case "onscreen" -> onscreen = unquote(value);
+                case "say" -> {
+                    if (value.contains("=")) {
+                        segments.add(Segment.say(value.strip()));
+                    } else {
+                        warnings.add("@say needs 'word = how it is said': " + value);
+                    }
+                }
                 case "claims" -> claims.addAll(List.of(value.split("\\s*,\\s*")).stream()
                         .filter(c -> !c.isBlank()).toList());
                 default -> warnings.add("Unknown directive @" + name);
@@ -226,7 +265,7 @@ public final class SfmParser {
         }
 
         Scene build() {
-            String narration = segments.stream().filter(s -> !s.silent()).map(Segment::text)
+            String narration = segments.stream().filter(Segment::spoken).map(Segment::text)
                     .collect(Collectors.joining(" ")).replaceAll("\\s+", " ").strip();
             if (narration.isEmpty()) {
                 warnings.add("Scene has no narration");

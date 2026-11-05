@@ -41,6 +41,14 @@ public class NarrateStage implements StageWorker {
     // Below ~0.9x a stretched voice starts to sound slow and robotic; the script length is fixed upstream instead.
     private static final double MIN_TEMPO = 0.9;
     private static final double MAX_TEMPO = 1.15;
+    /**
+     * The finished narration gets a room (pink noise far below the voice, so no silence is digital zero, which is a
+     * robot giveaway) and a "YouTube mic" chain: low cut, a little less mud, a little more presence, de-esser, a gentle
+     * compressor and a limiter.
+     */
+    static final String ROOM = "anoisesrc=color=pink:amplitude=0.0012:seed=7:sample_rate=" + WavAudio.SAMPLE_RATE;
+    static final String MIC_CHAIN = "highpass=f=75,equalizer=f=250:t=q:w=1:g=-2,equalizer=f=4500:t=q:w=1.2:g=2.5,"
+            + "deesser=i=0.35,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=140:makeup=2,alimiter=limit=0.95";
 
     private record Take(WavAudio.Builder audio, List<SceneAudio> clips, Map<String, ClipAlignment> alignments,
                         double silenceSec) {
@@ -74,12 +82,17 @@ public class NarrateStage implements StageWorker {
     @Override
     public void execute(StageContext context) {
         List<Scene> scenes = context.files().read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
-        String voice = context.run().voice() != null ? context.run().voice() : tts.voice();
+        String requested = context.run().voice() != null ? context.run().voice() : tts.voice();
+        // decided once: if the requested voice cannot be used now, the whole video uses the fallback, never a mix
+        String voice = tts.resolveVoice(requested);
+        if (!voice.equals(requested)) {
+            log.warn("Run {} is narrated with {} instead of {}", context.run().id(), voice, requested);
+        }
         context.usage().provider(tts.name());
 
         Map<String, ClipAlignment> alignments = new LinkedHashMap<>();
         for (Scene scene : scenes) {
-            synthesizeVerified(context, scene, clipPath(context, scene))
+            synthesizeVerified(context, scene, clipPath(context, scene), voice)
                     .ifPresent(aligned -> alignments.put(scene.id(), aligned));
         }
         Take take = assemble(context, scenes, alignments);
@@ -105,6 +118,9 @@ public class NarrateStage implements StageWorker {
 
         Path output = context.files().path(Stage.NARRATE, NARRATION);
         take.audio().write(output);
+        if (narration.polished()) {
+            polish(output);
+        }
         if (take.alignments().size() == scenes.size()) {
             context.files().write(Stage.NARRATE, CLIP_ALIGNMENTS, take.alignments());
         }
@@ -132,6 +148,21 @@ public class NarrateStage implements StageWorker {
         return context.files().path(Stage.NARRATE, "scene_" + scene.id() + ".wav");
     }
 
+    /** Room tone under the whole narration, then the mic chain (see ROOM and MIC_CHAIN). */
+    private void polish(Path narrationWav) {
+        Path polished = narrationWav.resolveSibling("polished_" + narrationWav.getFileName());
+        ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", narrationWav.toString(), "-f", "lavfi", "-i", ROOM,
+                "-filter_complex", "[1:a]lowpass=f=4000[room];[0:a][room]amix=inputs=2:duration=first:normalize=0,"
+                        + MIC_CHAIN + "[out]",
+                "-map", "[out]", "-ar", String.valueOf(WavAudio.SAMPLE_RATE), "-ac", "1", "-c:a", "pcm_s16le",
+                polished.toString()));
+        try {
+            Files.move(polished, narrationWav, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private void stretch(Path clip, double tempo) {
         Path stretched = clip.resolveSibling("stretched_" + clip.getFileName());
         ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", clip.toString(),
@@ -151,9 +182,9 @@ public class NarrateStage implements StageWorker {
         return new ClipAlignment(words, alignment.transcript(), alignment.wer(), round(alignment.durationSec() / tempo));
     }
 
-    private Optional<ClipAlignment> synthesizeVerified(StageContext context, Scene scene, Path clip) {
+    private Optional<ClipAlignment> synthesizeVerified(StageContext context, Scene scene, Path clip, String voice) {
         String text = String.join(" ", scene.words());
-        tts.synthesize(scene, clip, 1.0, context.run().voice());
+        tts.synthesize(scene, clip, 1.0, voice);
         Optional<ClipAlignment> first = aligner.alignClip(clip, text);
         if (first.isEmpty() || first.get().wer() <= narration.maxWer()) {
             return first;
@@ -162,7 +193,7 @@ public class NarrateStage implements StageWorker {
         log.info("Run {} scene {}: WER {} above {}, re-synthesizing slower", context.run().id(), scene.id(),
                 first.get().wer(), narration.maxWer());
         Path retry = clip.resolveSibling("retry_" + clip.getFileName());
-        tts.synthesize(scene, retry, narration.retrySpeedFactor(), context.run().voice());
+        tts.synthesize(scene, retry, narration.retrySpeedFactor(), voice);
         Optional<ClipAlignment> second = aligner.alignClip(retry, text);
         try {
             if (second.isPresent() && second.get().wer() < first.get().wer()) {

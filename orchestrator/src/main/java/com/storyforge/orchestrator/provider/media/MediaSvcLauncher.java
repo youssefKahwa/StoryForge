@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -24,14 +25,17 @@ public class MediaSvcLauncher {
 
     private final StoryForgeProperties.MediaSvc config;
     private final boolean needed;
+    /** The free NVIDIA key (from .env) handed to media-svc for the Magpie voice; never logged. */
+    private final String nvidiaKey;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     private Process process;
 
-    public MediaSvcLauncher(StoryForgeProperties properties) {
+    public MediaSvcLauncher(StoryForgeProperties properties, @Value("${NVIDIA_API_KEY:}") String nvidiaKey) {
         this.config = properties.mediaSvc();
+        this.nvidiaKey = nvidiaKey == null ? "" : nvidiaKey.strip();
         StoryForgeProperties.Providers providers = properties.providers();
-        this.needed = "kokoro".equals(providers.tts()) || "whisper".equals(providers.alignment())
-                || properties.sound().enabled();
+        this.needed = "kokoro".equals(providers.tts()) || "delivery".equals(providers.tts())
+                || "whisper".equals(providers.alignment()) || properties.sound().enabled();
     }
 
     public boolean needed() {
@@ -81,6 +85,9 @@ public class MediaSvcLauncher {
                         .redirectErrorStream(true)
                         .redirectOutput(dir.resolveSibling("media-svc.log").toFile());
                 builder.environment().put("PYTHONIOENCODING", "utf-8");
+                if (!nvidiaKey.isEmpty()) {
+                    builder.environment().put("NVIDIA_API_KEY", nvidiaKey);
+                }
                 process = builder.start();
                 log.info("Starting media-svc ({})", config.url());
             } catch (IOException e) {

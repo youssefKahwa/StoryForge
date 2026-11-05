@@ -9,8 +9,11 @@ storyforge:
     enabled: true
   llm:
     only: claude-code
+  narration:
+    # the fast-recap narrator, voiced by the human delivery engine (NVIDIA Magpie, free key in .env)
+    voice: magpie:Jason
   providers:
-    tts: kokoro
+    tts: delivery
     image: cloudflare
     alignment: whisper
     render: remotion

@@ -1,0 +1,6 @@
+{
+  "_how": {"note": "Words a voice gets wrong. ipa = the exact sound for the Magpie voice (SSML phoneme); say = a plain respelling used by every voice. Keys match without case. A script adds its own with @say: word = respelling."},
+  "Palahniuk": {"ipa": "ˈpɔːlənɪk", "say": "Paula-nick"},
+  "bro": {"say": "bruh"},
+  "Dyatlov": {"ipa": "ˈdjætlɔf", "say": "Dyat-loff"}
+}

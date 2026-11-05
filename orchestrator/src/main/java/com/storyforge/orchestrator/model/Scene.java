@@ -34,8 +34,28 @@ public record Scene(
             return new Segment("pause", null, false, pauseMs);
         }
 
+        /** [mood: hype|neutral|serious|angry]: how the following sentences are said, until the next mood. */
+        public static Segment mood(String mood) {
+            return new Segment("mood", mood, false, 0);
+        }
+
+        /** [beat]: a held pause before a reveal; the delivery engine sizes it (0 = its default). */
+        public static Segment beat(int pauseMs) {
+            return new Segment("beat", null, false, pauseMs);
+        }
+
+        /** @say: word = how it is said (a respelling, or ipa:...), for words a voice gets wrong. */
+        public static Segment say(String rule) {
+            return new Segment("say", rule, false, 0);
+        }
+
         public boolean silent() {
-            return "pause".equals(kind);
+            return "pause".equals(kind) || "beat".equals(kind);
+        }
+
+        /** Words that are said (not a delivery mark or a pronunciation rule). */
+        public boolean spoken() {
+            return kind == null || "text".equals(kind);
         }
     }
 

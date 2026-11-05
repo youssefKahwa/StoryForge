@@ -42,4 +42,18 @@ public record Critique(
         return new Critique(scores, average, hook, passed && ok, rewrites, wordCount, rounded, target, ok, coldRead,
                 List.copyOf(allFlags));
     }
+
+    /**
+     * Adds the spoken-language findings (SpokenCheck). A major one (robot rhythm, essay rhythm, written-only
+     * punctuation or asides) fails the round, so the rewrite pass fixes it like an editor's flag.
+     */
+    public Critique withSpoken(List<Flag> spokenFlags, boolean major) {
+        if (spokenFlags == null || spokenFlags.isEmpty()) {
+            return this;
+        }
+        List<Flag> allFlags = new ArrayList<>(flags);
+        allFlags.addAll(spokenFlags);
+        return new Critique(scores, average, hook, passed && !major, rewrites, words, estimatedSeconds, targetSeconds,
+                lengthOk, coldRead, List.copyOf(allFlags));
+    }
 }

@@ -68,7 +68,29 @@ public record StoryForgeProperties(
     public record MediaSvc(String url, long timeoutSeconds, boolean autostart, String python, String dir) {
     }
 
-    public record Narration(String voice, double speed, String lang, double maxWer, double retrySpeedFactor) {
+    /**
+     * fallbackVoice: the Kokoro voice used for a whole run when the Magpie voice is unavailable; pace scales the
+     * pauses of the human delivery (1 = a storyteller, 0.9 = a fast recap); breaths and polish (room tone and a mic
+     * chain on the finished narration) are on unless set to false.
+     */
+    public record Narration(String voice, double speed, String lang, double maxWer, double retrySpeedFactor,
+                            String fallbackVoice, Double pace, Boolean breaths, Boolean polish) {
+
+        public String fallback() {
+            return fallbackVoice == null || fallbackVoice.isBlank() ? "am_michael:60+am_fenrir:40" : fallbackVoice;
+        }
+
+        public double deliveryPace() {
+            return pace == null || pace <= 0 ? 0.9 : pace;
+        }
+
+        public boolean withBreaths() {
+            return breaths == null || breaths;
+        }
+
+        public boolean polished() {
+            return polish == null || polish;
+        }
     }
 
     /** minTargetSeconds: floor for long-form runs (480 = 8 min, the mid-roll threshold); 0 in the mock profile. */

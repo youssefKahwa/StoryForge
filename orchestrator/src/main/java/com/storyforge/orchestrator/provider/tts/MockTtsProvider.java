@@ -34,7 +34,10 @@ public class MockTtsProvider implements TtsProvider {
         WavAudio.Builder audio = WavAudio.builder();
         for (Segment segment : scene.segments()) {
             if (segment.silent()) {
-                audio.silence(segment.pauseMs() / 1000.0);
+                audio.silence((segment.pauseMs() > 0 ? segment.pauseMs() : 600) / 1000.0);
+                continue;
+            }
+            if (!segment.spoken()) {
                 continue;
             }
             for (String word : segment.text().split("\\s+")) {

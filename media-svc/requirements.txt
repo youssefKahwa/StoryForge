@@ -4,3 +4,5 @@ faster-whisper
 fastapi
 uvicorn[standard]
 yt-dlp
+# NVIDIA Magpie voice (free API) for the human delivery engine (/speak)
+nvidia-riva-client==2.27.0

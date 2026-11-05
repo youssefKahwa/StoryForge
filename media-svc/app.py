@@ -12,6 +12,8 @@ import soundfile as sf
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+import delivery
+
 MODELS_DIR = Path(os.environ.get("STORYFORGE_MODELS_DIR", Path.home() / "storyforge-data" / "models"))
 DATA_DIR = Path(os.environ.get("STORYFORGE_DATA_DIR", Path.home() / "storyforge-data")).resolve()
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
@@ -619,6 +621,156 @@ def fill_gaps(times: list, duration: float) -> None:
         for k in range(i, j):
             times[k] = (start + step * (k - i), start + step * (k - i + 1))
         i = j
+
+
+# --------------------------------------------------------------------------------------------- human delivery (/speak)
+# NVIDIA Magpie (free API, key in NVIDIA_API_KEY): the mood of a sentence picks the voice's emotion variant. The
+# variants are almost different people (Jason.Happy ~232 Hz, Jason ~148 Hz, Jason.Calm ~98 Hz and far slower), so a
+# mood only moves between close variants; Calm is never used.
+MAGPIE_FUNCTION = "877104f7-e885-42b9-8de8-f6e4c6303969"
+MAGPIE_MOODS = {
+    "Jason": {"hype": "Jason.Happy", "neutral": "Jason", "serious": "Jason", "angry": "Jason.Angry"},
+    "Leo": {"hype": "Leo", "neutral": "Leo", "serious": "Leo.Neutral", "angry": "Leo.Angry"},
+    "Ray": {"hype": "Ray", "neutral": "Ray", "serious": "Ray.Neutral", "angry": "Ray.Angry"},
+    "Aria": {"hype": "Aria", "neutral": "Aria", "serious": "Aria.Neutral", "angry": "Aria.Angry"},
+    "Sofia": {"hype": "Sofia", "neutral": "Sofia", "serious": "Sofia.Neutral", "angry": "Sofia.Angry"},
+    "Mia": {"hype": "Mia", "neutral": "Mia", "serious": "Mia.Neutral", "angry": "Mia.Angry"},
+}
+# Pace per mood: Magpie's variants already differ; Kokoro has one variant, so the pace carries more of the mood.
+TEMPO = {"magpie": {"hype": 1.03, "neutral": 1.0, "serious": 0.98, "angry": 1.0},
+         "kokoro": {"hype": 1.05, "neutral": 1.0, "serious": 0.96, "angry": 1.03}}
+MAGPIE_PER_MINUTE = 35  # under the free tier's rate limit
+_magpie = None
+_magpie_calls: list[float] = []
+_magpie_lock = threading.Lock()
+
+
+def magpie():
+    global _magpie
+    with _magpie_lock:
+        if _magpie is None:
+            key = os.environ.get("NVIDIA_API_KEY", "").strip()
+            if not key:
+                raise HTTPException(status_code=503, detail="NVIDIA_API_KEY is not set for media-svc")
+            try:
+                import riva.client
+            except ImportError:
+                raise HTTPException(status_code=503, detail="nvidia-riva-client is not installed "
+                                                            "(scripts/media-svc.ps1 -Install)")
+            auth = riva.client.Auth(None, True, "grpc.nvcf.nvidia.com:443",
+                                    [("function-id", MAGPIE_FUNCTION), ("authorization", "Bearer " + key)])
+            _magpie = riva.client.SpeechSynthesisService(auth)
+        return _magpie
+
+
+def magpie_say(text: str, voice: str) -> np.ndarray:
+    """One Magpie take at SAMPLE_RATE, throttled under the free rate limit, retried on a busy server."""
+    import time
+    service = magpie()
+    for attempt in range(4):
+        with _magpie_lock:
+            now = time.monotonic()
+            _magpie_calls[:] = [t for t in _magpie_calls if now - t < 60]
+            wait = 60 - (now - _magpie_calls[0]) if len(_magpie_calls) >= MAGPIE_PER_MINUTE else 0
+        if wait > 0:
+            time.sleep(wait)
+        with _magpie_lock:
+            _magpie_calls.append(time.monotonic())
+        try:
+            resp = service.synthesize(text, "Magpie-Multilingual.EN-US." + voice, "en-US", sample_rate_hz=SAMPLE_RATE)
+            return np.frombuffer(resp.audio, dtype=np.int16).astype(np.float32) / 32768.0
+        except Exception as e:  # rate limited or unavailable: back off and try again
+            if attempt == 3:
+                raise HTTPException(status_code=502, detail=f"Magpie failed: {str(e)[:200]}")
+            time.sleep(3 * (attempt + 1))
+
+
+def lexicon_text(text: str, lexicon: dict, engine: str) -> str:
+    """Words the voice gets wrong: IPA through <phoneme> (Magpie honours it) or a plain say-as respelling."""
+    if not lexicon:
+        return text
+    entries = {k.lower(): v for k, v in lexicon.items()}
+    ssml = False
+
+    def sub(m):
+        nonlocal ssml
+        entry = entries.get(m.group(0).lower())
+        if not entry:
+            return m.group(0)
+        if engine == "magpie" and entry.get("ipa"):
+            ssml = True
+            return f'<phoneme alphabet="ipa" ph="{entry["ipa"]}">{m.group(0)}</phoneme>'
+        return entry.get("say") or m.group(0)
+    out = re.sub(r"[A-Za-z][A-Za-z'-]*", sub, text)
+    if ssml:
+        out = "<speak>" + out.replace("&", "and") + "</speak>"
+    return out
+
+
+class SpeakItem(BaseModel):
+    kind: str = "text"
+    text: str | None = None
+    ms: int = 0
+
+
+class SpeakRequest(BaseModel):
+    items: list[SpeakItem]
+    engine: str = "kokoro"
+    voice: str
+    speed: float = Field(1.0, ge=0.5, le=2.0)
+    lang: str = "en-us"
+    mood: str = "neutral"
+    pace: float = Field(1.0, ge=0.5, le=1.5)
+    breaths: bool = True
+    takes: int = Field(3, ge=1, le=5)
+    lexicon: dict[str, dict] = {}
+    seed: str = ""
+    out_path: str
+
+
+@app.post("/speak")
+def speak(request: SpeakRequest):
+    """A scene voiced by the human delivery engine (delivery.py): Kokoro or Magpie."""
+    out = inside_data_dir(request.out_path)
+    engine = request.engine.lower()
+    if engine == "magpie":
+        moods = MAGPIE_MOODS.get(request.voice, {})
+
+        def synth(text, mood, attempt):
+            variant = moods.get(mood, moods.get("hype", request.voice)) if moods else request.voice
+            return magpie_say(lexicon_text(text, request.lexicon, engine), variant)
+    else:
+        style = voice_style(request.voice)
+
+        def synth(text, mood, attempt):
+            # Kokoro is deterministic: a retry is a slightly slower read
+            samples, rate = kokoro().create(lexicon_text(text, request.lexicon, engine), voice=style,
+                                            speed=request.speed * (1 - 0.04 * attempt), lang=request.lang)
+            return np.asarray(samples, dtype=np.float32)
+
+    def transcribe(audio16):
+        segments, _ = whisper().transcribe(audio16, language="en", word_timestamps=True, beam_size=1,
+                                           condition_on_previous_text=False)
+        return [(w.word, float(w.start), float(w.end)) for s in segments for w in (s.words or [])]
+
+    audio, report = delivery.speak(
+        [item.model_dump() for item in request.items], request.mood, synth, transcribe, sr=SAMPLE_RATE,
+        tempo=TEMPO["magpie" if engine == "magpie" else "kokoro"],
+        takes=request.takes if engine == "magpie" else 2, pace=request.pace,
+        breath=breath_sample() if request.breaths else None, seed=request.seed or request.out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(out), np.clip(audio, -1.0, 1.0), SAMPLE_RATE, subtype="PCM_16")
+    return {"duration_sec": len(audio) / SAMPLE_RATE, "engine": engine, **report}
+
+
+@app.get("/magpie/check")
+def magpie_check():
+    """Is the Magpie voice usable right now (key, client, API)? One tiny synthesis."""
+    try:
+        audio = magpie_say("Ready.", "Jason")
+        return {"ok": len(audio) > 0}
+    except HTTPException as e:
+        return {"ok": False, "detail": e.detail}
 
 
 @app.post("/align")

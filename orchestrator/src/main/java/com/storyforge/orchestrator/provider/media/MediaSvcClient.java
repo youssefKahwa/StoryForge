@@ -37,11 +37,58 @@ public class MediaSvcClient {
     public double tts(List<Scene.Segment> segments, String voice, double speed, String lang, Path out) {
         List<Map<String, Object>> parts = new ArrayList<>();
         for (Scene.Segment segment : segments) {
-            parts.add(segment.silent() ? Map.of("pause_ms", segment.pauseMs()) : Map.of("text", segment.text()));
+            if (segment.silent()) {
+                parts.add(Map.of("pause_ms", segment.pauseMs() > 0 ? segment.pauseMs() : 600));
+            } else if (segment.spoken()) {
+                parts.add(Map.of("text", segment.text()));
+            }
         }
         JsonNode response = post("/tts", Map.of("segments", parts, "voice", voice, "speed", speed, "lang", lang,
                 "out_path", out.toAbsolutePath().toString()));
         return response.path("duration_sec").asDouble(0);
+    }
+
+    /** What the human delivery engine did for one scene. */
+    public record Speech(double durationSec, String engine, int chunks, int takes, List<String> issues) {
+    }
+
+    /**
+     * A scene voiced by the human delivery engine (media-svc /speak): items are the scene's text, mood and beat
+     * marks in order; lexicon maps a word to {"ipa": ...} or {"say": ...}.
+     */
+    public Speech speak(List<Map<String, Object>> items, String engine, String voice, double speed, String lang,
+                        String mood, double pace, boolean breaths, Map<String, Map<String, String>> lexicon,
+                        String seed, Path out) {
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("items", items);
+        body.put("engine", engine);
+        body.put("voice", voice);
+        body.put("speed", speed);
+        body.put("lang", lang);
+        body.put("mood", mood);
+        body.put("pace", pace);
+        body.put("breaths", breaths);
+        body.put("lexicon", lexicon);
+        body.put("seed", seed);
+        body.put("out_path", out.toAbsolutePath().toString());
+        JsonNode response = post("/speak", body);
+        List<String> issues = new ArrayList<>();
+        response.path("issues").forEach(issue -> issues.add(issue.asString("")));
+        return new Speech(response.path("duration_sec").asDouble(0), response.path("engine").asString(engine),
+                response.path("chunks").asInt(0), response.path("takes").asInt(0), issues);
+    }
+
+    /** Can the Magpie voice be used right now (key, client library, NVIDIA API)? */
+    public boolean magpieReady() {
+        try {
+            if (!launcher.healthy()) {
+                launcher.ensureRunning();
+            }
+            JsonNode response = client.get().uri("/magpie/check").retrieve().body(JsonNode.class);
+            return response != null && response.path("ok").asBoolean(false);
+        } catch (RestClientException e) {
+            return false;
+        }
     }
 
     public ClipAlignment align(Path wav, String text) {

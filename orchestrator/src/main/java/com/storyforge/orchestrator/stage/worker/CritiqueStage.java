@@ -9,6 +9,7 @@ import com.storyforge.orchestrator.provider.llm.LlmRouter;
 import com.storyforge.orchestrator.script.NarrationStyle;
 import com.storyforge.orchestrator.script.SfmParseException;
 import com.storyforge.orchestrator.script.SfmParser;
+import com.storyforge.orchestrator.script.SpokenCheck;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
@@ -82,6 +83,10 @@ public class CritiqueStage implements StageWorker {
             List<Scene> scenes = SfmParser.parse(markup);
             critique = critique.withLength(wordCount(scenes), estimatedSeconds(scenes, wordsPerMinute), targetSeconds,
                     tolerance, wordsPerMinute);
+            SpokenCheck.Result spoken = SpokenCheck.check(scenes);
+            critique = critique.withSpoken(spoken.flags(), spoken.hasMajor());
+            log.info("Run {} critique round {}: spoken check {} ({} flags)", context.run().id(), round, spoken.stats(),
+                    spoken.flags().size());
             Version version = new Version(markup, scenes, critique);
             if (best == null || better(critique, best.critique())) {
                 best = version;

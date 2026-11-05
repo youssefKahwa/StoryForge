@@ -6,6 +6,7 @@ import com.storyforge.orchestrator.provider.realmedia.RealMediaFinder;
 import com.storyforge.orchestrator.run.PowerStatus;
 import com.storyforge.orchestrator.notify.NotificationService;
 import com.storyforge.orchestrator.provider.image.ImageQuota;
+import com.storyforge.orchestrator.provider.media.MediaSvcClient;
 import com.storyforge.orchestrator.provider.media.MediaSvcLauncher;
 import com.storyforge.orchestrator.sound.MusicLibrary;
 import com.storyforge.orchestrator.youtube.YouTubeAuthService;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /** Read-only health checks of everything a weekly run depends on, each with a plain-language fix. */
@@ -28,6 +30,8 @@ public class SystemCheckService {
 
     private final StoryForgeProperties properties;
     private final MediaSvcLauncher mediaSvc;
+    private final MediaSvcClient media;
+    private final boolean nvidiaKeySet;
     private final MusicLibrary music;
     private final ImageQuota quota;
     private final YouTubeAuthService youtube;
@@ -39,7 +43,10 @@ public class SystemCheckService {
 
     public SystemCheckService(StoryForgeProperties properties, MediaSvcLauncher mediaSvc, MusicLibrary music,
                               ImageQuota quota, YouTubeAuthService youtube, NotificationService notifications,
-                              StorageService storage, HostMascot host, RealMediaFinder realMedia, PowerStatus power) {
+                              StorageService storage, HostMascot host, RealMediaFinder realMedia, PowerStatus power,
+                              MediaSvcClient media, @Value("${NVIDIA_API_KEY:}") String nvidiaKey) {
+        this.media = media;
+        this.nvidiaKeySet = nvidiaKey != null && !nvidiaKey.isBlank();
         this.power = power;
         this.host = host;
         this.realMedia = realMedia;
@@ -59,6 +66,7 @@ public class SystemCheckService {
         checks.add(tool("ffmpeg", "FFmpeg", properties.media().ffmpeg(), "-version",
                 "Install FFmpeg (winget install Gyan.FFmpeg) and reopen the terminal."));
         checks.add(mediaService());
+        checks.add(magpieVoice());
         checks.add("remotion".equals(providers.render()) ? remotion()
                 : CheckResult.off("remotion", "Remotion renderer",
                         "Not used by this profile (" + providers.render() + ")."));
@@ -119,6 +127,29 @@ public class SystemCheckService {
                 ? CheckResult.warn("media-svc", label,
                         "Installed but not running; it starts automatically when a run needs it.", null)
                 : CheckResult.fail("media-svc", label, "Not installed.", "Run scripts\\media-svc.ps1 -Install once.");
+    }
+
+    /**
+     * The expressive narrator (NVIDIA Magpie, free API) used by the human delivery engine. Only asks the API when
+     * media-svc is already running, so opening Settings never starts it.
+     */
+    private CheckResult magpieVoice() {
+        String label = "Expressive voice (NVIDIA Magpie)";
+        if (!"delivery".equals(properties.providers().tts())) {
+            return CheckResult.off("magpie", label, "Not used by this profile.");
+        }
+        if (!nvidiaKeySet) {
+            return CheckResult.warn("magpie", label, "No NVIDIA_API_KEY: videos use the local voice "
+                    + properties.narration().fallback() + ".", "Add a free key from build.nvidia.com to .env.");
+        }
+        if (!mediaSvc.healthy()) {
+            return CheckResult.ok("magpie", label, "Key set; the voice is checked when a video starts.");
+        }
+        return media.magpieReady()
+                ? CheckResult.ok("magpie", label, "Ready.")
+                : CheckResult.warn("magpie", label, "Not reachable right now: videos use the local voice "
+                        + properties.narration().fallback() + " until it is back.",
+                        "Check the key, or run scripts\\media-svc.ps1 -Install to add nvidia-riva-client.");
     }
 
     private CheckResult remotion() {
