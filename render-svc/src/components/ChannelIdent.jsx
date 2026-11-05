@@ -316,7 +316,21 @@ const PathsOutro = ({ logo, beats }) => {
   const lower = `M -40 910 C 420 910, 640 ${M[1]}, ${M[0]} ${M[1]}`;
   const pathsOut = interpolate(frame, [b.bang, b.bang + 10], [1, 0], clamp);
   const pulse = (phase) => 0.5 + 0.5 * Math.max(0, Math.sin(frame / 9 + phase));
-  const labels = interpolate(frame, [56, 70], [0, 1], clamp) * pathsOut;
+  // Before the bang the scene is pulled toward the meeting point, the paths burn brighter, the pulses race.
+  const suck = interpolate(frame, [b.bang - 16, b.bang], [0, 1], { ...clamp, easing: Easing.in(Easing.cubic) }) * pathsOut;
+  const accel = interpolate(frame, [b.bang - 70, b.bang], [0, 1], clamp);
+  const bez = (y0, u) => {
+    const P = [[-40, y0], [420, y0], [640, M[1]], [M[0], M[1]]];
+    const a = (1 - u) ** 3;
+    const c = 3 * (1 - u) ** 2 * u;
+    const d = 3 * (1 - u) * u * u;
+    const e = u ** 3;
+    return [a * P[0][0] + c * P[1][0] + d * P[2][0] + e * P[3][0], a * P[0][1] + c * P[1][1] + d * P[2][1] + e * P[3][1]];
+  };
+  const comets = [170, 910].flatMap((y0, side) => Array.from({ length: 5 }).map((_, i) => {
+    const pos = (i / 5 + frame * 0.006 + 0.9 * accel * accel + side * 0.1) % 1;
+    return { y0, side, pos, key: `c${side}-${i}` };
+  })).filter((c) => c.pos < draw - 0.01 && frame < b.bang);
   // Light gathers where the paths meet, then the bang.
   const charge = interpolate(frame, [b.bang - 14, b.bang], [0, 1], { ...clamp, easing: Easing.in(Easing.quad) }) * pathsOut;
   const t = frame - b.bang;
@@ -331,14 +345,36 @@ const PathsOutro = ({ logo, beats }) => {
   return (
     <AbsoluteFill style={{ opacity: fadeOut(frame, durationInFrames, 20) }}>
       <Night snow={80} />
-      <AbsoluteFill style={{ transform: `translate(${shake}px, ${shake * 0.6}px)` }}>
+      <AbsoluteFill style={{
+        transform: `translate(${shake}px, ${shake * 0.6}px) scale(${1 + 0.07 * suck})`,
+        transformOrigin: `${M[0]}px ${M[1]}px`,
+      }}>
         <svg width={1920} height={1080} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+          <g opacity={pathsOut * 0.28}>
+            {[-16, 16].map((dy) => (
+              <g key={dy} transform={`translate(0 ${dy})`}>
+                <path d={upper} fill="none" stroke={BRAND.sky} strokeWidth={2} strokeDasharray={len}
+                  strokeDashoffset={(1 - draw) * len} />
+                <path d={lower} fill="none" stroke="#fff" strokeWidth={2} strokeDasharray={len}
+                  strokeDashoffset={(1 - draw) * len} />
+              </g>
+            ))}
+          </g>
           <g opacity={pathsOut}>
             <path d={upper} fill="none" stroke={BRAND.sky} strokeWidth={8} strokeLinecap="round" strokeDasharray={len}
-              strokeDashoffset={(1 - draw) * len} style={{ filter: `drop-shadow(0 0 ${8 + 16 * pulse(0)}px ${BRAND.sky})` }} />
+              strokeDashoffset={(1 - draw) * len}
+              style={{ filter: `drop-shadow(0 0 ${8 + 16 * pulse(0) + 30 * suck}px ${BRAND.sky})` }} />
             <path d={lower} fill="none" stroke="#fff" strokeWidth={8} strokeLinecap="round" strokeDasharray={len}
               strokeDashoffset={(1 - draw) * len}
-              style={{ filter: `drop-shadow(0 0 ${8 + 16 * pulse(Math.PI)}px rgba(255,255,255,0.9))` }} />
+              style={{ filter: `drop-shadow(0 0 ${8 + 16 * pulse(Math.PI) + 30 * suck}px rgba(255,255,255,0.9))` }} />
+            {comets.map((c) => [0, 1, 2, 3].map((j) => {
+              const [x, y] = bez(c.y0, Math.max(0, c.pos - j * 0.012));
+              return (
+                <circle key={`${c.key}-${j}`} cx={x} cy={y} r={(9 - j * 2) * (1 + 0.4 * accel)}
+                  fill={c.side === 0 ? '#e8f8ff' : '#ffffff'} opacity={(1 - j * 0.28) * (0.75 + 0.25 * accel)}
+                  style={j === 0 ? { filter: `drop-shadow(0 0 14px ${c.side === 0 ? BRAND.sky : '#ffffff'})` } : undefined} />
+              );
+            }))}
           </g>
           {charge > 0 && (
             <circle cx={M[0]} cy={M[1]} r={10 + 60 * charge} fill="#fff" opacity={0.9 * charge}
@@ -362,13 +398,6 @@ const PathsOutro = ({ logo, beats }) => {
             ) : null;
           })}
         </svg>
-        {['PATH 1', 'PATH 2'].map((text, i) => (
-          <div key={text} style={{
-            position: 'absolute', left: 70, top: i === 0 ? 92 : 945, padding: '8px 20px', borderRadius: 999,
-            fontFamily: headline, fontSize: 30, color: '#0b0f17', background: i === 0 ? BRAND.sky : '#f0f0f0',
-            opacity: labels, boxShadow: `0 0 ${10 + 24 * pulse(i * Math.PI)}px ${i === 0 ? BRAND.sky : '#ffffff'}`,
-          }}>{text}</div>
-        ))}
         {t >= 0 && fly < 1 && (
           <div style={{
             position: 'absolute', left: lx - logoSize / 2 - 22, top: ly - logoSize / 2 - 22 + float,
