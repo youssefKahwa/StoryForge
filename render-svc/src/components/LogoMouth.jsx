@@ -16,6 +16,7 @@ const beak = (lowerCtrl) => `M ${L[0]} ${L[1]} Q ${CX} ${lowerCtrl} ${R[0]} ${R[
 const lens = (x1, x2, y, top, bottom) => `M ${x1} ${y} Q ${CX} ${top} ${x2} ${y} Q ${CX} ${bottom} ${x1} ${y} Z`;
 const SLIT = lens(640, 920, 916, 870, 924);
 
+/** The logo's white slit opens and closes: white inside, nothing else (the owner's choice). */
 const Classic = ({ o, s }) => {
   const w = 1 + 0.1 * s;
   const tall = 1 - 0.25 * s;
@@ -26,9 +27,6 @@ const Classic = ({ o, s }) => {
     <>
       <path d={beak(1090 + 80 * o * tall)} fill="#000" />
       <path d={lens(x1, x2, 916, 870 - 20 * o, bottom)} fill="#fff" />
-      {o > 0.04 && (
-        <path d={lens(x1 + 14, x2 - 14, 918, 870 - 20 * o + 34, bottom - 10)} fill="url(#mouthInside)" />
-      )}
     </>
   );
 };
