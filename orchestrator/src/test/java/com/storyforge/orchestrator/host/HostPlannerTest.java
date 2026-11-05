@@ -57,6 +57,22 @@ class HostPlannerTest {
     }
 
     @Test
+    void vectorMouthOpensWithTheVoiceAndClosesInSilence() {
+        double[] db = new double[90];
+        java.util.Arrays.fill(db, -90);
+        for (int f = 30; f < 60; f++) {
+            db[f] = -16;
+        }
+        List<HostAppearance> mouths = HostPlanner.openness(List.<double[]>of(new double[] {0, 3}), db, 30);
+        List<Double> open = mouths.get(0).open();
+        assertThat(open).hasSize(90);
+        assertThat(open.get(10)).isZero();
+        assertThat(open.get(45)).isGreaterThan(0.8);
+        assertThat(open.get(89)).isLessThan(0.05);
+        assertThat(mouths.get(0).shape()).hasSize(90);
+    }
+
+    @Test
     void talkingLogoNeverCoversTheMaskedCharacter() {
         List<double[]> ranges = List.of(new double[] {5, 10}, new double[] {100, 106}, new double[] {588, 599.6});
         List<double[]> character = List.of(new double[] {3, 8}, new double[] {106.5, 112});

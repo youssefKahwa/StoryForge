@@ -74,6 +74,12 @@ public class AudioMixStage implements StageWorker {
     private static final double PRESET_PEAK_DB = -3;
     private static final double AMBIENCE_MEAN_DB = -40;
     private static final double CUE_PEAK_DB = -17;
+    /** Sounds the owner picked by ear (Freesound ids, CC0): "FX - Swoosh - Slow", "Mouse Click",
+     *  "Reward Notification 3_1", "ppop". */
+    private static final long SWOOSH_ID = 475133;
+    private static final long CLICK_ID = 825193;
+    private static final long CHIME_ID = 504784;
+    private static final long POP_ID = 527522;
     /** Chapter card on screen (LongForm CHAPTER_FRAMES at 30 fps). */
     private static final double CHAPTER_SECONDS = 3.5;
 
@@ -199,7 +205,7 @@ public class AudioMixStage implements StageWorker {
             all.addAll(hostFoley(files, runSeed));
             all.addAll(subscribeSounds(subscribeAt, runSeed));
             for (double[] bubble : bubbles) {
-                addSound(all, "pop", runSeed + Math.round(bubble[0]), bubble[0] + 0.12, -21, "talking logo pops in");
+                addSound(all, "pop", POP_ID, bubble[0] + 0.12, -21, "talking logo pops in");
             }
             all.sort((a, b) -> Double.compare(a.start(), b.start()));
             SoundPlan plan = new SoundPlan(designed.music(), all);
@@ -257,7 +263,7 @@ public class AudioMixStage implements StageWorker {
      * character only where it does not cover him. Empty when switched off.
      */
     private List<double[]> bubblePlan(com.storyforge.orchestrator.artifact.RunFiles files) {
-        if (!preferences.get().hostEnabled() || !mascot.available()) {
+        if (!preferences.get().hostEnabled() || !mascot.available() && !subscribe.available()) {
             return List.of();
         }
         try {
@@ -319,19 +325,21 @@ public class AudioMixStage implements StageWorker {
         List<SoundPlan.SfxCue> cues = new ArrayList<>();
         for (double t : starts) {
             String reason = "subscribe pop-up " + t;
-            addSound(cues, "swoosh_soft", seed, t + SubscribeNudge.ENTER_AT, -22, reason);
-            if (!addSound(cues, "click", seed, t + SubscribeNudge.CLICK_AT, -16, reason) && sfxAvailable("shutter")) {
+            // The owner's picks: a soft swoosh in, a real mouse click, a light chime, a quieter swoosh out.
+            addSound(cues, "whoosh_fast", SWOOSH_ID, t + SubscribeNudge.ENTER_AT, -21, reason);
+            if (!addSound(cues, "click", CLICK_ID, t + SubscribeNudge.CLICK_AT, -15, reason) && sfxAvailable("shutter")) {
                 cues.add(new SoundPlan.SfxCue("shutter", sfx.file("shutter"), t + SubscribeNudge.CLICK_AT, -16, reason));
             }
-            addSound(cues, "bell", seed, t + SubscribeNudge.BELL_AT, -18, reason);
-            addSound(cues, "swoosh_soft", seed + 1, t + SubscribeNudge.EXIT_AT, -27, reason);
+            addSound(cues, "bell", CHIME_ID, t + SubscribeNudge.BELL_AT, -18, reason);
+            addSound(cues, "whoosh_fast", SWOOSH_ID, t + SubscribeNudge.EXIT_AT, -27, reason);
         }
         return cues;
     }
 
-    private boolean addSound(List<SoundPlan.SfxCue> cues, String category, long seed, double at, double peakDb,
+    /** A specific bank sound by its Freesound id (see {@link SoundBank#find}). */
+    private boolean addSound(List<SoundPlan.SfxCue> cues, String category, long id, double at, double peakDb,
                              String reason) {
-        Optional<SoundBank.Sound> sound = bank.pick(category, seed);
+        Optional<SoundBank.Sound> sound = bank.find(category, id);
         sound.ifPresent(s -> cues.add(new SoundPlan.SfxCue(category, s.file(),
                 Math.max(0, Math.round((at - s.peak()) * 1000) / 1000.0), s.gainForPeak(peakDb),
                 reason + " / " + category)));

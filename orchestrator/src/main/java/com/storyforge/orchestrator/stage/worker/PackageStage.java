@@ -197,6 +197,15 @@ public class PackageStage implements StageWorker {
         var files = context.files();
         TopicBrief brief = files.read(Stage.SELECT, "topic_brief.json", TopicBrief.class);
         Edl edl = files.read(Stage.ASSEMBLE, "edl.json", Edl.class);
+        // Chapters as they are in the final video (after the channel intro, if one was added).
+        List<Edl.EdlChapter> chapters = edl.chapters();
+        if (files.exists(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE)) {
+            var timeline = files.read(Stage.ASSEMBLE,
+                    com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE,
+                    com.storyforge.orchestrator.provider.render.ChannelIdents.Timeline.class);
+            chapters = chapters.stream().map(c -> new Edl.EdlChapter(c.start() <= 0.01 ? 0 : timeline.shift(c.start()),
+                    c.title())).toList();
+        }
         Dossier dossier = files.read(Stage.RESEARCH, "dossier.json", Dossier.class);
         QaReport qa = files.read(Stage.QA, "qa_report.json", QaReport.class);
         List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
@@ -225,14 +234,14 @@ public class PackageStage implements StageWorker {
         List<String> hashtags = draft.hashtags() == null ? List.of() : draft.hashtags();
         List<String> mediaCredits = files.exists(Stage.ASSETS, "assets.json")
                 ? mediaCredits(files.read(Stage.ASSETS, "assets.json", AssetManifest.class)) : List.of();
-        String description = DescriptionBuilder.build(draft.hookLine(), edl.chapters(), dossier.sources(), credits,
+        String description = DescriptionBuilder.build(draft.hookLine(), chapters, dossier.sources(), credits,
                 mediaCredits, hashtags);
         files.writeText(Stage.PACKAGE, "description.txt", description);
         List<PublishKit.ShortClip> shorts = shorts(context, edl, draft, brief, titles.get(0).title());
         files.write(Stage.PACKAGE, "package.json", new VideoPackage(titles.get(0).title(), titles, description,
                 draft.tags() == null ? List.of() : draft.tags(), draft.pinnedComment(),
                 Stage.PACKAGE.folder() + "/thumbnail.png", concepts.get(0).text(),
-                rendered.subList(1, rendered.size()), DescriptionBuilder.youtubeChapters(edl.chapters()),
+                rendered.subList(1, rendered.size()), DescriptionBuilder.youtubeChapters(chapters),
                 qa.disclosureRequired(), hashtags, draft.communityPost(), shorts));
     }
 }

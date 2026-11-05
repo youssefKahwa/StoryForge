@@ -16,6 +16,7 @@ import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.Edl;
 import com.storyforge.orchestrator.model.Edl.EdlAudio;
 import com.storyforge.orchestrator.model.Edl.EdlCaption;
+import com.storyforge.orchestrator.model.NarrationManifest;
 import com.storyforge.orchestrator.model.Outline;
 import com.storyforge.orchestrator.model.Overlay;
 import com.storyforge.orchestrator.model.Scene;
@@ -37,6 +38,10 @@ public class AssembleStage implements StageWorker {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AssembleStage.class);
     private static final String HOST_DIR = "host";
+    private static final String HOST_LOGO = "host_logo.jpg";
+    /** The intro goes after the first scene (the hook) when it ends in this window, else at the very start. */
+    private static final double INTRO_MIN_AT = 5;
+    private static final double INTRO_MAX_AT = 60;
     private static final int HOST_SIZE = 300;
 
     private static final int CAPTION_MAX_CHARS = 42;
@@ -48,9 +53,14 @@ public class AssembleStage implements StageWorker {
     private final PreferencesService preferences;
     private final HostMascot host;
     private final SubscribeNudge subscribe;
+    private final org.springframework.beans.factory.ObjectProvider<
+            com.storyforge.orchestrator.provider.render.ChannelIdents> idents;
 
     public AssembleStage(RenderProvider renderer, FormatRegistry formats, StoryForgeProperties properties,
-                         PreferencesService preferences, HostMascot host, SubscribeNudge subscribe) {
+                         PreferencesService preferences, HostMascot host, SubscribeNudge subscribe,
+                         org.springframework.beans.factory.ObjectProvider<
+                                 com.storyforge.orchestrator.provider.render.ChannelIdents> idents) {
+        this.idents = idents;
         this.subscribe = subscribe;
         this.host = host;
         this.renderer = renderer;
@@ -74,7 +84,8 @@ public class AssembleStage implements StageWorker {
      * masked character only where it does not cover him. Any problem just leaves it out of this video.
      */
     private Edl withHost(StageContext context, Edl edl, Alignment alignment) {
-        if (!preferences.get().hostEnabled() || !host.available()) {
+        boolean logo = subscribe.logo() != null && java.nio.file.Files.isRegularFile(subscribe.logo());
+        if (!preferences.get().hostEnabled() || !logo && !host.available()) {
             return edl;
         }
         try {
@@ -87,6 +98,15 @@ public class AssembleStage implements StageWorker {
                 return edl;
             }
             var files = context.files();
+            if (logo) {
+                // The channel logo with the vector mouth (LogoMouth.jsx), lip-synced to the narration's loudness.
+                Path copy = files.path(Stage.ASSEMBLE, HOST_LOGO);
+                java.nio.file.Files.copy(subscribe.logo(), copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                double[] loudness = host.loudnessPerFrame(files.path(Stage.NARRATE, NarrateStage.NARRATION),
+                        video.fps(), files.dir(Stage.ASSEMBLE));
+                return edl.withHost(new Edl.HostTrack(null, 0, HOST_SIZE,
+                        HostPlanner.openness(ranges, loudness, video.fps()), files.relative(copy)));
+            }
             HostMascot.Prepared prepared = host.prepare();
             Path dir = files.dir(Stage.ASSEMBLE).resolve(HOST_DIR);
             host.linkInto(prepared, dir);
@@ -95,10 +115,51 @@ public class AssembleStage implements StageWorker {
             List<Edl.HostAppearance> appearances = HostPlanner.mouths(ranges, loudness, prepared.openness(),
                     video.fps());
             return edl.withHost(new Edl.HostTrack(files.relative(dir.resolve(HostMascot.FRAME_PATTERN)),
-                    prepared.frameCount(), HOST_SIZE, appearances));
-        } catch (RuntimeException e) {
+                    prepared.frameCount(), HOST_SIZE, appearances, null));
+        } catch (java.io.IOException | RuntimeException e) {
             log.warn("Run {}: talking host skipped: {}", context.run().id(), e.getMessage());
             return edl;
+        }
+    }
+
+    /**
+     * The channel intro (right after the opening scene, the hook) and the outro (at the end) around the rendered
+     * video; the uploaded captions move with them (ident.json tells the package stage how to move the chapters).
+     * Any problem leaves the video as rendered.
+     */
+    private void withIdents(StageContext context, List<EdlCaption> captions) {
+        var channel = idents.getIfAvailable();
+        if (channel == null || !channel.available()) {
+            return;
+        }
+        var files = context.files();
+        Path video = files.path(Stage.ASSEMBLE, QaService.VIDEO);
+        Path content = files.path(Stage.ASSEMBLE, "content_16x9.mp4");
+        try {
+            java.nio.file.Files.move(video, content, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            NarrationManifest narration = files.read(Stage.NARRATE, "narration.json", NarrationManifest.class);
+            double introAt = 0;
+            if (narration.scenes() != null && !narration.scenes().isEmpty()) {
+                NarrationManifest.SceneAudio hook = narration.scenes().get(0);
+                double end = hook.offsetSec() + hook.durationSec();
+                introAt = end >= INTRO_MIN_AT && end <= INTRO_MAX_AT ? end : 0;
+            }
+            var timeline = channel.wrap(content, video, introAt, narration.voice());
+            files.write(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE, timeline);
+            files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions.stream()
+                    .map(c -> new EdlCaption(timeline.shift(c.start()), timeline.shift(c.end()), c.text())).toList()));
+            java.nio.file.Files.deleteIfExists(content);
+            log.info("Run {}: intro at {} s ({} s), outro ({} s) added", context.run().id(), timeline.introAt(),
+                    timeline.introSeconds(), timeline.outroSeconds());
+        } catch (java.io.IOException | RuntimeException e) {
+            log.warn("Run {}: intro/outro skipped: {}", context.run().id(), e.getMessage());
+            try {
+                if (!java.nio.file.Files.isRegularFile(video) && java.nio.file.Files.isRegularFile(content)) {
+                    java.nio.file.Files.move(content, video);
+                }
+            } catch (java.io.IOException moveFailed) {
+                throw new java.io.UncheckedIOException(moveFailed);
+            }
         }
     }
 
@@ -163,7 +224,14 @@ public class AssembleStage implements StageWorker {
         edl = withSubscribe(context, edl);
         files.write(Stage.ASSEMBLE, "edl.json", edl);
         files.writeText(Stage.ASSEMBLE, "captions.srt", CaptionBuilder.toSrt(captions));
+        Path timeline = files.path(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE);
+        try {
+            java.nio.file.Files.deleteIfExists(timeline);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
         renderer.render(edl, files.root(), files.path(Stage.ASSEMBLE, QaService.VIDEO));
         context.usage().provider(renderer.name());
+        withIdents(context, captions);
     }
 }

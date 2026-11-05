@@ -104,6 +104,13 @@ public class SoundBank {
         return sounds.isEmpty() ? Optional.empty() : Optional.of(sounds.get((int) Math.floorMod(seed, sounds.size())));
     }
 
+    /** A specific bank sound (one the owner picked by ear), or any sound of its category when it is missing. */
+    public synchronized Optional<Sound> find(String category, long id) {
+        Optional<Sound> exact = index().getOrDefault(category, List.of()).stream()
+                .filter(s -> s.id() == id && Files.isRegularFile(Path.of(s.file()))).findFirst();
+        return exact.isPresent() ? exact : pick(category, id);
+    }
+
     /** A sound for a free-text script cue such as "projector whir"; empty when nothing fits. */
     public synchronized Optional<Sound> cue(String text, long seed) {
         String words = text == null ? "" : text.toLowerCase(Locale.ROOT).replaceAll("[^a-z ]+", " ")

@@ -1,6 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, Easing, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { BRAND } from '../brand';
+import { LogoMouth } from './LogoMouth';
 
 const SIZE = 240;
 const RING = 18;
@@ -11,11 +12,14 @@ const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
  * It pops in with a little tilt, floats while it talks (a blue glow pulses with the mouth, a dotted ring turns
  * slowly) and pops out.
  */
-export const HostBubble = ({ appearance, frameUrl, durationInFrames }) => {
+export const HostBubble = ({ appearance, frameUrl, durationInFrames, logo }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const frames = appearance.frames || [];
+  const vector = logo && appearance.open && appearance.open.length > 0;
+  // The vector mouth's openness stands in for "mouth frames" in the glow logic below.
+  const frames = vector ? appearance.open.map((o) => Math.round(o * 6)) : (appearance.frames || []);
   const at = (f) => (frames.length ? frames[Math.max(0, Math.min(f, frames.length - 1))] : 0);
+  const value = (list, f) => (list && list.length ? list[Math.max(0, Math.min(f, list.length - 1))] : 0);
   const index = at(frame);
   const enter = spring({ frame, fps, config: { damping: 9, stiffness: 170, mass: 0.6 } });
   const exit = interpolate(frame, [durationInFrames - 9, durationInFrames - 1], [0, 1], {
@@ -58,7 +62,10 @@ export const HostBubble = ({ appearance, frameUrl, durationInFrames }) => {
           overflow: 'hidden', backgroundColor: '#fff',
           boxShadow: `0 16px 40px rgba(0,0,0,0.6), 0 0 ${20 + 30 * glow}px ${BRAND.sky}66`,
         }}>
-          <Img src={frameUrl(index)} style={{ width: '100%', height: '100%' }} />
+          {vector
+            ? <LogoMouth logo={logo} style="classic" open={value(appearance.open, frame)}
+              shape={value(appearance.shape, frame)} frame={frame} size={SIZE} />
+            : <Img src={frameUrl(index)} style={{ width: '100%', height: '100%' }} />}
         </div>
       </div>
     </AbsoluteFill>

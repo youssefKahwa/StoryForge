@@ -29,7 +29,7 @@ public class RemotionRenderer implements RenderProvider {
     /** A render whose log shows no progress this long is stuck (a crashed browser that never came back). */
     private static final long STALL_MS = 10 * 60 * 1000L;
     private static final Logger log = LoggerFactory.getLogger(RemotionRenderer.class);
-    private static final List<String> SYNCED = List.of("package.json", "render.mjs", "still.mjs", "src");
+    private static final List<String> SYNCED = List.of("package.json", "render.mjs", "still.mjs", "ident.mjs", "src");
     private static final int TAIL = 3000;
     private static final long STILL_TIMEOUT_SECONDS = 300;
 
@@ -354,6 +354,20 @@ public class RemotionRenderer implements RenderProvider {
         } catch (IOException e) {
             log.debug("Progress not written: {}", e.getMessage());
         }
+    }
+
+    /** The channel intro or outro (ident.mjs, ChannelIdent.jsx), silent; props: kind, variant, durationInFrames, beats. */
+    public void renderIdent(Path propsJson, Path assetDir, Path outputMp4) {
+        syncSources();
+        Path logFile = outputMp4.resolveSibling("ident.log");
+        try {
+            Files.writeString(logFile, "", StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        runNode(List.of(config.node(), installDir.resolve("ident.mjs").toString(), propsJson.toString(),
+                assetDir.toString(), outputMp4.toString()),
+                Map.of("RENDER_CONCURRENCY", String.valueOf(concurrency()), "RENDER_GL", "angle"), logFile, outputMp4);
     }
 
     /** Runs render.mjs with the stall watchdog; {@code expected}: the file it must write (null: checked by caller). */

@@ -34,11 +34,15 @@ public record Edl(
     }
 
     /** The channel's talking logo: frames under {@code framePattern} (relative to the run), shown per appearance. */
-    public record HostTrack(String framePattern, int frameCount, int size, List<HostAppearance> appearances) {
+    /** logo: when set, the bubble draws this logo with a vector mouth (open/shape per frame) instead of frames. */
+    public record HostTrack(String framePattern, int frameCount, int size, List<HostAppearance> appearances,
+                            String logo) {
     }
 
     /** One pop-in: start/end in seconds and the frame index (0-based) to show on each video frame. */
-    public record HostAppearance(double start, double end, List<Integer> frames) {
+    /** open (0..1) and shape (-1 "oh" .. 1 "ee") per video frame drive the vector mouth; frames the old one. */
+    public record HostAppearance(double start, double end, List<Integer> frames, List<Double> open,
+                                 List<Double> shape) {
     }
 
     public record EdlStyle(List<String> fonts, List<String> palette, boolean burnCaptions) {

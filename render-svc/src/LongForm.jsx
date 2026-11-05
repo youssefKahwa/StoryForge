@@ -106,10 +106,12 @@ export const LongForm = ({ edl, assetBase, filmLook = true }) => {
       {edl.host && (edl.host.appearances || []).map((appearance, index) => {
         const from = Math.round(appearance.start * fps);
         const length = Math.max(1, Math.min(Math.round((appearance.end - appearance.start) * fps), durationInFrames - from));
-        const frameUrl = (i) => assetUrl(assetBase, edl.host.framePattern.replace('%04d', String(i + 1).padStart(4, '0')));
+        const frameUrl = (i) => (edl.host.framePattern
+          ? assetUrl(assetBase, edl.host.framePattern.replace('%04d', String(i + 1).padStart(4, '0'))) : null);
         return (
           <Sequence key={`host-${index}`} from={from} durationInFrames={length}>
-            <HostBubble appearance={appearance} frameUrl={frameUrl} palette={palette} durationInFrames={length} />
+            <HostBubble appearance={appearance} frameUrl={frameUrl} palette={palette} durationInFrames={length}
+              logo={edl.host.logo ? assetUrl(assetBase, edl.host.logo) : null} />
           </Sequence>
         );
       })}
