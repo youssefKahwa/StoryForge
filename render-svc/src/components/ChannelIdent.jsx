@@ -104,16 +104,19 @@ const LogoReveal = ({ logo }) => {
 const TwoPaths = ({ logo }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const fork = [760, 540];
+  const fork = [960, 540];
   const trunk = interpolate(frame, [0, 28], [0, 1], { ...clamp, easing: Easing.inOut(Easing.cubic) });
   const split = interpolate(frame, [26, 60], [0, 1], { ...clamp, easing: Easing.inOut(Easing.cubic) });
   const pop = spring({ frame: frame - 52, fps, config: { damping: 10, stiffness: 150 } });
-  const upper = `M ${fork[0]} ${fork[1]} C 1050 540, 1150 230, 1960 190`;
-  const lower = `M ${fork[0]} ${fork[1]} C 1050 540, 1150 850, 1960 890`;
+  const upper = `M ${fork[0]} ${fork[1]} C 1220 540, 1330 250, 1960 190`;
+  const lower = `M ${fork[0]} ${fork[1]} C 1220 540, 1330 830, 1960 890`;
   const len = 1400;
+  // Once the paths and the logo are drawn, the whole drawing glides up to make room for the name below it.
+  const rise = interpolate(frame, [60, 84], [0, -150], { ...clamp, easing: Easing.inOut(Easing.cubic) });
   return (
     <AbsoluteFill style={{ opacity: fadeOut(frame, durationInFrames) }}>
       <Night />
+      <AbsoluteFill style={{ transform: `translateY(${rise}px)` }}>
       <svg width={1920} height={1080} style={{ position: 'absolute', inset: 0 }}>
         <line x1={-20} y1={fork[1]} x2={-20 + (fork[0] + 20) * trunk} y2={fork[1]} stroke="#fff" strokeWidth={8}
           strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.8))' }} />
@@ -125,9 +128,13 @@ const TwoPaths = ({ logo }) => {
       <div style={{ position: 'absolute', left: fork[0] - 131, top: fork[1] - 131, transform: `scale(${pop})` }}>
         <LogoDisc logo={logo} size={218} frame={frame} />
       </div>
-      <div style={{ position: 'absolute', left: 1040, top: 430, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <Title frame={frame} fps={fps} start={70} size={110} />
-        <Tagline frame={frame} start={86} size={24} />
+      </AbsoluteFill>
+      <div style={{
+        position: 'absolute', left: 0, bottom: 130, width: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', gap: 18,
+      }}>
+        <Title frame={frame} fps={fps} start={74} size={120} />
+        <Tagline frame={frame} start={90} size={26} />
       </div>
     </AbsoluteFill>
   );
@@ -300,7 +307,9 @@ const TalkingOutro = ({ logo, mouthPattern, mouth }) => {
   return (
     <AbsoluteFill style={{ opacity: fadeOut(frame, durationInFrames, 20) }}>
       <Night snow={80} />
-      {frame >= talkEnd && <EndLayout logo={logo} frame={frame} fps={fps} start={talkEnd + 10} />}
+      {frame >= talkEnd && (
+        <EndLayout logo={logo} frame={frame} fps={fps} start={talkEnd + 10} heading="See you on the next path" />
+      )}
       {move < 1 && (
         <div style={{ position: 'absolute', left: cx - size / 2 - 22, top: cy - size / 2 - 22 }}>
           <BigTalker mouthPattern={mouthPattern} mouth={mouth} frame={frame} fps={fps} size={size} />
