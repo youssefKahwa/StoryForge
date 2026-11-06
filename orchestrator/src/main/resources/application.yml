@@ -117,7 +117,7 @@ storyforge:
     # and room tone + mic chain on the finished narration
     fallback-voice: am_michael:60+am_fenrir:40
     pace: 0.9
-    breaths: true
+    breaths: false
     polish: true
   cloudflare:
     account-id: ${CLOUDFLARE_ACCOUNT_ID:}

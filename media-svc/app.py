@@ -721,7 +721,7 @@ class SpeakRequest(BaseModel):
     lang: str = "en-us"
     mood: str = "neutral"
     pace: float = Field(1.0, ge=0.5, le=1.5)
-    breaths: bool = True
+    breaths: bool = False
     takes: int = Field(3, ge=1, le=5)
     lexicon: dict[str, dict] = {}
     seed: str = ""

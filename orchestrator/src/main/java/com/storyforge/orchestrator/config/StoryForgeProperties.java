@@ -70,8 +70,8 @@ public record StoryForgeProperties(
 
     /**
      * fallbackVoice: the Kokoro voice used for a whole run when the Magpie voice is unavailable; pace scales the
-     * pauses of the human delivery (1 = a storyteller, 0.9 = a fast recap); breaths and polish (room tone and a mic
-     * chain on the finished narration) are on unless set to false.
+     * pauses of the human delivery (1 = a storyteller, 0.9 = a fast recap); breaths are off unless set to true (the owner
+     * does not want them); polish (room tone and a mic chain on the finished narration) is on unless false.
      */
     public record Narration(String voice, double speed, String lang, double maxWer, double retrySpeedFactor,
                             String fallbackVoice, Double pace, Boolean breaths, Boolean polish) {
@@ -85,7 +85,7 @@ public record StoryForgeProperties(
         }
 
         public boolean withBreaths() {
-            return breaths == null || breaths;
+            return breaths != null && breaths;
         }
 
         public boolean polished() {

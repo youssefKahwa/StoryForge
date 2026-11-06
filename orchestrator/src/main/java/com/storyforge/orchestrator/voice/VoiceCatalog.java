@@ -77,7 +77,8 @@ public class VoiceCatalog {
         if (!Files.isRegularFile(file)) {
             if (id.startsWith("magpie:")) {
                 media.speak(TALKING_SAMPLE, "magpie", id.substring("magpie:".length()), 1.0,
-                        properties.narration().lang(), "hype", properties.narration().deliveryPace(), true, Map.of(),
+                        properties.narration().lang(), "hype", properties.narration().deliveryPace(),
+                        properties.narration().withBreaths(), Map.of(),
                         "sample", file);
             } else {
                 media.tts(List.of(Scene.Segment.text(SAMPLE_TEXT, false)), id, properties.narration().speed(),
