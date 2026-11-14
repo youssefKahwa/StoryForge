@@ -25,6 +25,7 @@ import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.VideoTranscript;
 import com.storyforge.orchestrator.provider.render.ChannelIdents;
 import com.storyforge.orchestrator.run.RunInfo;
+import com.storyforge.orchestrator.settings.Preferences;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.worker.AssetsStage;
 import java.nio.file.Files;
@@ -109,10 +110,7 @@ public class QaService {
         checks.add(check("captions.sync", "technical", WARNING, captionsOk,
                 edl.captions().size() + " caption(s)"));
 
-        double deviation = Math.abs(info.durationSec() - run.targetSeconds()) / run.targetSeconds();
-        checks.add(check("content.duration", "content", CRITICAL, deviation <= qa.durationTolerance(),
-                fmt(info.durationSec()) + "s vs target " + run.targetSeconds() + "s ("
-                        + fmt(deviation * 100) + "% off, max " + fmt(qa.durationTolerance() * 100) + "%)"));
+        checks.addAll(durationChecks(info.durationSec(), run.targetSeconds(), qa.durationTolerance()));
 
         Set<String> renderedScenes = edl.shots().stream().map(EdlShot::sceneId).collect(Collectors.toSet());
         List<String> missingScenes = scenes.stream().map(Scene::id).filter(id -> !renderedScenes.contains(id))
@@ -273,6 +271,24 @@ public class QaService {
                 check("legal.music_licenses", "legal", CRITICAL, unlicensedAudio.isEmpty(),
                         unlicensedAudio.isEmpty() ? musicTracks + " music/SFX track(s), all licensed"
                                 : "unknown license: " + unlicensedAudio));
+    }
+
+    /**
+     * The owner's rule for long videos: at least 8 minutes, so YouTube allows mid-roll ads. Missing the target length
+     * is only a warning then (the narrator's speed varies). A short test video keeps the tolerance as its gate.
+     */
+    static List<Check> durationChecks(double seconds, int targetSeconds, double tolerance) {
+        double deviation = Math.abs(seconds - targetSeconds) / targetSeconds;
+        String detail = fmt(seconds) + "s vs target " + targetSeconds + "s (" + fmt(deviation * 100) + "% off, max "
+                + fmt(tolerance * 100) + "%)";
+        double minimum = Preferences.MIN_LONG_MINUTES * 60;
+        if (targetSeconds < minimum) {
+            return List.of(check("content.duration", "content", CRITICAL, deviation <= tolerance, detail));
+        }
+        return List.of(
+                check("content.duration", "content", CRITICAL, seconds >= minimum, fmt(seconds) + "s, at least "
+                        + Math.round(minimum) + "s for mid-roll ads"),
+                check("content.duration_target", "content", WARNING, deviation <= tolerance, detail));
     }
 
     /** One frame of every shot on review pages for the owner (qa/review_*.jpg), and the shots that show nothing. */

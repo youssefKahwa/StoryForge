@@ -11,6 +11,7 @@ import com.storyforge.orchestrator.provider.llm.LlmRouter;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
+import com.storyforge.orchestrator.voice.VoiceCalibration;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -29,13 +30,16 @@ public class OutlineStage implements StageWorker {
     private final LlmRouter llm;
     private final FormatRegistry formats;
     private final JsonMapper json;
-    private final int wordsPerMinute;
+    private final StoryForgeProperties properties;
+    private final VoiceCalibration calibration;
 
-    public OutlineStage(LlmRouter llm, FormatRegistry formats, JsonMapper json, StoryForgeProperties properties) {
+    public OutlineStage(LlmRouter llm, FormatRegistry formats, JsonMapper json, StoryForgeProperties properties,
+                        VoiceCalibration calibration) {
         this.llm = llm;
         this.formats = formats;
         this.json = json;
-        this.wordsPerMinute = properties.video().wordsPerMinute();
+        this.properties = properties;
+        this.calibration = calibration;
     }
 
     @Override
@@ -59,6 +63,9 @@ public class OutlineStage implements StageWorker {
         // With inspiration links, their running order IS the beat sheet: the generic format beats (hook, recap,
         // pillars...) are not even shown, so the model cannot fall back to an essay structure.
         Object beatSheet = blueprint ? blueprintBeats(ideas) : format.beats();
+        // The narrator's own measured speed (the critique uses the same), so a 10-minute plan is 10 minutes of voice.
+        String voice = context.run().voice() != null ? context.run().voice() : properties.narration().voice();
+        int wordsPerMinute = calibration.wordsPerMinute(voice);
         Map<String, String> vars = Map.of(
                 "blueprint", blueprint ? json.writeValueAsString(ideas.blueprint()) : "[]",
                 "topic", brief.title(),
@@ -81,7 +88,8 @@ public class OutlineStage implements StageWorker {
             draft.beats().stream().filter(beat -> !format.hasBeat(beat.beat()))
                     .forEach(beat -> log.warn("Outline beat '{}' is not in format {}", beat.beat(), format.id()));
         }
-        context.files().write(Stage.OUTLINE, "outline.json", normalize(draft, context.run().targetSeconds()));
+        context.files().write(Stage.OUTLINE, "outline.json", normalize(draft, context.run().targetSeconds(),
+                wordsPerMinute));
     }
 
     /** The inspiration's parts as a beat sheet: part_1, part_2... with their titles and shares. */
@@ -128,7 +136,7 @@ public class OutlineStage implements StageWorker {
         return new Outline(targetSeconds, beats);
     }
 
-    private Outline normalize(Outline draft, int targetSeconds) {
+    static Outline normalize(Outline draft, int targetSeconds, int wordsPerMinute) {
         double total = draft.beats().stream().mapToInt(beat -> Math.max(1, beat.targetSeconds())).sum();
         List<Outline.Beat> beats = draft.beats().stream().map(beat -> {
             int seconds = (int) Math.round(Math.max(1, beat.targetSeconds()) / total * targetSeconds);
