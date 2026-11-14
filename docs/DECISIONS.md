@@ -330,3 +330,51 @@ scene at 0.88× (30+ min), still missing QA's ±10%.
   picture changes every 2-3 s without more AI pictures. Shorts carry the same cuts so their borrowed sound matches.
   New synthesized SFX: shutter, glitch, boom, sub_drop, film_burn, whoosh.
 - Fair-use clips: share is a setting (`clipSharePercent`, default 20%, max 25%), >= 8 s apart, up to 4 trailers.
+  Superseded by ADR-030.
+
+## ADR-028 Human narration: NVIDIA Magpie through a delivery engine (2026-11-05, owner request)
+- The narrator read instead of talking. The `local` profile now uses `tts: delivery` with `magpie:Jason` (NVIDIA free
+  API, `NVIDIA_API_KEY`, handed to media-svc by `MediaSvcLauncher`). The NVIDIA key is used for this voice only; text
+  stays on Claude Code (ADR-012).
+- media-svc `/speak` (`delivery.py`): one thought (at most 26 words) per take, up to 3 takes judged by Whisper and
+  voiced time per word, cuts on silences, pauses by meaning, moods mapped to Magpie's emotions. Magpie ignores SSML
+  rate, pitch and breaks, so the engine does the pacing itself. `NarrateStage` adds room tone and a light mic chain.
+- Without the key the whole run uses the Kokoro blend `am_michael:60+am_fenrir:40` (never mixed with Magpie).
+- Breaths are off by default (`narration.breaths: false`, owner choice).
+- Scripts are written for the ear: `SpokenCheck` flags essay rhythm, written-only asides and punctuation, robot
+  fragments, digits; its major flags fail the critique round, so the existing rewrite pass fixes them.
+
+## ADR-029 Dashboard on Ant Design 5 (2026-11-05, owner request)
+Dark studio theme with a light toggle (`src/theme/`), antd 5 with `extractStyle` in `gatsby-ssr.js`. Supersedes the
+antd 4 choice of ADR-004.
+
+## ADR-030 Footage: moments, at most two uses, AI pictures last (2026-11-14, owner request)
+- The same moment sits in several trailers and scene uploads, so "each catalogue entry once" still repeated footage.
+  `FootageIndex` groups every cut into moments (same footage, small-frame correlation both ways >= 0.93) and set-ups
+  (>= 0.8), finds cuts the scene detector missed, keeps each moment's best copy; cached as `moments.json` per work.
+- `clip_describe` 0.2 describes one copy per moment (`catalog2.json`); `clip_match` gives up to 3 ranked picks;
+  `FootagePlanner` takes the best pick that respects `storyforge.clips.max-uses` (2, a second use >= 90 s from any
+  other, on a later part), prefers clean and varied footage, and builds long shots (up to 14 s) as a montage of up to
+  5 moments. Shots still empty continue the previous scene, then get one more matching pass, then real media, then AI.
+- Footage share defaults to 100% (max 100). A library with too little different footage searches YouTube wider once.
+- Clips get a light grade (denoise, lift for dark moments, contrast, colour, sharpness).
+- `assets/footage_report.json`; QA warnings `assets.repeats` and `assets.ai_share` (over 15% on a screen work).
+
+## ADR-031 Ideas from open-source Claude skills, ported not installed (2026-11-14, owner request)
+The owner proposed nine skill packs and repos. They are instructions for an interactive session; StoryForge runs on
+its own, so only their rules were ported: text cards over the shot before them (footage included), one set of motion
+curves (`render-svc/src/motion.js`: eased entrances, exits in about half the time), review pages of every shot
+(`qa/review_*.jpg`, the dashboard's Shots tab, QA warning `video.flat_shots`), and a script that ends on one ask
+(`script` 0.9, checked by `SpokenCheck`).
+
+## ADR-032 V3: cuts on the beat, and the main video's shot choices (2026-11-14, owner request)
+- `MusicPlanner` computes the music plan AUDIO_MIX will play (it is deterministic), so the visual plan and the footage
+  can be cut to it. `BeatGrid` finds a track's beats (spectral flux, grid search 70-180 BPM leaning to 120, cached in
+  `library/music-beats/`); only tracks with confidence >= 2.0 get a grid (29 of the 61 library tracks; ambient beds
+  none). Cuts between shots of one scene move onto a beat within 0.25 s; cuts inside a montage within 0.4 s.
+- The main inspiration video: media-svc `/transcript` keeps timed segments, `/video` fetches its picture at 480p for
+  analysis only (deleted after). `CreatorShots` matches its cuts against the library frame by frame (normal and
+  mirrored, fine score >= 0.9) and has Claude describe it once (`creator_describe`, cached in
+  `inspirations/videos/`). `clip_match` 0.6 sees what it showed every ~10 s and takes those moments first when they
+  fit. Calibration on run 133's main video: it shows mostly full-film scenes, so exact matching needs the owner's
+  copy of the film in `library/films`; when the library holds under half of its footage, YouTube is searched wider.

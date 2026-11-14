@@ -88,11 +88,25 @@
   and a progress column in the runs list; Quick start follows the inspiration analysis and opens the run.
 - Animated globe maps (Wikidata + Natural Earth) for the story's main place; NASA and Pixabay photos.
 
+### Human narration, film footage without repeats, V3 edit (2026-11-05 to 2026-11-14)
+- Narration talks instead of reading: NVIDIA Magpie "Jason" through media-svc's delivery engine (`/speak`), Kokoro
+  blend fallback, no breaths by default; scripts written for the ear (`SpokenCheck`), ending on one ask (ADR-028).
+- Dashboard on antd 5 with a dark studio theme and a light toggle; a Shots tab shows every shot of the final video.
+- Footage: moments index, ranked picks, at most 2 uses per moment, montages for long shots, light grade, footage
+  share 100% by default, AI pictures only when nothing else fits (ADR-030). Run 133 (Fight Club, 10 min), ASSETS
+  redone: footage 419 s → 505 s of 600, AI pictures 68 s → 3 s, no moment above 2 uses.
+- Text cards over the film, one set of motion curves, review pages and `video.flat_shots` in QA (ADR-031).
+- V3 (ADR-032): cuts on the music's beat (29 of 61 tracks have a usable grid); the main inspiration video's shot
+  choices, matched exactly when the owner's film copy is in `library/films`, described by Claude otherwise.
+- Tests: 150 passing.
+
 ## Next
-- Owner steps in `docs/OWNER_SETUP.md` (roll Cloudflare token, YouTube client, Telegram, power settings).
+- Owner: put your own copy of the film in `storyforge-data\library\films\` for the Fight Club videos (exact main-video
+  matching and the whole film as footage); restart StoryForge so media-svc gets `/video`.
+- Owner steps in `docs/OWNER_SETUP.md` (roll the Cloudflare token and the NVIDIA key, YouTube client, Telegram).
 - First real YouTube upload test once the Google client exists.
-- M6: analytics pulls + retention-based learning; M7: Film-analysis format.
+- M6: analytics pulls + retention-based learning.
 
 ## Blocked / needs owner
-- ~~NVIDIA API key~~ done (in `.env`). Images: NVIDIA FLUX not reachable, so pick another free image source before M3.
+- NVIDIA API key in `.env`: used for the Magpie narration voice (images use Cloudflare, ADR-015).
 - See docs/OWNER_SETUP.md. Docker Desktop is optional (the `h2` profile works without it).

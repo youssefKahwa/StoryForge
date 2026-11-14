@@ -12,12 +12,15 @@ This guide explains everything the app does, step by step, and everything it can
 
 | Part | State |
 |---|---|
-| Pipeline, dashboard, live progress, Quick start, revisions, fair-use trailer clips, Pixabay/NASA/Commons media, globe maps, talking logo, BiPath style, transitions with sound | Done, tested, committed |
-| Smart fallback when no AI picture can be made (stock photo, then reuse) | Done, tested, committed (`b8604c4`) |
-| **v3** (your last request): human script that follows your links, 8+ minutes, wait for the picture quota instead of empty screens, full-screen pro edit, punch-ins, glitch, film burn, impact, dip to black, new sounds | **Built and unit-tested, NOT yet tested on a real video, NOT committed yet** |
+| Pipeline, dashboard, live progress, Quick start, revisions, Pixabay/NASA/Commons media, globe maps, talking logo, BiPath style, transitions with sound, human script from your links, 8+ minutes | Done, tested, committed |
+| Narration that talks instead of reading (Magpie voice "Jason"), no breaths | Done, tested, committed |
+| New dashboard look (dark studio theme with a light toggle) | Done, committed |
+| Film footage on almost every shot, no moment more than twice, AI pictures only when nothing else fits | Done, tested on run 133, committed |
+| Text cards over the film, smoother motion, Shots tab, one ask at the end of the script | Done, tested, committed |
+| Cuts on the music's beat, and your main video's own shot choices | Done, tested on run 133, committed |
 
-The full v3 test with your 3 Fight Club links was started and then stopped when you asked. It will continue when you
-say so.
+What still needs you: put your own copy of the film in `storyforge-data\library\films\` (see section 6), and restart
+StoryForge once so the updated media-svc is used.
 
 ---
 
@@ -44,8 +47,8 @@ A 10-minute video takes about 2 to 2.5 hours on this PC. Most of that time is sp
 | Part | What it does | Tech |
 |---|---|---|
 | **Orchestrator** (`orchestrator/`) | The brain: runs the 17 steps, stores everything, serves the dashboard and the API | Java 17, Spring Boot 4, H2 database |
-| **Dashboard** (`dashboard/`) | The website at localhost:8080: new video, progress, revise, settings | Gatsby / React |
-| **media-svc** (`media-svc/`) | Voice (text to speech), word timing, YouTube transcripts, trailer download, sound effects | Python, FastAPI, Kokoro, Whisper, yt-dlp |
+| **Dashboard** (`dashboard/`) | The website at localhost:8080: new video, progress, revise, settings | Gatsby / React, Ant Design 5 |
+| **media-svc** (`media-svc/`) | The narrator's voice, word timing, YouTube transcripts with timings, footage download, your main video's picture, sound effects | Python, FastAPI, NVIDIA Magpie, Kokoro, Whisper, yt-dlp |
 | **render-svc** (`render-svc/`) | Draws and renders the video, the Shorts and the thumbnails frame by frame | Remotion (React video), Chrome |
 | **Prompts** (`prompts/`) | The instructions given to the AI writer at each step | Markdown files |
 | **Formats** (`config/formats/`) | The two video styles: Great Stories and Film Analysis | JSON |
@@ -69,13 +72,13 @@ step, not from zero. Answers from the AI are cached, so a rerun does not spend y
 | 4 | Planning the chapters | Builds the outline. With links, it follows **your videos' order and points**. Without links, it uses the format's beats (hook, context, recap, analysis…). |
 | 5 | Writing the script | Writes the full narration in **StoryForge Markup** (scenes, tone, pauses, picture ideas, sound cues, music mood). |
 | 6 | Reviewing and polishing | A separate AI critic scores the script (hook, clarity, pacing, facts, **human voice**…). If too low, it is rewritten (up to the limit), then trimmed to the exact length. |
-| 7 | Recording the narration | Kokoro voice reads each scene (free, runs on your PC). |
+| 7 | Recording the narration | The Magpie voice "Jason" (free NVIDIA key) records each scene like a person talking: one thought per take, the best of up to 3 takes, pauses by meaning, a light mic polish. Without the key, a local Kokoro voice reads it. |
 | 8 | Syncing words to the voice | Finds the exact time of every word (for cuts, captions, punch-ins and the talking logo). |
-| 9 | Planning every shot | The "director": cuts the narration into shots of 3–6 s, writes a picture prompt per shot, decides which shots get a real photo, real footage, a trailer clip or a map, and writes the on-screen texts. |
-| 10 | Finding photos, footage and pictures | Gets every visual: real media, trailer clips, AI pictures (see section 6). |
+| 9 | Planning every shot | The "director": cuts the narration into shots of 3–6 s, writes a picture prompt per shot, decides which shots get a real photo, real footage or a map, and writes the on-screen texts. Cuts inside a scene move onto the music's beat when one is close. |
+| 10 | Finding photos, footage and pictures | Gets every visual: film footage, real media, AI pictures only when nothing else fits (see section 6). |
 | 11 | Mixing music and sound | Music per scene (ducked under the voice), sound cues, transition sounds, loudness to YouTube's -14 LUFS. |
 | 12 | Rendering the video | Remotion draws every frame (1920×1080, 30 fps) with all the edit effects (see section 7). |
-| 13 | Quality checks | Automatic checks: resolution, sound level, sync, black frames, length, every shot has a picture, sources, licenses, originality (no copied sentences), fair-use clip share. |
+| 13 | Quality checks | Automatic checks: resolution, sound level, sync, black frames, length, every shot has a picture, sources, licenses, originality (no copied sentences), footage share, footage shown more than twice, AI share, empty-looking shots. It also makes the pages of the **Shots** tab. |
 | 14 | Packaging | Title, description with chapters and sources, tags, 3 thumbnails, 3 Shorts, export folder. |
 | 15–17 | Schedule, publish, learn | Prepares the upload (private first, you can veto). Uploading needs your YouTube OAuth set up (not done yet). |
 
@@ -99,6 +102,12 @@ What you asked for: "read carefully what my links say and do something like that
   - Banned: essay words ("furthermore", "profound", "delve"), "according to scholars", "sources differ",
     "in this video", "let's dive in".
   - At most one dramatic pause per scene, placed before a reveal. The edit uses these pauses (see 7.3).
+  - **Written for the ear**: sentences of one breath, linked with "so", "and", "but"; no asides between commas, no
+    colons or brackets, numbers written as they are said. An automatic check catches essay rhythm and robot-like
+    runs of short fragments, and the script is rewritten when it finds them.
+  - **The ending**: the big question from the start gets its answer, then **one** ask (a question for the comments or
+    a related story to watch next). Never "like, subscribe and follow me" and never "thanks for watching": the
+    subscribe button is already on screen.
 - **Facts**: real-world facts (dates, money, names) must come from the researched sources. Plot events must match the
   story. Opinions are free.
 - **Close adaptation, not translation**: same story, same order, same points, same energy, but our own English
@@ -110,9 +119,10 @@ What you asked for: "read carefully what my links say and do something like that
   The originality check in QA verifies this.
 - **Channel brief** (Settings): "a passionate, funny, opinionated storyteller who talks to the viewer like a friend".
   You can edit it.
-- **Voice**: Kokoro, free and local. Current voice: `af_heart`, a female US voice and Kokoro's best-rated one. There
-  are samples to compare in `storyforge-data\samples\voices-v3\`: `am_michael.wav`, `am_fenrir.wav`,
-  `bm_george.wav`, `af_heart.wav`. Choose one in **Settings → Default voice**.
+- **Voice**: Magpie "Jason" (NVIDIA, free key in `.env`), delivered like a person talking: the script's moods
+  (excited, telling, serious, angry) change how he says it, and a pause comes where the meaning needs one. Without
+  the key, a local Kokoro voice blend reads the whole video instead. Breaths are off. Choose another voice in
+  **Settings → Default voice**.
 
 ---
 
@@ -124,23 +134,33 @@ The goal is to never show an empty screen, and to use as much real material as p
 
 1. **Map** (for at most 2 shots per video): an animated 3D globe that turns and zooms to the place being talked
    about. It uses Wikidata coordinates and Natural Earth maps (both free and public domain).
-2. **Fair-use trailer clips** (only when the video is about a film, series, anime or game):
-   - The app finds the official trailers itself (up to 4: official trailer, teaser, trailer 2, international), using
-     yt-dlp, picture only, no sound.
-   - It detects every cut and shows Claude numbered contact sheets. Claude matches trailer moments to what the
-     narrator says.
-   - Limits enforced in code:
-     - A share of the video set in Settings (default **20%**, maximum 25%).
-     - Each clip uses at most 4.5 s of the trailer, slowed down (at least 0.5×) with a short freeze.
-     - At least 8 s between clips.
-     - No title or logo cards, muted, with a credit in the corner.
-   - QA lists every clip, and the description credits them.
-   - A Content ID claim is still possible; watch the clips before publishing.
+2. **The work's own footage** (only when the video is about a film, series, anime or game):
+   - **The library**: the app downloads the work's trailers, teasers, TV spots, official clips and scene uploads
+     (picture only, no sound) into `storyforge-data\library\trailers\<work>\`, plus any copy of the film you put in
+     `storyforge-data\library\films\` (the file name must contain the title). With your own copy it has the whole
+     film to choose from.
+   - **Moments, not files**: the same scene appears in several trailers, so the app groups every copy into one
+     "moment" and keeps the best copy (longest, sharpest). Claude describes each moment once; the description is
+     kept for the next video on the same work.
+   - **Your main video's choices**: Claude looks at your main inspiration video once and notes what it shows at every
+     point. When your film copy is in the library, the app also recognises the exact moments it used. Our shot on the
+     same idea then gets that moment first (when it fits the words).
+   - **Matching**: for every shot Claude gives up to 3 moments that fit what is said, best first.
+   - **Rules enforced in code**:
+     - A moment is shown **at most twice**, and the second time is at least 90 s away, on a later part of it.
+     - Dark or low-quality moments, and the same set-up twice in a row, are avoided when anything else fits.
+     - A long shot becomes a quick montage of up to 5 moments, and those cuts land on the music's beat.
+     - Footage can fill the whole video by default (**Settings → Real footage, max share**, 100%).
+     - Muted, no title cards, a light grade so old footage looks current, a credit in the corner.
+   - If the library holds too little different footage for the video (or too little of what your main video showed),
+     the app searches YouTube wider once.
+   - QA lists the footage share and any repeats, and the description credits the sources. A Content ID claim is still
+     possible; watch the **Shots** tab before publishing.
 3. **Real photos**: Wikimedia Commons (public domain or CC licenses, with attribution), then NASA (public domain),
    then Pixabay photos.
 4. **Real footage**: Pixabay videos (landscape only, cleaned), Wikimedia Commons video, and Pexels if you ever get a
    key.
-5. **AI pictures**:
+5. **AI pictures**, only for the shots that nothing above could fill (on a film video that is usually 1-3 shots):
    - Cloudflare Workers AI, model FLUX.1-schnell, free tier of about 165 pictures per day, reset at 01:00 your time
      (00:00 UTC).
    - Film Analysis style (v3): cinematic film stills, moody 35mm, dramatic light, anonymous people (faces in shadow
@@ -151,11 +171,11 @@ The goal is to never show an empty screen, and to use as much real material as p
      01:02 your time** and then continues. The progress page shows "Waiting for the free picture quota…". Keep the
      app open, or start it again later and it continues.
    - Leftover gaps: the AI suggests a stock photo search (checked against the narration, off-topic photos are
-     rejected), else the nearest picture is reused with a different framing.
+     rejected), else the nearest picture is reused with a different crop (each picture once, unless no other is left).
    - Empty backgrounds can no longer happen: QA fails the video if one appears.
 
-A 10-minute video needs about 80–100 AI pictures, so 1 video per day fits the free quota easily. Thumbnails keep 3
-pictures in reserve.
+A 10-minute video that is not about a film needs about 80–100 AI pictures, so 1 video per day fits the free quota
+easily. Thumbnails keep 3 pictures in reserve.
 
 ---
 
@@ -173,6 +193,8 @@ This is what makes it look like a YouTube channel and not a slideshow.
   **punch-in** halfway through (same picture, tighter crop on another area, a tiny camera flash and a quiet shutter
   click). This is the "frame switch" of current edits, and it costs no extra AI pictures.
 - **Film look** on top of everything: soft vignette and light film grain.
+- **Motion**: titles and overlays come in eased and leave in about half the time; nothing starts or stops with a
+  robotic linear move, and a key phrase drifts slightly while you read it.
 
 ### 7.2 Transitions with sound (v3)
 The default is a **hard cut** (pro editors cut, they don't fade). On the cuts that matter, the app picks a transition
@@ -189,12 +211,19 @@ and the matching sound, timed so the sound peaks exactly on the cut:
 | Calm or sad scene change | slow crossfade | none |
 | Punch-in inside a shot | tighter crop + tiny flash | quiet camera shutter click |
 
-Energetic transitions are at least 6 s apart so it never becomes noisy. All sounds are generated by code (noise and
-tones), so there are no copyright problems.
+Energetic transitions are at least 6 s apart so it never becomes noisy. The sounds are real recordings from Freesound
+under CC0 (public domain), fetched once with `FREESOUND_API_KEY`; without the key, sounds generated by code are used.
+Either way there are no copyright problems.
+
+**Cuts on the beat**: the app knows which music will play before it cuts the picture. When the track has a clear
+beat (about half of the library; calm or ambient beds have none), a cut inside a scene moves onto the nearest beat if
+one is within a quarter of a second, and the cuts inside a montage within 0.4 s. The picture never moves further from
+the words than that.
 
 ### 7.3 Text and graphics (BiPath brand style)
 - Fonts and colors match your BiPath logo: white and sky blue, bold extruded titles, snow particles.
-- **Chapter cards** at each new chapter. **Kinetic text** (a key phrase over a blurred picture) about once a minute.
+- **Chapter cards** at each new chapter. **Kinetic text** (a key phrase over the shot before it, film footage
+  included, slowed down, blurred and dimmed) about once a minute.
 - **Overlays** checked against the narration: dates, places ("VENICE, ITALY / SEPTEMBER 10, 1999"), numbers, quotes.
 - Captions can be burned in (Settings). A captions file (`captions.srt`) is always exported.
 
@@ -204,7 +233,7 @@ Your `assets\channel\DownRightTalkingMouth.mp4` logo appears in a circle at the 
 Settings.
 
 ### 7.5 Sound
-- **Narration**: Kokoro voice, with pauses from the script.
+- **Narration**: Magpie "Jason" (see section 5), with a quiet room tone and a light mic polish.
 - **Music**:
   - Comes from your library `storyforge-data\library\music\<mood>\` (royalty-free tracks).
   - A mood is chosen per scene and ducked under the voice.
@@ -257,8 +286,10 @@ picture quota resets).
 - **Home**: all runs with their status and a live progress column.
 - **New video**: Quick start (links, topic or nothing), or the step-by-step wizard (choose the angle and length
   yourself).
-- **Run page**: live progress (steps, %, time left, finish time), video player, Revise, Publish kit, QA report,
-  costs (always $0).
+- **Run page**: live progress (steps, %, time left, finish time), video player, Revise, Publish kit, **Shots** (one
+  frame of every shot with what is said under it: green is film footage, red an AI picture), QA report, costs
+  (always $0).
+- The theme is dark by default; the sun/moon button in the header switches between dark and light.
 - **Topics**: topic ideas generated for your channel, and seed topics.
 - **Settings**:
   - Default voice, default length (minimum **8 min**, default **10**), format.
@@ -267,7 +298,7 @@ picture quota resets).
   - Publish day and time.
   - Channel brief.
   - Talking logo on/off.
-  - Fair-use trailer clips on/off and **max share %**.
+  - Real footage of the work on/off and its **max share** (default 100%).
   - **System check**: is everything installed and are the keys working, how many free pictures are left today.
   - **Storage cleanup**: delete old runs and caches.
 
@@ -277,14 +308,15 @@ picture quota resets).
 
 | Service | Used for | Key | Limit |
 |---|---|---|---|
-| Claude Code (your Pro subscription) | Thinking and writing: analysis, research, script, critic, director, clip matching | your login | Pro quota (used sparingly, answers cached) |
-| NVIDIA free API | Backup text model | `.env` | free tier |
+| Claude Code (your Pro subscription) | Thinking and writing: analysis, research, script, critic, director, describing and matching footage, reading your main video | your login | Pro quota (used sparingly, answers cached) |
+| NVIDIA free API | The narration voice (Magpie "Jason") | `NVIDIA_API_KEY` in `.env` | free tier (the app keeps under 35 requests a minute) |
 | Cloudflare Workers AI | AI pictures (FLUX.1-schnell) | `.env` (account ID + token) | ~165 pictures/day, reset 00:00 UTC |
 | Pixabay | Photos and footage | `PIXABAY_API_KEY` in `.env` | free, rate-limited (the app throttles) |
 | Wikimedia Commons, NASA, Wikidata | Real photos, video, map coordinates | none | free |
-| Kokoro (local) | Narration voice | none | runs on your PC |
-| Whisper (local) | Transcripts and word timing | none | runs on your PC |
-| yt-dlp | Reading your links, trailers | none | — |
+| Kokoro (local) | Backup narration voice (when there is no NVIDIA key) | none | runs on your PC |
+| Whisper (local) | Transcripts, word timing, judging each voice take | none | runs on your PC |
+| yt-dlp | Reading your links, film footage, your main video's picture (only analysed, never shown) | none | — |
+| Freesound | Recorded sound effects (CC0) | `FREESOUND_API_KEY` in `.env` | free |
 | Pexels | Footage | optional (new keys paused) | — |
 | Telegram | "Your video is ready" message | optional | — |
 | YouTube Data API (OAuth) | Upload as private | optional, not set up yet | — |
@@ -301,10 +333,12 @@ Secrets live only in `.env`, which is never committed to git. The Cloudflare tok
   YouTube's "altered or synthetic content" label (this does not affect monetization).
 - Real photos and footage are only used with an allowed license (public domain, CC0, CC BY/BY-SA, Pixabay license),
   with attribution in the description.
-- Trailer clips use fair-use limits: short, muted, under commentary, credited, with a share set by you. A Content ID
-  claim is still possible, and QA warns you.
-- No tricks to dodge Content ID (no mirroring or pitch shifting): that is against YouTube policy.
-- Music and sound effects: only licensed tracks from your library, and sound effects generated by code.
+- Film footage is used as fair-use commentary: muted, under our narration, credited, each moment at most twice, with
+  a share set by you (default 100%). The more footage, the more likely a Content ID claim; QA warns you.
+- No tricks to dodge Content ID (no mirroring or pitch shifting of our footage): that is against YouTube policy.
+- Your main inspiration video is only read (its words and what it shows), never copied into ours.
+- Music and sound effects: only licensed tracks from your library, CC0 recordings from Freesound, and sounds
+  generated by code.
 - Long-form videos are at least 8 minutes, the minimum for mid-roll ads.
 
 ---
@@ -315,12 +349,15 @@ Secrets live only in `.env`, which is never committed to git. The Cloudflare tok
 |---|---|
 | `storyforge-data\runs\<n>\` | Everything for one video, step by step (script, shots, pictures, audio, edl.json, render log, QA) |
 | `storyforge-data\exports\` | Finished publish kits |
-| `storyforge-data\inspirations\<n>\` | Transcripts of your links + the blueprint (`ideas.json`) |
+| `storyforge-data\inspirations\<n>\` | Transcripts of your links (with timings) + the blueprint (`ideas.json`) |
+| `storyforge-data\inspirations\videos\` | What your main videos show: small frames, cuts, preview tiles and Claude's notes (the video itself is deleted) |
 | `storyforge-data\library\music\<mood>\` | Your music |
+| `storyforge-data\library\music-beats\` | The beat grid of each music track |
 | `storyforge-data\library\sfx\` | Generated sound effects |
-| `storyforge-data\library\trailers\` | Downloaded trailers (picture only) |
+| `storyforge-data\library\trailers\<work>\` | The work's footage library (picture only), its moments (`moments.json`) and their descriptions (`catalog2.json`) |
+| `storyforge-data\library\films\` | Your own copies of films or episodes (title in the file name) |
 | `storyforge-data\cache\` | AI answers, pictures, voice (so reruns are free and fast) |
-| `docs\` | SPEC, PROGRESS, DECISIONS (every design choice, ADR-001 to ADR-027), OWNER_SETUP |
+| `docs\` | SPEC, PROGRESS, DECISIONS (every design choice, ADR-001 to ADR-032), OWNER_SETUP |
 
 ---
 
@@ -338,6 +375,8 @@ Secrets live only in `.env`, which is never committed to git. The Cloudflare tok
 
 ## 15. What's next
 
-1. Finish the v3 test with your 3 Fight Club links (10 minutes), check the result, then commit v3.
-2. Choose a narrator voice from the 4 samples.
-3. Optional: set up YouTube upload (OAuth) and Telegram notifications, and roll the Cloudflare token.
+1. Put your own copy of Fight Club in `storyforge-data\library\films\`, restart StoryForge, and make the next video:
+   the footage then comes from the whole film and follows your main video's choices exactly.
+2. Watch the **Shots** tab of that video before publishing.
+3. Optional: set up YouTube upload (OAuth) and Telegram notifications, and roll the Cloudflare token and the NVIDIA
+   key (see `docs\OWNER_SETUP.md`).

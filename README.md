@@ -8,7 +8,9 @@ video per week. Everything runs on free providers (see `docs/DECISIONS.md`, ADR-
 ## Layout
 ```
 orchestrator/   Spring Boot 4 (JDK 17): state machine, stage workers, providers, QA gate, REST API
-dashboard/      Gatsby 5 + React 18 + antd 4 + Redux Saga + react-intl
+dashboard/      Gatsby 5 + React 18 + antd 5 + Redux Saga + react-intl (dark theme with a light toggle)
+media-svc/      Python FastAPI: narration (Magpie via the NVIDIA key, Kokoro fallback), Whisper timing, yt-dlp
+render-svc/     Remotion: the long video, Shorts and thumbnails (copied to ~/.storyforge/render-svc before a render)
 prompts/        versioned prompt templates (front matter: version, tier)
 config/formats/ format plugins: beat sheet + style bible
 docker-compose.yml  PostgreSQL 16
@@ -43,7 +45,8 @@ One-time setup: `docs/OWNER_SETUP.md`.
 
 ## Profiles
 - `mock`: canned LLM output, sine-wave narration, placeholder images, FFmpeg slideshow, no upload (about 70 s video).
-- `local` (M1+): Claude Code + NVIDIA free API for text, local TTS/alignment, no upload.
+- `local` (M1+): Claude Code for text, Magpie voice `Jason` (`NVIDIA_API_KEY` in `.env`, Kokoro blend when it is
+  missing), local alignment, no upload.
 - `h2`: add to any profile to use an H2 file DB instead of Postgres.
 
 ## API

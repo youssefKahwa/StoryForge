@@ -171,7 +171,7 @@ Essays about films and series: themes, character arcs, symbolism, structure, why
 | Media sidecar | Python 3 + FastAPI: forced alignment (WhisperX), optional local TTS, audio analysis |
 | Rendering | Node + **Remotion** (React-based programmatic video) |
 | Media utilities | FFmpeg (loudness, concat, black/freeze detection, transcode) |
-| Dashboard | React, antd 4, Redux Saga (onSuccess/onFail callbacks), centralized `ApiRoutes.js`, react-intl |
+| Dashboard | React, antd 5, Redux Saga (onSuccess/onFail callbacks), centralized `ApiRoutes.js`, react-intl |
 | Deployment | Docker Compose (orchestrator, media-svc, render-svc, postgres, dashboard) |
 
 ---
@@ -250,7 +250,8 @@ Essays about films and series: themes, character arcs, symbolism, structure, why
 
 ### S7. Narration
 - Use the `TtsProvider` interface. Synthesize per scene with one consistent narrator voice, then normalize.
-- **Providers (switch via config):** ElevenLabs, Google Cloud TTS, local open-source (e.g. Chatterbox/Kokoro via media-svc).
+- **Providers (switch via config):** `delivery` (NVIDIA Magpie through media-svc's delivery engine, the default in
+  the `local` profile; Kokoro on CPU when the NVIDIA key is missing), `kokoro`, `mock`.
 - **Option:** clone **my own voice** (my consent, my voice) for a human, recognizable identity.
 - **Output:** a WAV per scene plus a merged narration track.
 
@@ -475,7 +476,7 @@ storyforge/
 │   └── src/main/java/.../{run,stage,provider,claude,format,playbook,publish,learn,api,dto}
 ├── media-svc/             # Python FastAPI: alignment, local TTS, audio QA
 ├── render-svc/            # Node + Remotion: compositions, components (map, timeline, kinetic text)
-├── dashboard/             # React, antd 4, Redux Saga, ApiRoutes.js, react-intl
+├── dashboard/             # React, antd 5, Redux Saga, ApiRoutes.js, react-intl
 ├── prompts/               # versioned prompt templates per stage
 ├── schemas/               # JSON Schemas for every Claude output and the EDL
 ├── library/               # licensed music/SFX + license metadata (gitignored media)

@@ -68,9 +68,15 @@ fog, forests, cities...):
 Settings → System check then shows "Real photos and footage: OK". (Pexels keys are paused; if you ever get one,
 `PEXELS_API_KEY=` works too.)
 
-Fair-use trailer clips: Settings → Preferences → "Fair-use trailer clips" (on). For stories about a film, series
-or anime the app picks a few short, muted moments from the official trailer. Before publishing, watch them (QA
-lists each one). A Content ID claim can still happen; it usually only moves that video's ad money to the studio.
+Real film footage: Settings → Preferences → "Real footage of the work" (on) and "Real footage, max share" (100% by
+default). For stories about a film, series or anime the app builds a footage library from the work's trailers,
+clips and scene uploads, and uses it on almost every shot, muted, matched to the words, each moment at most twice.
+Before publishing, watch it (the run's **Shots** tab shows every shot). A Content ID claim can still happen; it
+usually only moves that video's ad money to the studio. Lower the share if you get claims.
+
+Your own copy of a film or episode: put the file in `storyforge-data\library\films\` with the title in its name
+(for example `Fight Club 1999.mp4`). The app then has the whole film to choose from, and it can show exactly the
+moments your main inspiration video showed.
 
 Your talking logo: `assets/channel/DownRightTalkingMouth.mp4` is used automatically (Settings → Preferences →
 "Talking logo host" to switch it off). Replace the file with another logo video of the same layout to change it.
@@ -94,7 +100,9 @@ The NVIDIA key and the Cloudflare token were pasted into a chat once. To be safe
   new value, then run `.\scripts\set-cloudflare-token.ps1` and paste it at the hidden prompt (it checks the token
   and saves it to `.env`). Don't paste it into a chat. The app can't roll it itself: the token is limited to
   Workers AI on purpose.
-- NVIDIA: the key is no longer used; you can delete it at build.nvidia.com.
+- NVIDIA: the key now powers the narration voice (Magpie "Jason"). Make a new key at build.nvidia.com, put it in
+  `.env` as `NVIDIA_API_KEY=...`, then delete the old key there. Without a key the narration falls back to the local
+  Kokoro voice.
 
 ---
 
