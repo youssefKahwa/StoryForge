@@ -1,5 +1,6 @@
 import React from 'react';
-import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { EASE } from './motion';
 import { KenBurnsImage } from './components/KenBurnsImage';
 import { MediaShot } from './components/MediaShot';
 import { KineticText } from './components/KineticText';
@@ -18,12 +19,42 @@ const isGraphic = (type) => ['kinetic_text', 'map', 'timeline', 'chart'].include
 
 const assetUrl = (base, file) => `${base}/${file.split('/').map(encodeURIComponent).join('/')}`;
 
-const previousImage = (shots, index) => {
+const isMoving = (shot) => ['footage', 'clip'].includes(shot.media);
+const canBack = (shot) => shot && shot.asset && !isGraphic(shot.type) && !['map', 'host'].includes(shot.media);
+
+/**
+ * What a text card sits on: the picture just before it (film footage included), else the one just after. On a film
+ * video almost every shot is footage, so a card over stills only would sit on black.
+ */
+const backdrop = (shots, index) => {
   for (let i = index - 1; i >= 0; i -= 1) {
-    if (!isGraphic(shots[i].type) && !['footage', 'clip', 'map', 'host'].includes(shots[i].media)) return shots[i].asset;
+    if (canBack(shots[i])) return shots[i];
   }
-  const next = shots.slice(index + 1).find((shot) => !isGraphic(shot.type) && !['footage', 'clip', 'map', 'host'].includes(shot.media));
-  return next ? next.asset : null;
+  return shots.slice(index + 1).find(canBack) || null;
+};
+
+/** The footage behind a text card: half speed, blurred and dimmed, slowly pushed in; it holds its last frame. */
+const MovingBackdrop = ({ src, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.06, 1.14], {
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: EASE.move,
+  });
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
+      <OffthreadVideo src={src} muted playbackRate={0.5} style={{
+        width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})`,
+        filter: 'blur(14px) brightness(0.45) saturate(0.8)',
+      }} />
+    </AbsoluteFill>
+  );
+};
+
+const Backdrop = ({ shot, assetBase, durationInFrames }) => {
+  if (!shot) return null;
+  const src = assetUrl(assetBase, shot.asset);
+  return isMoving(shot)
+    ? <MovingBackdrop src={src} durationInFrames={durationInFrames} />
+    : <KenBurnsImage src={src} motion="push_in" durationInFrames={durationInFrames} dimmed />;
 };
 
 const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
@@ -34,10 +65,8 @@ const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
   const style = { ...exitStyle(next && next.transition, frame, durationInFrames), ...enterStyle(kind, frame) };
   const content = isGraphic(shot.type) ? (
     <>
-      {previousImage(shots, index) && (
-        <KenBurnsImage src={assetUrl(assetBase, previousImage(shots, index))} motion="push_in" durationInFrames={durationInFrames} dimmed />
-      )}
-      <KineticText text={shot.text || ''} />
+      <Backdrop shot={backdrop(shots, index)} assetBase={assetBase} durationInFrames={durationInFrames} />
+      <KineticText text={shot.text || ''} durationInFrames={next ? durationInFrames - OVERLAP_FRAMES : durationInFrames} />
     </>
   ) : <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={durationInFrames} />;
   return (

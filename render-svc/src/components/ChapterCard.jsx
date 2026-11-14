@@ -1,16 +1,16 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { BRAND, Snow, body, extrude, headline } from '../brand';
+import { EASE, tween } from '../motion';
+
+const EXIT_FRAMES = 8;
 
 /** Chapter title in BiPath style: dark night gradient with snow, block letters with slate extrusion. */
 export const ChapterCard = ({ title, number, durationInFrames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const enter = spring({ frame, fps, config: { damping: 16 } });
-  const exit = interpolate(frame, [durationInFrames - 15, durationInFrames - 1], [1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const exit = 1 - tween(frame, durationInFrames - EXIT_FRAMES, durationInFrames - 1, EASE.exit);
   return (
     <AbsoluteFill style={{ opacity: exit }}>
       <AbsoluteFill style={{

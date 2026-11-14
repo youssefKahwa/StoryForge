@@ -586,7 +586,8 @@ public class AssetsStage implements StageWorker {
                 repeats, pictures);
     }
 
-    private static String pictureType(Asset asset) {
+    /** The kind of picture a shot shows, as the footage report and the QA review pages name it. */
+    public static String pictureType(Asset asset) {
         if ("clip".equals(asset.media())) {
             return "footage";
         }

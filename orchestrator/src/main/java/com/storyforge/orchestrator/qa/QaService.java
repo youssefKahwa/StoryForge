@@ -10,6 +10,7 @@ import com.storyforge.orchestrator.inspiration.InspirationFiles;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.media.LoudnessStats;
 import com.storyforge.orchestrator.media.MediaInfo;
+import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.Critique;
@@ -22,6 +23,7 @@ import com.storyforge.orchestrator.model.QaReport.Check;
 import com.storyforge.orchestrator.model.QaReport.Severity;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.VideoTranscript;
+import com.storyforge.orchestrator.provider.render.ChannelIdents;
 import com.storyforge.orchestrator.run.RunInfo;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.worker.AssetsStage;
@@ -30,6 +32,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -51,8 +54,11 @@ public class QaService {
     private final FfmpegService ffmpeg;
     private final StoryForgeProperties properties;
     private final InspirationFiles inspirations;
+    private final ReviewSheet reviewSheet;
 
-    public QaService(FfmpegService ffmpeg, StoryForgeProperties properties, InspirationFiles inspirations) {
+    public QaService(FfmpegService ffmpeg, StoryForgeProperties properties, InspirationFiles inspirations,
+                     ReviewSheet reviewSheet) {
+        this.reviewSheet = reviewSheet;
         this.ffmpeg = ffmpeg;
         this.properties = properties;
         this.inspirations = inspirations;
@@ -90,6 +96,8 @@ public class QaService {
         List<double[]> black = ffmpeg.detectBlack(video, BLACK_MIN_SECONDS);
         checks.add(check("video.black_frames", "technical", CRITICAL, black.isEmpty(),
                 black.isEmpty() ? "none" : black.size() + " black segment(s), first at " + fmt(black.get(0)[0]) + "s"));
+
+        checks.add(review(files, edl, assets, video));
 
         double drift = Math.abs(info.videoDurationSec() - info.audioDurationSec());
         checks.add(check("av.sync", "technical", CRITICAL, drift <= SYNC_TOLERANCE,
@@ -265,6 +273,33 @@ public class QaService {
                 check("legal.music_licenses", "legal", CRITICAL, unlicensedAudio.isEmpty(),
                         unlicensedAudio.isEmpty() ? musicTracks + " music/SFX track(s), all licensed"
                                 : "unknown license: " + unlicensedAudio));
+    }
+
+    /** One frame of every shot on review pages for the owner (qa/review_*.jpg), and the shots that show nothing. */
+    private Check review(RunFiles files, Edl edl, AssetManifest assets, Path video) {
+        try {
+            Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
+            ChannelIdents.Timeline timeline = files.exists(Stage.ASSEMBLE, ChannelIdents.TIMELINE)
+                    ? files.read(Stage.ASSEMBLE, ChannelIdents.TIMELINE, ChannelIdents.Timeline.class) : null;
+            Map<String, AssetManifest.Asset> byShot = assets.assets().stream()
+                    .collect(Collectors.toMap(AssetManifest.Asset::shotId, asset -> asset, (a, b) -> a));
+            List<ReviewSheet.Tile> tiles = edl.shots().stream().map(shot -> {
+                double middle = (shot.start() + shot.end()) / 2;
+                AssetManifest.Asset asset = byShot.get(shot.id());
+                String spoken = alignment.words().stream()
+                        .filter(w -> (w.start() + w.end()) / 2 >= shot.start() && (w.start() + w.end()) / 2 < shot.end())
+                        .map(Alignment.Word::text).collect(Collectors.joining(" "));
+                return new ReviewSheet.Tile(shot.id(), timeline == null ? middle : timeline.shift(middle),
+                        shot.end() - shot.start(), asset == null ? "none" : AssetsStage.pictureType(asset), spoken);
+            }).toList();
+            ReviewSheet.Result result = reviewSheet.build(video, tiles, files.dir(Stage.QA));
+            boolean clean = result.flatShots().isEmpty();
+            return check("video.flat_shots", "content", WARNING, clean,
+                    (clean ? "no shot looks empty" : "almost flat or black: " + result.flatShots()) + "; every shot on "
+                            + result.pages().size() + " review page(s) in qa/");
+        } catch (RuntimeException e) {
+            return check("video.flat_shots", "content", INFO, true, "review pages skipped: " + e.getMessage());
+        }
     }
 
     private static Check check(String id, String category, Severity severity, boolean passed, String detail) {

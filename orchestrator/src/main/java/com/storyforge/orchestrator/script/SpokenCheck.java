@@ -33,6 +33,24 @@ public final class SpokenCheck {
             "look", "then", "or", "yeah", "well", "still", "until", "plus");
     private static final int FRAGMENT_WORDS = 3;
     private static final int LONG_WORDS = 30;
+    /**
+     * Kinds of ask to the viewer. One at the end is a call to action; two or more ("like, subscribe, and follow me")
+     * is a list read out at the moment the viewer decides to leave.
+     */
+    private static final List<Pattern> ASKS = List.of(
+            Pattern.compile("\\b(?:hit|smash|leave|drop|give) (?:a |the |that |it a )?like\\b|\\blike (?:this|the) video\\b"
+                    + "|\\blike(?:,| and) (?:subscribe|share|comment)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\bsubscrib(?:e|ing)\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\bfollow (?:me|us|the channel)\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\bcomments?\\b|\\bcomment below\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\bshare (?:this|it|the video)\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\b(?:the )?bell\\b|\\bnotifications?\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\b(?:watch|check out|click) (?:this|that|my|the) (?:next )?(?:video|one)\\b"
+                    + "|\\bnext video\\b", Pattern.CASE_INSENSITIVE));
+    /** Closers that tell the viewer the video is over, so they leave before the last line. */
+    private static final Pattern CLOSER = Pattern.compile("\\b(?:thanks|thank you)(?: so much)? for watching\\b"
+            + "|\\bin conclusion\\b|\\bto sum (?:it )?up\\b|\\bthat'?s (?:it|all) for (?:today|this video)\\b",
+            Pattern.CASE_INSENSITIVE);
 
     private SpokenCheck() {
     }
@@ -153,9 +171,28 @@ public final class SpokenCheck {
                         * 10) / 10.0 + " times per 100 words): talk to one person.", false));
             }
         }
+        if (!scenes.isEmpty()) {
+            ending(scenes.get(scenes.size() - 1), flags);
+        }
         Stats stats = new Stats(sentences, median, round(fragmentShare), runs, longOnes, round(connectorShare),
                 round(youPer100));
         return new Result(stats, List.copyOf(flags));
+    }
+
+    /** The last scene ends on one ask, and never announces that the video is over. */
+    private static void ending(Scene last, List<Flag> flags) {
+        String text = last.narration() == null ? "" : last.narration();
+        long asks = ASKS.stream().filter(ask -> ask.matcher(text).find()).count();
+        if (asks >= 2) {
+            flags.add(new Flag(last.id(), "major", asks + " different asks in the last scene: end with ONE ask, a "
+                    + "question for the comments or a related video to watch next. The subscribe button is on screen "
+                    + "already.", false));
+        }
+        Matcher closer = CLOSER.matcher(text);
+        if (closer.find()) {
+            flags.add(new Flag(last.id(), "major", "\"" + closer.group() + "\" tells the viewer the video is over, so "
+                    + "they leave before the last line: go from the last point straight into the ask.", false));
+        }
     }
 
     static List<String> sentences(String text) {

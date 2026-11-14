@@ -1,13 +1,12 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { BRAND, body, extrude, headline } from '../brand';
+import { EASE, ENTER_FRAMES, EXIT_FRAMES, presence, tween } from '../motion';
 
-const useFade = (durationInFrames, fadeFrames = 12) => {
+/** Eased in, and out in about half the time: a graphic that leaves slowly looks like it is stuck. */
+const useFade = (durationInFrames, enterFrames = ENTER_FRAMES, exitFrames = EXIT_FRAMES) => {
   const frame = useCurrentFrame();
-  return interpolate(frame, [0, fadeFrames, durationInFrames - fadeFrames, durationInFrames - 1], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  return presence(frame, durationInFrames, enterFrames, exitFrames);
 };
 
 /** Lower third with place and date: evil-eye pin, block letters, sky-blue date. */
@@ -46,12 +45,13 @@ export const LocationTag = ({ title, subtitle, durationInFrames }) => {
   );
 };
 
-/** Quotation card: dark blurred backdrop, big sky-blue block quote mark, words fading in one by one. */
+/** Quotation card: dark blurred backdrop, big sky-blue block quote mark, words rising in one by one. */
 export const QuoteCard = ({ title, subtitle, durationInFrames }) => {
   const frame = useCurrentFrame();
   const opacity = useFade(durationInFrames, 10);
   const words = title.split(/\s+/).filter(Boolean);
-  const perWord = Math.max(1, Math.min(5, Math.floor((durationInFrames * 0.45) / Math.max(1, words.length))));
+  // About 0.1 s apart, faster for a long quote, so the whole quote is up by 45% of the card and can be read.
+  const perWord = Math.max(1, Math.min(3, Math.floor((durationInFrames * 0.45) / Math.max(1, words.length))));
   const size = words.length > 22 ? 50 : words.length > 12 ? 60 : 70;
   return (
     <AbsoluteFill style={{ opacity, alignItems: 'center', justifyContent: 'center', padding: '0 220px' }}>
@@ -64,21 +64,22 @@ export const QuoteCard = ({ title, subtitle, durationInFrames }) => {
           fontFamily: body, fontWeight: 600, fontSize: size, lineHeight: 1.3, color: BRAND.white,
           textShadow: '0 4px 24px rgba(0,0,0,0.9)', marginTop: 24,
         }}>
-          {words.map((word, i) => (
-            <span
-              key={`${word}-${i}`}
-              style={{
-                opacity: interpolate(frame, [i * perWord, i * perWord + 8], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
-              }}
-            >
-              {`${word} `}
-            </span>
-          ))}
+          {words.map((word, i) => {
+            const rise = tween(frame, i * perWord, i * perWord + 10);
+            return (
+              <React.Fragment key={`${word}-${i}`}>
+                <span style={{ display: 'inline-block', opacity: rise, transform: `translateY(${(1 - rise) * 22}px)` }}>
+                  {word}
+                </span>
+                {' '}
+              </React.Fragment>
+            );
+          })}
         </div>
         {subtitle && (
           <div style={{
             fontFamily: body, fontWeight: 700, fontSize: 28, letterSpacing: '0.3em', color: BRAND.sky, marginTop: 36,
-            opacity: interpolate(frame, [words.length * perWord, words.length * perWord + 12], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
+            opacity: tween(frame, words.length * perWord, words.length * perWord + 12, EASE.enter),
           }}>
             {`— ${subtitle.toUpperCase()}`}
           </div>

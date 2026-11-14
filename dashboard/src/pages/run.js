@@ -112,6 +112,8 @@ const RunPage = ({ location }) => {
   const video = detail.files.find((f) => f.stage === 'assemble' && f.name === 'final_16x9.mp4');
   const thumbnail = detail.files.find((f) => f.stage === 'package' && f.name === 'thumbnail.png');
   const videoUrl = video ? `${ApiRoutes.runFile(run.id, 'assemble', video.name)}?v=${video.sizeBytes}` : null;
+  const reviewPages = detail.files.filter((f) => f.stage === 'qa' && /^review_\d+\.jpg$/.test(f.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const cancel = () => modal.confirm({
     title: intl.formatMessage({ id: 'run.cancelTitle' }),
@@ -231,6 +233,23 @@ const RunPage = ({ location }) => {
             key: 'script',
             label: intl.formatMessage({ id: 'run.tab.script' }),
             children: script ? <pre className="text-block">{script}</pre> : <Empty description={<FormattedMessage id="run.noScript" />} />,
+          },
+          {
+            key: 'shots',
+            label: intl.formatMessage({ id: 'run.tab.shots' }),
+            children: reviewPages.length ? (
+              <Space direction="vertical" size="middle" className="full-width">
+                <Typography.Text type="secondary"><FormattedMessage id="run.shotsHelp" /></Typography.Text>
+                {reviewPages.map((page) => {
+                  const url = `${ApiRoutes.runFile(run.id, 'qa', page.name)}?v=${page.sizeBytes}`;
+                  return (
+                    <a key={page.name} href={url} target="_blank" rel="noreferrer">
+                      <img className="thumbnail" alt={page.name} src={url} loading="lazy" />
+                    </a>
+                  );
+                })}
+              </Space>
+            ) : <Empty description={<FormattedMessage id="run.noShots" />} />,
           },
           { key: 'qa', label: intl.formatMessage({ id: 'run.tab.qa' }), children: <QaReportView report={qaReport} /> },
           { key: 'details', label: intl.formatMessage({ id: 'run.tab.details' }), children: details },

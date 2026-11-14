@@ -56,6 +56,49 @@ class SpokenCheckTest {
     }
 
     @Test
+    void stackedAsksAtTheEndAreMajor() {
+        String ending = """
+                ## SCENE 01 | beat: a | duration_target: 20s
+                [TONE: playful]
+                So that is the whole trick, and you can stop worrying about it now.
+                ## SCENE 02 | beat: b | duration_target: 20s
+                [TONE: playful]
+                Tyler was never the answer, and the film knew it all along. Which side were you on the first time you \
+                watched it? Like, subscribe, and follow me on Instagram.
+                """;
+        SpokenCheck.Result result = SpokenCheck.check(SfmParser.parse(ending));
+
+        assertThat(result.flags()).anySatisfy(flag -> {
+            assertThat(flag.sceneId()).isEqualTo("02");
+            assertThat(flag.severity()).isEqualTo("major");
+            assertThat(flag.issue()).contains("ONE ask");
+        });
+    }
+
+    @Test
+    void oneQuestionForTheCommentsIsAFineEnding() {
+        String ending = """
+                ## SCENE 01 | beat: b | duration_target: 20s
+                [TONE: playful]
+                Tyler was never the answer, and the film knew it all along. So tell me in the comments, which side \
+                were you on the first time?
+                """;
+        assertThat(SpokenCheck.check(SfmParser.parse(ending)).flags())
+                .noneSatisfy(flag -> assertThat(flag.issue()).contains("ask"));
+    }
+
+    @Test
+    void aCloserThatAnnouncesTheEndIsMajor() {
+        String ending = """
+                ## SCENE 01 | beat: b | duration_target: 20s
+                [TONE: calm]
+                In conclusion, Tyler was never the answer. Thanks for watching.
+                """;
+        assertThat(SpokenCheck.check(SfmParser.parse(ending)).flags())
+                .filteredOn(flag -> flag.issue().contains("tells the viewer the video is over")).hasSize(1);
+    }
+
+    @Test
     void aRunOfFragmentsIsRobotRhythm() {
         String robot = """
                 ## SCENE 01 | beat: b | duration_target: 20s

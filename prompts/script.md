@@ -1,5 +1,5 @@
 ---
-version: 0.8.0
+version: 0.9.0
 tier: high
 ---
 ## system
@@ -72,8 +72,10 @@ faking, his own fake cure stops working."
 - Name the big question within 20 seconds and keep it alive to the end.
 - End every chapter with an open loop that the next chapter pays off. Re-hook every 60-90 seconds with a surprise,
   a reveal or a sharp opinion.
-- Last scene: what it all means in one line, a question for the comments, then tease a related story. At most one
-  short, natural subscribe line.
+- Last scene: pay off the big question from the start, say what it all means in one line, then make ONE ask, either
+  a question for the comments or a related story to watch next. Never a list of asks ("like, subscribe, and follow
+  me"): the subscribe button is on screen already. Never announce the end ("thanks for watching", "in conclusion",
+  "that's it for today"): go from the last point straight into the ask.
 
 4. The owner's MAIN VIDEO (when a source above is marked "MAIN VIDEO")
 It is the script you are adapting. Go through it part by part in its exact order and keep about 80% of its content:
