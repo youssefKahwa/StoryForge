@@ -2,12 +2,16 @@ package com.storyforge.orchestrator.provider.clips;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.media.FfmpegService;
-import com.storyforge.orchestrator.media.MediaInfo;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.LicenseRecord;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.ShotList.Shot;
+import com.storyforge.orchestrator.provider.clips.FootageIndex.Segment;
+import com.storyforge.orchestrator.provider.clips.FootagePlanner.Choice;
+import com.storyforge.orchestrator.provider.clips.FootagePlanner.Need;
+import com.storyforge.orchestrator.provider.clips.FootagePlanner.Part;
+import com.storyforge.orchestrator.provider.clips.FootagePlanner.Pick;
 import com.storyforge.orchestrator.provider.llm.LlmRouter;
 import com.storyforge.orchestrator.provider.media.MediaSvcClient;
 import com.storyforge.orchestrator.revision.RevisionService;
@@ -23,13 +27,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -47,12 +54,15 @@ import tools.jackson.databind.json.JsonMapper;
  * are the main picture, matched to what the narrator says.
  * <ol>
  *   <li>Library: the work's trailers, teasers, TV spots, official clips and scene uploads (picture only, found by
- *       {@code clip_work} searches), plus any copy the owner put in {@code library/films}.</li>
- *   <li>Catalogue: every scene cut is shown to Claude on numbered contact sheets and described once
+ *       {@code clip_work} searches), plus any copy the owner put in {@code library/films}. {@link FootageIndex} groups
+ *       the copies of each moment, so the same footage is never counted twice.</li>
+ *   <li>Catalogue: one copy of every moment is shown to Claude on numbered contact sheets and described once
  *       ({@code clip_describe}); the catalogue is cached per work, so the next video on it costs nothing.</li>
- *   <li>Matching: one text call ({@code clip_match}) pairs narration shots with catalogue scenes.</li>
- *   <li>Cutting: each clip plays the scene (and the shots that follow it in the source) for the whole shot, muted,
- *       full screen, credited. Up to the owner's share of the video (70% by default).</li>
+ *   <li>Matching: one text call ({@code clip_match}) gives each narration shot up to three ranked moments.</li>
+ *   <li>Assignment: {@link FootagePlanner} takes the best pick that respects the limit on repeats. A shot left empty
+ *       goes on with the previous scene, then gets one more matching pass; only what is still empty moves on to real
+ *       media and AI pictures.</li>
+ *   <li>Cutting: each clip plays its moments for the whole shot, muted, full screen, credited, with a light grade.</li>
  * </ol>
  * Never done: mirroring, pitch or speed tricks to dodge Content ID. The protection is the commentary itself.
  */
@@ -62,26 +72,22 @@ public class FilmClipFinder {
     public record Work(String work, Integer year, List<String> queries) {
     }
 
-    /** more: extra catalogue shots (in order) that keep the same moment on screen when the first is too short. */
-    public record Match(String shot, Integer tile, List<Integer> more) {
+    /** picks: up to three ranked moments. An answer in the older form (tile, more) still reads. */
+    public record Match(String shot, Integer tile, List<Integer> more, List<Pick> picks) {
+        List<Pick> ranked() {
+            if (picks != null && !picks.isEmpty()) {
+                return picks;
+            }
+            return tile == null ? List.of() : List.of(new Pick(tile, more));
+        }
     }
 
     public record Matches(List<Match> matches) {
     }
 
+    /** moments: the footage moments on screen, for the report on repeats. */
     public record Clip(String shotId, Path file, LicenseRecord license, String credit, String label,
-                       double sourceSeconds) {
-    }
-
-    /** One scene cut of one source video. */
-    record Segment(int tile, MediaSvcClient.Trailer source, double start, double end) {
-        double length() {
-            return end - start;
-        }
-
-        String key() {
-            return source.videoId() + "@" + fmt(start);
-        }
+                       double sourceSeconds, List<Integer> moments) {
     }
 
     public record Described(Integer tile, String scene, Boolean text) {
@@ -94,32 +100,24 @@ public class FilmClipFinder {
     }
 
     private static final Logger log = LoggerFactory.getLogger(FilmClipFinder.class);
-    private static final Pattern PTS = Pattern.compile("pts_time:([0-9.]+)");
-    private static final Pattern CROP = Pattern.compile("crop=([0-9]+:[0-9]+:[0-9]+:[0-9]+)");
     private static final Pattern BLACK = Pattern.compile("black_duration:([0-9.]+)");
     private static final Pattern VIDEO_FILE = Pattern.compile("(?i).+\\.(mp4|mkv|webm|mov|avi)");
-    static final double SLOWEST = 0.8;
-    /** At most this many catalogue moments in one video shot. */
-    static final int MAX_MOMENTS = 3;
-    static final double TYPICAL_SHOT_SECONDS = 4;
+    /** Longer shots stay on one picture for too long even as a chain of moments. */
+    static final double MAX_SHOT = 14;
     private static final int MAX_QUERIES = 8;
     private static final int VIDEOS_PER_QUERY = 2;
     private static final double LIBRARY_SECONDS = 45 * 60;
     private static final int MIN_LIBRARY_VIDEOS = 6;
-    private static final double PROMO_SKIP_HEAD = 4;
-    private static final double PROMO_SKIP_TAIL = 6;
-    private static final double FILM_SKIP_HEAD = 60;
-    private static final double FILM_SKIP_TAIL = 420;
-    private static final double MIN_SEGMENT = 1.2;
-    /** A longer "segment" usually hides a cut the detector missed in dark footage. */
-    private static final double MAX_SEGMENT = 9;
-    private static final int TILES_PER_PROMO = 45;
-    private static final int TILES_PER_FILM = 220;
-    private static final int MAX_TILES = 420;
+    /** Less different footage than this share of the video: search wider once, before repeating anything. */
+    private static final double TOP_UP_BELOW = 0.9;
+    /** More than this share of the video without a pick: one more matching pass, on the moments not used yet. */
+    private static final double EXTRA_PASS_ABOVE = 0.05;
+    /** A clip that was rejected tries the next pick, a few times at most. */
+    private static final int MAX_ATTEMPTS = 6;
     private static final int SHEETS_PER_CALL = 6;
-    private static final int TILE_W = 320;
-    private static final int TILE_H = 180;
-    private static final int COLS = 4;
+    private static final int TILE_W = 480;
+    private static final int TILE_H = 270;
+    private static final int COLS = 3;
     private static final int ROWS = 3;
 
     private final LlmRouter llm;
@@ -130,10 +128,15 @@ public class FilmClipFinder {
     private final Path library;
     private final Path films;
     private final Path claudeWork;
+    private final FootageIndex index;
+    private final int maxUses;
 
     public FilmClipFinder(LlmRouter llm, MediaSvcClient media, FfmpegService ffmpeg, JsonMapper json,
                           StoryForgeProperties properties,
-                          @Value("${storyforge.clips.enabled:false}") boolean enabled) {
+                          @Value("${storyforge.clips.enabled:false}") boolean enabled,
+                          @Value("${storyforge.clips.max-uses:2}") int maxUses) {
+        this.index = new FootageIndex(ffmpeg, json);
+        this.maxUses = maxUses;
         this.llm = llm;
         this.media = media;
         this.ffmpeg = ffmpeg;
@@ -149,6 +152,11 @@ public class FilmClipFinder {
         return enabled;
     }
 
+    /** How many times one moment of footage may appear in a video. */
+    public int maxUses() {
+        return maxUses;
+    }
+
     public Map<String, Clip> find(StageContext context, ShotList shots, Alignment alignment, List<Scene> scenes,
                                   Set<String> excluded, int width, int height, double share) {
         if (!enabled || share <= 0) {
@@ -162,152 +170,231 @@ public class FilmClipFinder {
                 return Map.of();
             }
             Path dir = library.resolve(slug(work.work()));
-            List<MediaSvcClient.Trailer> sources = sources(work, dir);
-            List<Segment> segments = segments(sources, dir);
+            List<MediaSvcClient.Trailer> sources = sources(work, dir, false);
+            List<Segment> segments = index.segments(sources, dir);
             if (segments.isEmpty()) {
                 return Map.of();
             }
-            Map<String, CatalogEntry> catalog = catalog(context, work, segments, dir);
+            Map<Integer, CatalogEntry> moments = catalog(context, work, segments, dir);
+            if (differentFootage(segments, moments) < shots.durationSec() * TOP_UP_BELOW) {
+                List<MediaSvcClient.Trailer> wider = sources(work, dir, true);
+                if (wider.size() > sources.size()) {
+                    segments = index.segments(wider, dir);
+                    moments = catalog(context, work, segments, dir);
+                }
+            }
+            Map<Integer, CatalogEntry> described = moments;
             List<Segment> usable = segments.stream().filter(s -> {
-                CatalogEntry entry = catalog.get(s.key());
+                CatalogEntry entry = described.get(s.moment());
                 return entry != null && !entry.text();
             }).toList();
             List<Shot> candidates = shots.shots().stream()
-                    .filter(s -> !s.graphic() && !excluded.contains(s.id()) && s.duration() <= 9).toList();
-            int maxClips = maxClips(shots.durationSec(), share);
-            if (candidates.isEmpty() || maxClips == 0 || usable.isEmpty()) {
+                    .filter(s -> !s.graphic() && !excluded.contains(s.id()) && s.duration() <= MAX_SHOT)
+                    .sorted(Comparator.comparingDouble(Shot::start)).toList();
+            if (candidates.isEmpty() || usable.isEmpty()) {
                 return Map.of();
             }
-            String catalogLines = usable.stream().map(s -> s.tile() + " | " + fmt1(s.length()) + " s | "
-                    + catalog.get(s.key()).scene()).collect(Collectors.joining("\n"));
-            String shotLines = candidates.stream().map(s -> s.id() + " | " + fmt1(s.duration()) + " s | "
-                    + RevisionService.spoken(alignment, s)).collect(Collectors.joining("\n"));
-            Matches matches = llm.json(context, Stage.ASSETS, "clip_match", Map.of(
-                    "work", label(work),
-                    "catalog", catalogLines,
-                    "shots", shotLines,
-                    "max", String.valueOf(maxClips)), Matches.class);
-            return cut(context, work, shots, segments, matches, maxClips, share, width, height);
+            Map<String, List<Pick>> ranked = match(context, work, candidates, usable, described, alignment);
+            FootagePlanner planner = new FootagePlanner(usable, maxUses);
+            Placing placing = new Placing(context, work, dir, planner, shots.durationSec() * share, width, height);
+            List<Shot> gaps = new ArrayList<>();
+            for (Shot shot : candidates) {
+                List<Pick> picks = ranked.getOrDefault(shot.id(), List.of());
+                if (!placing.place(shot, () -> planner.choose(need(shot), picks))) {
+                    gaps.add(shot);
+                }
+            }
+            int matched = placing.clips.size();
+            gaps.removeIf(shot -> placing.place(shot, () -> planner.continuation(need(shot))));
+            int continued = placing.clips.size() - matched;
+            double empty = gaps.stream().mapToDouble(Shot::duration).sum();
+            if (empty > shots.durationSec() * EXTRA_PASS_ABOVE) {
+                extraPass(context, work, gaps, usable, described, alignment, placing);
+            }
+            log.info("Run {}: footage on {} shot(s), {} s of {} s ({} matched, {} continued, {} from a second pass); "
+                    + "{} shot(s) left for other pictures", context.run().id(), placing.clips.size(),
+                    fmt(placing.total), fmt(shots.durationSec()), matched, continued,
+                    placing.clips.size() - matched - continued, gaps.size());
+            return placing.clips;
         } catch (IOException | RuntimeException e) {
             log.warn("Run {}: film footage skipped: {}", context.run().id(), e.getMessage());
             return Map.of();
         }
     }
 
-    static int maxClips(double durationSec, double share) {
-        return (int) Math.floor(durationSec * share / TYPICAL_SHOT_SECONDS);
+    private static Need need(Shot shot) {
+        return new Need(shot.id(), shot.start(), shot.end());
     }
 
-    /** Applies the limits to the model's picks and renders each clip to exactly the shot's length. */
-    private Map<String, Clip> cut(StageContext context, Work work, ShotList shots, List<Segment> segments,
-                                  Matches matches, int maxClips, double share, int width, int height) {
-        Map<String, Shot> byId = shots.shots().stream().collect(Collectors.toMap(Shot::id, s -> s));
-        Map<Integer, Segment> byTile = segments.stream().collect(Collectors.toMap(Segment::tile, s -> s));
-        List<Match> ordered = (matches.matches() == null ? List.<Match>of() : matches.matches()).stream()
-                .filter(m -> m.shot() != null && m.tile() != null && byId.containsKey(m.shot())
-                        && byTile.containsKey(m.tile()))
-                .sorted((a, b) -> Double.compare(byId.get(a.shot()).start(), byId.get(b.shot()).start())).toList();
-        Map<String, Clip> clips = new HashMap<>();
-        Set<Integer> usedTiles = new HashSet<>();
-        Set<String> usedShots = new HashSet<>();
-        double total = 0;
-        for (Match match : ordered) {
-            Shot shot = byId.get(match.shot());
-            Segment first = byTile.get(match.tile());
-            if (clips.size() >= maxClips || usedTiles.contains(match.tile()) || !usedShots.add(shot.id())
-                    || total + shot.duration() > shots.durationSec() * share) {
-                continue;
+    /** Seconds of footage that are truly different: one copy of each moment that is not a title card. */
+    private static double differentFootage(List<Segment> segments, Map<Integer, CatalogEntry> moments) {
+        return segments.stream().filter(Segment::best).filter(s -> {
+            CatalogEntry entry = moments.get(s.moment());
+            return entry != null && !entry.text();
+        }).mapToDouble(Segment::length).sum();
+    }
+
+    /** The shots still empty, matched again against only the moments not on screen yet. */
+    private void extraPass(StageContext context, Work work, List<Shot> gaps, List<Segment> usable,
+                           Map<Integer, CatalogEntry> moments, Alignment alignment, Placing placing) {
+        List<Segment> unused = usable.stream().filter(s -> !placing.planner.used(s.moment())).toList();
+        if (unused.isEmpty()) {
+            return;
+        }
+        try {
+            Map<String, List<Pick>> ranked = match(context, work, gaps, unused, moments, alignment);
+            gaps.removeIf(shot -> placing.place(shot, () -> placing.planner.choose(need(shot),
+                    ranked.getOrDefault(shot.id(), List.of()))));
+        } catch (RuntimeException e) {
+            log.warn("Run {}: second footage pass skipped: {}", context.run().id(), e.getMessage());
+        }
+    }
+
+    /** One text call: up to three ranked moments for every shot. */
+    private Map<String, List<Pick>> match(StageContext context, Work work, List<Shot> shots, List<Segment> usable,
+                                          Map<Integer, CatalogEntry> moments, Alignment alignment) {
+        String catalogLines = usable.stream().filter(Segment::best).map(s -> s.tile() + " | " + fmt1(s.length())
+                + " s | " + tags(s) + " | " + moments.get(s.moment()).scene()).collect(Collectors.joining("\n"));
+        String shotLines = shots.stream().map(s -> s.id() + " | " + fmt1(s.duration()) + " s | "
+                + RevisionService.spoken(alignment, s)).collect(Collectors.joining("\n"));
+        Matches matches = llm.json(context, Stage.ASSETS, "clip_match", Map.of(
+                "work", label(work),
+                "catalog", catalogLines,
+                "shots", shotLines), Matches.class);
+        Map<String, List<Pick>> ranked = new HashMap<>();
+        for (Match match : matches.matches() == null ? List.<Match>of() : matches.matches()) {
+            if (match.shot() != null) {
+                ranked.put(match.shot(), match.ranked());
             }
-            double target = shot.duration() + 0.6;
-            // The matched moment, then the editor's extra moments for the same idea; only without them do the shots
-            // that follow it in the source fill in (they can be a different scene, so they come last).
-            List<Segment> run = new ArrayList<>(List.of(first));
-            for (Integer extra : match.more() == null ? List.<Integer>of() : match.more()) {
-                Segment next = byTile.get(extra);
-                if (next != null && !usedTiles.contains(extra) && run.size() < MAX_MOMENTS
-                        && run.stream().mapToDouble(Segment::length).sum() < target) {
-                    run.add(next);
+        }
+        return ranked;
+    }
+
+    private static String tags(Segment segment) {
+        if (segment.clean()) {
+            return "-";
+        }
+        return segment.dark() && segment.soft() ? "dark, soft" : segment.dark() ? "dark" : "soft";
+    }
+
+    /** One video's cutting: tries the planner's choices for a shot until one renders properly. */
+    private final class Placing {
+        private final StageContext context;
+        private final Work work;
+        private final Path dir;
+        private final FootagePlanner planner;
+        private final double limit;
+        private final int width;
+        private final int height;
+        private final Map<String, Clip> clips = new HashMap<>();
+        private double total;
+
+        Placing(StageContext context, Work work, Path dir, FootagePlanner planner, double limit, int width,
+                int height) {
+            this.context = context;
+            this.work = work;
+            this.dir = dir;
+            this.planner = planner;
+            this.limit = limit;
+            this.width = width;
+            this.height = height;
+        }
+
+        boolean place(Shot shot, Supplier<Optional<Choice>> chooser) {
+            if (total + shot.duration() > limit) {
+                return false;
+            }
+            for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                Optional<Choice> choice = chooser.get();
+                if (choice.isEmpty()) {
+                    return false;
                 }
-            }
-            if (run.size() == 1) {
-                run = run(segments, first, target);
-            }
-            double available = run.stream().mapToDouble(r -> Math.max(0, r.length() - 0.1)).sum();
-            double source = Math.min(available, target);
-            double factor = Math.max(SLOWEST, source / target);
-            double hold = Math.max(0, target - source / factor);
-            Path out = context.files().path(Stage.ASSETS, shot.id() + ".clip.mp4");
-            List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
-            StringBuilder graph = new StringBuilder();
-            double left = source;
-            int inputs = 0;
-            for (Segment segment : run) {
-                if (left <= 0.05) {
-                    break;
+                Clip clip = render(context, work, dir, shot, choice.get(), width, height);
+                if (clip == null) {
+                    // A fade-to-black or a night shot too dark to read: the next pick is better than any AI picture.
+                    log.info("Run {} {}: footage unusable, trying the next pick", context.run().id(), shot.id());
+                    planner.reject(choice.get());
+                    continue;
                 }
-                double take = Math.min(left, Math.max(0.1, segment.length() - 0.1));
-                left -= take;
-                args.addAll(List.of("-ss", fmt(segment.start() + 0.05), "-t", fmt(take), "-i",
-                        segment.source().file().toString()));
-                graph.append(f("[%d:v]", inputs)).append(bars(segment.source(), library.resolve(slug(work.work()))))
-                        .append(watermark(segment.source())).append("scale=").append(width).append(':').append(height)
-                        .append(":force_original_aspect_ratio=increase,crop=").append(width).append(':').append(height)
-                        .append(",fps=30,setsar=1,setpts=PTS-STARTPTS").append(f("[m%d];", inputs));
-                inputs++;
+                planner.commit(choice.get());
+                clips.put(shot.id(), clip);
+                total += shot.duration();
+                return true;
             }
-            for (int i = 0; i < inputs; i++) {
-                graph.append(f("[m%d]", i));
-            }
-            graph.append(f("concat=n=%d:v=1:a=0,setpts=PTS/%s,tpad=stop_mode=clone:stop_duration=%s[v]", inputs,
-                    fmt(factor), fmt(hold + 0.1)));
-            args.addAll(List.of("-filter_complex", graph.toString(), "-map", "[v]", "-map_metadata", "-1",
-                    "-write_tmcd", "0", "-an", "-dn", "-t", fmt(target), "-c:v", "libx264", "-preset", "veryfast",
-                    "-crf", "20", "-pix_fmt", "yuv420p", out.toString()));
+            return false;
+        }
+    }
+
+    /** Renders a clip to exactly the shot's length, or returns null if it is too dark to show or cannot be cut. */
+    private Clip render(StageContext context, Work work, Path dir, Shot shot, Choice choice, int width, int height) {
+        double target = choice.need().target();
+        double source = choice.seconds();
+        double factor = Math.max(FootagePlanner.SLOWEST, source / target);
+        double hold = Math.max(0, target - source / factor);
+        Path out = context.files().path(Stage.ASSETS, shot.id() + ".clip.mp4");
+        List<String> args = new ArrayList<>(List.of("-y", "-loglevel", "error"));
+        StringBuilder graph = new StringBuilder();
+        int inputs = 0;
+        for (Part part : choice.parts()) {
+            Segment segment = part.segment();
+            args.addAll(List.of("-ss", fmt(part.from()), "-t", fmt(part.seconds()), "-i",
+                    segment.source().file().toString()));
+            graph.append(f("[%d:v]", inputs)).append(index.bars(segment.source(), dir))
+                    .append(watermark(segment.source())).append("hqdn3d=1.5:1.5:4:4,scale=").append(width).append(':')
+                    .append(height).append(":force_original_aspect_ratio=increase,crop=").append(width).append(':')
+                    .append(height).append(',').append(look(segment.brightness()))
+                    .append("fps=30,setsar=1,setpts=PTS-STARTPTS").append(f("[m%d];", inputs));
+            inputs++;
+        }
+        for (int i = 0; i < inputs; i++) {
+            graph.append(f("[m%d]", i));
+        }
+        graph.append(f("concat=n=%d:v=1:a=0,setpts=PTS/%s,tpad=stop_mode=clone:stop_duration=%s[v]", inputs,
+                fmt(factor), fmt(hold + 0.1)));
+        args.addAll(List.of("-filter_complex", graph.toString(), "-map", "[v]", "-map_metadata", "-1",
+                "-write_tmcd", "0", "-an", "-dn", "-t", fmt(target), "-c:v", "libx264", "-preset", "veryfast",
+                "-crf", "20", "-pix_fmt", "yuv420p", out.toString()));
+        try {
             ffmpeg.ffmpeg(args);
-            if (mostlyBlack(out, target)) {
-                // A fade-to-black or a night shot too dark to read: worse than any other picture.
-                log.info("Run {} {}: footage too dark, left for another picture", context.run().id(), shot.id());
-                usedTiles.add(match.tile());
-                usedShots.remove(shot.id());
-                try {
-                    Files.deleteIfExists(out);
-                } catch (IOException e) {
-                    log.debug("Could not delete {}", out);
-                }
-                continue;
-            }
-            MediaSvcClient.Trailer from = first.source();
-            String where = from.url() == null || from.url().isBlank() ? "owner's copy of the work" : from.url();
-            String evidence = "Footage from \"" + from.title() + "\" (" + from.channel() + "), " + fmt(source)
-                    + " s shown without audio under original commentary and criticism (fair use): " + where;
-            clips.put(shot.id(), new Clip(shot.id(), out, new LicenseRecord("fair_use_clip",
-                    "Footage: " + from.channel(), from.url(), evidence, null),
-                    label(work), from.title(), source));
-            run.forEach(s -> usedTiles.add(s.tile()));
-            total += shot.duration();
+        } catch (RuntimeException e) {
+            log.warn("Run {} {}: footage could not be cut: {}", context.run().id(), shot.id(), e.getMessage());
+            return null;
         }
-        log.info("Run {}: {} footage clip(s), {} s of {} s", context.run().id(), clips.size(), fmt(total),
-                fmt(shots.durationSec()));
-        return clips;
+        if (mostlyBlack(out, target)) {
+            try {
+                Files.deleteIfExists(out);
+            } catch (IOException e) {
+                log.debug("Could not delete {}", out);
+            }
+            return null;
+        }
+        MediaSvcClient.Trailer from = choice.parts().get(0).segment().source();
+        Set<MediaSvcClient.Trailer> used = new LinkedHashSet<>();
+        choice.parts().forEach(part -> used.add(part.segment().source()));
+        String where = used.stream().map(t -> t.url() == null || t.url().isBlank() ? "owner's copy of the work" : t.url())
+                .distinct().collect(Collectors.joining(", "));
+        String titles = used.stream().map(t -> "\"" + t.title() + "\" (" + t.channel() + ")")
+                .collect(Collectors.joining(", "));
+        String evidence = "Footage from " + titles + ", " + fmt(source)
+                + " s shown without audio under original commentary and criticism (fair use): " + where;
+        return new Clip(shot.id(), out, new LicenseRecord("fair_use_clip", "Footage: " + from.channel(), from.url(),
+                evidence, null), label(work), from.title(), source, choice.moments());
     }
 
-    /** {@code first} plus the following back-to-back segments of the same source until {@code target} is covered. */
-    private static List<Segment> run(List<Segment> segments, Segment first, double target) {
-        List<Segment> run = new ArrayList<>(List.of(first));
-        int index = segments.indexOf(first);
-        while (run.get(run.size() - 1).end() - first.start() < target && index + 1 < segments.size() && run.size() < 4) {
-            Segment next = segments.get(++index);
-            Segment last = run.get(run.size() - 1);
-            if (next.source() != first.source() || Math.abs(next.start() - last.end()) > 0.15) {
-                break;
-            }
-            run.add(next);
-        }
-        return run;
+    /**
+     * A light grade so 1990s and 2000s footage sits well next to today's videos: dark moments are lifted a little
+     * (the darker, the more, within limits), then a touch of contrast, colour and sharpness.
+     */
+    static String look(double brightness) {
+        double gamma = Math.min(1.32, Math.max(1, Math.pow(46 / Math.max(brightness, 10), 0.33)));
+        return f("eq=gamma=%.2f:contrast=1.04:saturation=1.08,unsharp=5:5:0.55:5:5:0,", gamma);
     }
 
-    /** The footage library of a work: reused when it is big enough, topped up from YouTube otherwise. */
-    private List<MediaSvcClient.Trailer> sources(Work work, Path dir) throws IOException {
+    /**
+     * The footage library of a work: reused when it is big enough, topped up from YouTube otherwise. {@code wider}
+     * searches again even so, for a video that needs more different footage than the library holds.
+     */
+    private List<MediaSvcClient.Trailer> sources(Work work, Path dir, boolean wider) throws IOException {
         Files.createDirectories(dir);
         Path index = dir.resolve("sources.json");
         List<MediaSvcClient.Trailer> known = Files.isRegularFile(index)
@@ -315,9 +402,10 @@ public class FilmClipFinder {
                         .stream().filter(t -> Files.isRegularFile(t.file())).toList())
                 : new ArrayList<>();
         double seconds = known.stream().mapToDouble(MediaSvcClient.Trailer::durationSec).sum();
-        if (known.size() < MIN_LIBRARY_VIDEOS) {
+        double limit = wider ? LIBRARY_SECONDS * 2 : LIBRARY_SECONDS;
+        if (wider || known.size() < MIN_LIBRARY_VIDEOS) {
             for (String query : work.queries().stream().limit(MAX_QUERIES).toList()) {
-                if (seconds >= LIBRARY_SECONDS) {
+                if (seconds >= limit) {
                     break;
                 }
                 try {
@@ -358,34 +446,6 @@ public class FilmClipFinder {
         }
     }
 
-    /** Scene cuts of every source (cached next to the video), minus logo heads and credit tails. */
-    private List<Segment> segments(List<MediaSvcClient.Trailer> sources, Path dir) throws IOException {
-        List<Segment> segments = new ArrayList<>();
-        for (MediaSvcClient.Trailer source : sources) {
-            boolean film = source.videoId().startsWith("film-");
-            List<Double> cuts = cuts(source, dir);
-            double duration = source.durationSec() > 0 ? source.durationSec() : cuts.get(cuts.size() - 1) + 2;
-            double head = film ? FILM_SKIP_HEAD : PROMO_SKIP_HEAD;
-            double tail = film ? FILM_SKIP_TAIL : PROMO_SKIP_TAIL;
-            List<double[]> ranges = new ArrayList<>();
-            for (int i = 0; i + 1 < cuts.size(); i++) {
-                double start = cuts.get(i);
-                double end = Math.min(cuts.get(i + 1), duration);
-                if (start >= head && end <= duration - tail && end - start >= MIN_SEGMENT
-                        && end - start <= MAX_SEGMENT) {
-                    ranges.add(new double[] {start, end});
-                }
-            }
-            int limit = film ? TILES_PER_FILM : TILES_PER_PROMO;
-            double step = Math.max(1, ranges.size() / (double) limit);
-            for (double i = 0; i < ranges.size() && segments.size() < MAX_TILES; i += step) {
-                double[] range = ranges.get((int) i);
-                segments.add(new Segment(segments.size() + 1, source, range[0], range[1]));
-            }
-        }
-        return segments;
-    }
-
     /**
      * Scene uploads by clip channels carry a corner logo (e.g. "MOVIECLIPS"): a slight centre crop removes it.
      */
@@ -418,100 +478,63 @@ public class FilmClipFinder {
     }
 
     /**
-     * A crop filter that removes black letterbox bars baked into the source (common in trailers), so the footage
-     * really fills the screen; empty when there are none. Measured once per source on a few seconds of its middle.
+     * What every moment shows, described by Claude from contact sheets (one copy each; the others inherit the line).
+     * Cached per work. catalog.json holds the older, less exact lines: only a fallback when a description fails.
      */
-    private String bars(MediaSvcClient.Trailer source, Path dir) {
-        Path cache = dir.resolve(slug(source.videoId()) + ".crop.txt");
-        try {
-            if (Files.isRegularFile(cache)) {
-                return Files.readString(cache);
-            }
-            double middle = Math.max(0, source.durationSec() / 2 - 5);
-            String output = ffmpeg.ffmpeg(List.of("-ss", fmt(middle), "-t", "10", "-i", source.file().toString(),
-                    "-an", "-vf", "cropdetect=limit=24:round=2:reset=0", "-f", "null", "-"));
-            Matcher matcher = CROP.matcher(output);
-            String crop = null;
-            while (matcher.find()) {
-                crop = matcher.group(1);
-            }
-            MediaInfo info = ffmpeg.probe(source.file());
-            String filter = "";
-            if (crop != null && info.height() > 0) {
-                String[] parts = crop.split(":");
-                int h = Integer.parseInt(parts[1]);
-                int w = Integer.parseInt(parts[0]);
-                // Only real bars: at least 4% of the height removed, and the width kept.
-                if (h < info.height() * 0.96 && h > info.height() * 0.5 && w >= info.width() * 0.96) {
-                    filter = "crop=" + crop + ",";
+    private Map<Integer, CatalogEntry> catalog(StageContext context, Work work, List<Segment> segments, Path dir)
+            throws IOException {
+        Path file = dir.resolve("catalog2.json");
+        Map<String, CatalogEntry> known = entries(file);
+        Map<Integer, List<Segment>> copies = FootageIndex.byMoment(segments);
+        List<Segment> missing = segments.stream().filter(Segment::best)
+                .filter(s -> copies.get(s.moment()).stream().noneMatch(c -> known.containsKey(c.key()))).toList();
+        if (!missing.isEmpty()) {
+            Path sheetDir = claudeWork.resolve("clips").resolve(slug(work.work()));
+            int perCall = SHEETS_PER_CALL * COLS * ROWS;
+            for (int from = 0; from < missing.size(); from += perCall) {
+                List<Segment> batch = missing.subList(from, Math.min(missing.size(), from + perCall));
+                List<Path> sheets = sheets(batch, sheetDir, dir);
+                try {
+                    Descriptions described = llm.json(context, Stage.ASSETS, "clip_describe", Map.of(
+                            "work", label(work),
+                            "sheets", sheets.stream().map(Path::toString).collect(Collectors.joining("\n"))),
+                            Descriptions.class);
+                    Map<Integer, Segment> byTile = batch.stream().collect(Collectors.toMap(Segment::tile, s -> s));
+                    for (Described d : described.tiles() == null ? List.<Described>of() : described.tiles()) {
+                        Segment segment = d.tile() == null ? null : byTile.get(d.tile());
+                        if (segment != null && d.scene() != null && !d.scene().isBlank()) {
+                            for (Segment copy : copies.get(segment.moment())) {
+                                known.put(copy.key(), new CatalogEntry(copy.key(), d.scene().strip(),
+                                        Boolean.TRUE.equals(d.text())));
+                            }
+                        }
+                    }
+                } catch (RuntimeException e) {
+                    log.warn("Run {}: footage description batch failed: {}", context.run().id(), e.getMessage());
                 }
             }
-            Files.writeString(cache, filter);
-            return filter;
-        } catch (IOException | RuntimeException e) {
-            return "";
+            json.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), new ArrayList<>(known.values()));
+            log.info("Footage catalogue for {}: {} new moment(s) described", work.work(), missing.size());
         }
+        Map<String, CatalogEntry> older = entries(dir.resolve("catalog.json"));
+        Map<Integer, CatalogEntry> moments = new HashMap<>();
+        copies.forEach((moment, list) -> list.stream().map(c -> known.get(c.key())).filter(e -> e != null).findFirst()
+                .or(() -> list.stream().map(c -> older.get(c.key())).filter(e -> e != null).findFirst())
+                .ifPresent(entry -> moments.put(moment, entry)));
+        return moments;
     }
 
-    private List<Double> cuts(MediaSvcClient.Trailer source, Path dir) throws IOException {
-        Path cache = dir.resolve(slug(source.videoId()) + ".cuts.json");
-        if (Files.isRegularFile(cache)) {
-            return json.readValue(cache.toFile(), new TypeReference<List<Double>>() { });
-        }
-        String output = ffmpeg.ffmpeg(List.of("-i", source.file().toString(), "-an", "-vf",
-                "select='gt(scene,0.18)',showinfo", "-f", "null", "-"));
-        List<Double> cuts = new ArrayList<>(List.of(0.0));
-        Matcher matcher = PTS.matcher(output);
-        while (matcher.find()) {
-            cuts.add(Double.parseDouble(matcher.group(1)));
-        }
-        cuts.add(source.durationSec() > 0 ? source.durationSec() : cuts.get(cuts.size() - 1) + 2);
-        json.writeValue(cache.toFile(), cuts);
-        return cuts;
-    }
-
-    /** What every segment shows, described by Claude from contact sheets; cached per work. */
-    private Map<String, CatalogEntry> catalog(StageContext context, Work work, List<Segment> segments, Path dir)
-            throws IOException {
-        Path file = dir.resolve("catalog.json");
-        Map<String, CatalogEntry> catalog = new LinkedHashMap<>();
+    private Map<String, CatalogEntry> entries(Path file) throws IOException {
+        Map<String, CatalogEntry> entries = new LinkedHashMap<>();
         if (Files.isRegularFile(file)) {
             json.readValue(file.toFile(), new TypeReference<List<CatalogEntry>>() { })
-                    .forEach(entry -> catalog.put(entry.key(), entry));
+                    .forEach(entry -> entries.put(entry.key(), entry));
         }
-        List<Segment> missing = segments.stream().filter(s -> !catalog.containsKey(s.key())).toList();
-        if (missing.isEmpty()) {
-            return catalog;
-        }
-        Path sheetDir = claudeWork.resolve("clips").resolve(slug(work.work()));
-        int perCall = SHEETS_PER_CALL * COLS * ROWS;
-        for (int from = 0; from < missing.size(); from += perCall) {
-            List<Segment> batch = missing.subList(from, Math.min(missing.size(), from + perCall));
-            List<Path> sheets = sheets(batch, sheetDir);
-            try {
-                Descriptions described = llm.json(context, Stage.ASSETS, "clip_describe", Map.of(
-                        "work", label(work),
-                        "sheets", sheets.stream().map(Path::toString).collect(Collectors.joining("\n"))),
-                        Descriptions.class);
-                Map<Integer, Segment> byTile = batch.stream().collect(Collectors.toMap(Segment::tile, s -> s));
-                for (Described d : described.tiles() == null ? List.<Described>of() : described.tiles()) {
-                    Segment segment = d.tile() == null ? null : byTile.get(d.tile());
-                    if (segment != null && d.scene() != null && !d.scene().isBlank()) {
-                        catalog.put(segment.key(), new CatalogEntry(segment.key(), d.scene().strip(),
-                                Boolean.TRUE.equals(d.text())));
-                    }
-                }
-            } catch (RuntimeException e) {
-                log.warn("Run {}: footage description batch failed: {}", context.run().id(), e.getMessage());
-            }
-        }
-        json.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), new ArrayList<>(catalog.values()));
-        log.info("Footage catalogue for {}: {} scene(s) described", work.work(), catalog.size());
-        return catalog;
+        return entries;
     }
 
-    /** Numbered contact sheets (4x3 tiles) of each segment's middle frame, for the model to look at. */
-    private List<Path> sheets(List<Segment> segments, Path dir) throws IOException {
+    /** Numbered contact sheets (3x3 big tiles) of each moment's middle frame, for the model to look at. */
+    private List<Path> sheets(List<Segment> segments, Path dir, Path library) throws IOException {
         Files.createDirectories(dir);
         List<Path> sheets = new ArrayList<>();
         int perSheet = COLS * ROWS;
@@ -524,8 +547,9 @@ public class FilmClipFinder {
                 Path frame = dir.resolve("tile_" + segment.tile() + ".jpg");
                 ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-ss", fmt((segment.start() + segment.end()) / 2),
                         "-i", segment.source().file().toString(), "-frames:v", "1", "-vf",
-                        "scale=" + TILE_W + ":" + TILE_H + ":force_original_aspect_ratio=increase,crop=" + TILE_W
-                                + ":" + TILE_H, frame.toString()));
+                        index.bars(segment.source(), library) + "scale=" + TILE_W + ":" + TILE_H
+                                + ":force_original_aspect_ratio=increase,crop=" + TILE_W + ":" + TILE_H,
+                        frame.toString()));
                 int x = ((i - first) % COLS) * TILE_W;
                 int y = ((i - first) / COLS) * TILE_H;
                 g.drawImage(ImageIO.read(frame.toFile()), x, y, null);

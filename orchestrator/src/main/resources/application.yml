@@ -151,6 +151,8 @@ storyforge:
     video: ../assets/channel/DownRightTalkingMouth.mp4
   clips:
     enabled: false
+    # how many times one moment of footage may appear in a video
+    max-uses: 2
   youtube:
     client-id: ${GOOGLE_CLIENT_ID:}
     client-secret: ${GOOGLE_CLIENT_SECRET:}

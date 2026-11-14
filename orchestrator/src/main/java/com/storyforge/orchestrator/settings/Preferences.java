@@ -20,8 +20,8 @@ public record Preferences(
         Boolean fairUseClips,
         Integer clipSharePercent) {
 
-    public static final int DEFAULT_CLIP_SHARE = 70;
-    public static final int MAX_CLIP_SHARE = 80;
+    public static final int DEFAULT_CLIP_SHARE = 100;
+    public static final int MAX_CLIP_SHARE = 100;
     public static final double MIN_LONG_MINUTES = 8;
 
     /** Short muted trailer clips for stories about a film/series/anime (owner chose this mode; on by default). */
@@ -29,7 +29,7 @@ public record Preferences(
         return fairUseClips == null || fairUseClips;
     }
 
-    /** Most of the video that may be the work's own footage (fair-use commentary), as a fraction (0.70 by default). */
+    /** Most of the video that may be the work's own footage (fair-use commentary), as a fraction (all of it by default). */
     public double clipShare() {
         int percent = clipSharePercent == null ? DEFAULT_CLIP_SHARE : clipSharePercent;
         return Math.max(0, Math.min(MAX_CLIP_SHARE, percent)) / 100.0;

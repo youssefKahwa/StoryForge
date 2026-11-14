@@ -116,7 +116,7 @@ const PreferencesCard = () => {
             </Col>
             <Col xs={12} md={6}>
               <Form.Item name="clipSharePercent" label={t('prefs.clipShare')} tooltip={t('prefs.clipShareHelp')}>
-                <InputNumber min={0} max={80} step={10} addonAfter="%" className="full-width" />
+                <InputNumber min={0} max={100} step={10} addonAfter="%" className="full-width" />
               </Form.Item>
             </Col>
             <Col xs={24}>

@@ -16,6 +16,7 @@ import com.storyforge.orchestrator.model.Critique;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Edl;
 import com.storyforge.orchestrator.model.Edl.EdlShot;
+import com.storyforge.orchestrator.model.FootageReport;
 import com.storyforge.orchestrator.model.QaReport;
 import com.storyforge.orchestrator.model.QaReport.Check;
 import com.storyforge.orchestrator.model.QaReport.Severity;
@@ -44,6 +45,8 @@ public class QaService {
 
     private static final int MAX_SHARED_RUN = 12;
     private static final double MAX_SHARED_SHARE = 0.05;
+    /** On a video about a screen work, AI pictures are for what no footage can cover. */
+    private static final double MAX_AI_SHARE = 0.15;
 
     private final FfmpegService ffmpeg;
     private final StoryForgeProperties properties;
@@ -127,6 +130,21 @@ public class QaService {
             checks.add(check("legal.fair_use_clips", "legal", WARNING, false, clipShots.size()
                     + " trailer clip(s), " + fmt(clipSeconds) + " s (" + fmt(share * 100) + "% of the video), "
                     + "muted, credited: watch them before publishing; a Content ID claim is possible"));
+        }
+
+        if (files.exists(Stage.ASSETS, AssetsStage.FOOTAGE_REPORT)) {
+            FootageReport pictures = files.read(Stage.ASSETS, AssetsStage.FOOTAGE_REPORT, FootageReport.class);
+            List<FootageReport.Repeat> over = pictures.overLimit();
+            checks.add(check("assets.repeats", "content", WARNING, over.isEmpty(), over.isEmpty()
+                    ? pictures.momentsUsed() + " moment(s) of footage, " + pictures.repeats().size()
+                            + " shown twice, none above " + pictures.maxUses()
+                    : "shown more than " + pictures.maxUses() + " times: " + over.stream()
+                            .map(FootageReport.Repeat::what).toList()));
+            if (pictures.footageShots() > 0) {
+                checks.add(check("assets.ai_share", "content", WARNING, pictures.aiShare() <= MAX_AI_SHARE,
+                        fmt(pictures.aiShare() * 100) + "% of the video is AI pictures (" + pictures.aiPictures().size()
+                                + " shot(s), reasons in " + AssetsStage.FOOTAGE_REPORT + ")"));
+            }
         }
 
         if (properties.sound() != null && properties.sound().enabled()) {

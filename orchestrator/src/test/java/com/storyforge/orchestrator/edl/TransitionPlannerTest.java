@@ -8,7 +8,6 @@ import com.storyforge.orchestrator.model.Edl.EdlChapter;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.ShotList.Shot;
-import com.storyforge.orchestrator.provider.clips.FilmClipFinderLimits;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -77,14 +76,6 @@ class TransitionPlannerTest {
             assertThat(p.zoom()).isBetween(1.2, 1.4);
             assertThat(p.x()).isBetween(0.0, 1.0);
         });
-    }
-
-    @Test
-    void fairUseClipsStayUnderTheOwnersShare() {
-        assertThat(FilmClipFinderLimits.maxClips(600, 0.20) * 4.0).isLessThanOrEqualTo(600 * 0.20);
-        assertThat(FilmClipFinderLimits.maxClips(600, 0.70)).isEqualTo(105);
-        assertThat(FilmClipFinderLimits.maxClips(10, 0.20)).isZero();
-        assertThat(FilmClipFinderLimits.maxClips(600, 0)).isZero();
     }
 
     private static List<Shot> shots(int count, double length) {

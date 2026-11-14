@@ -11,6 +11,7 @@ import com.storyforge.orchestrator.format.FormatRegistry;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.AssetManifest.Asset;
+import com.storyforge.orchestrator.model.FootageReport;
 import com.storyforge.orchestrator.model.LicenseRecord;
 import com.storyforge.orchestrator.model.RealMedia;
 import com.storyforge.orchestrator.model.ShotList;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -57,6 +59,11 @@ public class AssetsStage implements StageWorker {
     private static final LicenseRecord HOST_LICENSE = new LicenseRecord("owned", "BiPath channel character", null,
             "The channel's own masked host: gesture clips and stills made for the channel by its owner", null);
     public static final String BACKDROP = "backdrop-fallback";
+    public static final String FOOTAGE_REPORT = "footage_report.json";
+    /** A reused picture shows this much of the original, from a corner, so it is not the same frame again. */
+    private static final double REUSE_CROP = 0.8;
+    /** A search result that shows a picture already used is passed over a few times at most. */
+    private static final int REAL_MEDIA_ATTEMPTS = 3;
     /** Pictures kept back from the daily free quota for the three thumbnails. */
     private static final int THUMBNAIL_RESERVE = 3;
     private static final LicenseRecord MAP_LICENSE = new LicenseRecord("public_domain",
@@ -188,7 +195,8 @@ public class AssetsStage implements StageWorker {
     }
 
     /** Real photos and footage for the shots the director picked; anything not found falls back to AI images. */
-    private Map<String, RealMediaFinder.Found> realMedia(StageContext context, ShotList shots, Set<String> skip) {
+    private Map<String, RealMediaFinder.Found> realMedia(StageContext context, ShotList shots, Set<String> skip,
+                                                         List<float[]> seen) {
         Map<String, RealMediaFinder.Found> found = new HashMap<>();
         if (!finder.enabled() || !context.files().exists(Stage.VISUAL_PLAN, VisualPlanStage.REAL_MEDIA)) {
             return found;
@@ -202,8 +210,18 @@ public class AssetsStage implements StageWorker {
                 continue;
             }
             Path target = context.files().path(Stage.ASSETS, shot.id());
-            finder.find(pick, shot.duration() + 0.5, video.width(), video.height(), used, target)
-                    .ifPresent(media -> found.put(shot.id(), media));
+            // The same upload can live under several pages: each attempt moves on to the search's next result.
+            for (int attempt = 0; attempt < REAL_MEDIA_ATTEMPTS; attempt++) {
+                Optional<RealMediaFinder.Found> media = finder.find(pick, shot.duration() + 0.5, video.width(),
+                        video.height(), used, target);
+                if (media.isEmpty()) {
+                    break;
+                }
+                if (!finder.repeatsEarlier(media.get().file(), seen)) {
+                    found.put(shot.id(), media.get());
+                    break;
+                }
+            }
         }
         log.info("Run {}: {} of {} real media requests found", context.run().id(), found.size(), picks.size());
         return verified(context, shots, picks, found);
@@ -270,7 +288,8 @@ public class AssetsStage implements StageWorker {
      * an empty background.
      */
     private void fillMissing(StageContext context, ShotList shots, FormatDefinition.Style style, List<Shot> missing,
-                             List<Asset> assets, Set<String> used) {
+                             List<Asset> assets, Set<String> used, List<float[]> seen,
+                             Map<String, List<String>> reused) {
         Map<String, RealMediaFinder.Found> stock = new HashMap<>();
         Map<String, RealMedia> queries = new HashMap<>();
         if (finder.stockAvailable()) {
@@ -292,6 +311,7 @@ public class AssetsStage implements StageWorker {
                 RealMedia query = queries.get(shot.id());
                 if (query != null) {
                     finder.stockPhoto(query.query(), used, context.files().path(Stage.ASSETS, shot.id()))
+                            .filter(photo -> !finder.repeatsEarlier(photo.file(), seen))
                             .ifPresent(photo -> stock.put(shot.id(), photo));
                 }
             }
@@ -312,7 +332,7 @@ public class AssetsStage implements StageWorker {
                         photo.credit()));
                 continue;
             }
-            Asset asset = reuse(context, shot, assets, byId, order);
+            Asset asset = reuse(context, shot, assets, byId, order, reused);
             context.usage().provider(asset.provider());
             assets.add(asset);
         }
@@ -321,11 +341,12 @@ public class AssetsStage implements StageWorker {
     }
 
     /**
-     * Reuses the nearest still picture (same scene first); the renderer frames it differently, so it reads as a new
-     * angle. The branded backdrop is only for a run that has no picture at all: a blank screen loses viewers.
+     * Reuses the nearest still picture (same scene first) with a different crop, so it reads as a new angle. A picture
+     * already reused is taken again only when no other picture is left: that shows in the report and in QA, but a
+     * blank screen loses more viewers. The branded backdrop is only for a run that has no picture at all.
      */
     private Asset reuse(StageContext context, Shot shot, List<Asset> assets, Map<String, Shot> byId,
-                        Map<String, Integer> order) {
+                        Map<String, Integer> order, Map<String, List<String>> reused) {
         int position = order.get(shot.id());
         Asset donor = null;
         int best = Integer.MAX_VALUE;
@@ -338,7 +359,8 @@ public class AssetsStage implements StageWorker {
                 continue;
             }
             int distance = Math.abs(order.get(candidate.shotId()) - position)
-                    + (shot.sceneId().equals(other.sceneId()) ? 0 : 1000);
+                    + (shot.sceneId().equals(other.sceneId()) ? 0 : 1000)
+                    + 100_000 * reused.getOrDefault(candidate.shotId(), List.of()).size();
             if (distance < best) {
                 best = distance;
                 donor = candidate;
@@ -348,7 +370,8 @@ public class AssetsStage implements StageWorker {
             String name = donor.file().substring(donor.file().lastIndexOf('/') + 1);
             Path file = context.files().path(Stage.ASSETS, shot.id() + name.substring(name.lastIndexOf('.')));
             try {
-                Files.copy(context.files().root().resolve(donor.file()), file, StandardCopyOption.REPLACE_EXISTING);
+                reframe(context.files().root().resolve(donor.file()), file, shot.seed());
+                reused.computeIfAbsent(donor.shotId(), id -> new ArrayList<>()).add(shot.id());
                 return new Asset(shot.id(), context.files().relative(file), shot.type(), "reused-fallback",
                         donor.model(), donor.prompt(), shot.seed(), BigDecimal.ZERO, donor.realistic(),
                         donor.license(), donor.media(), donor.credit());
@@ -360,6 +383,28 @@ public class AssetsStage implements StageWorker {
         CardRenderer.backdrop(file, video.width(), video.height(), shot.seed());
         return new Asset(shot.id(), context.files().relative(file), shot.type(), BACKDROP, "java2d", null,
                 shot.seed(), BigDecimal.ZERO, false, LicenseRecord.generated("storyforge-backdrop"), "ai", null);
+    }
+
+    /** Copies a picture, showing only part of it, zoomed from the corner the seed picks. */
+    static void reframe(Path from, Path to, long seed) throws IOException {
+        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(from.toFile());
+        if (image == null) {
+            Files.copy(from, to, StandardCopyOption.REPLACE_EXISTING);
+            return;
+        }
+        int w = (int) (image.getWidth() * REUSE_CROP);
+        int h = (int) (image.getHeight() * REUSE_CROP);
+        int corner = Math.floorMod(seed, 4);
+        int x = corner % 2 == 0 ? 0 : image.getWidth() - w;
+        int y = corner < 2 ? 0 : image.getHeight() - h;
+        java.awt.image.BufferedImage out = new java.awt.image.BufferedImage(image.getWidth(), image.getHeight(),
+                java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = out.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.drawImage(image, 0, 0, image.getWidth(), image.getHeight(), x, y, x + w, y + h, null);
+        g.dispose();
+        String name = to.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        javax.imageio.ImageIO.write(out, name.endsWith(".png") ? "png" : "jpg", to.toFile());
     }
 
     /** The director's picture description without the style words, for stock photo searches. */
@@ -409,7 +454,9 @@ public class AssetsStage implements StageWorker {
         taken.addAll(hostShots.keySet());
         Map<String, FilmClipFinder.Clip> clips = clips(context, shots, new HashSet<>(taken));
         taken.addAll(clips.keySet());
-        Map<String, RealMediaFinder.Found> real = realMedia(context, shots, taken);
+        List<float[]> seenPictures = new ArrayList<>();
+        Map<String, List<String>> reused = new HashMap<>();
+        Map<String, RealMediaFinder.Found> real = realMedia(context, shots, taken, seenPictures);
         Set<String> notAi = new HashSet<>(taken);
         notAi.addAll(real.keySet());
         Set<String> allowedNew = budget(context, shots, style, notAi);
@@ -498,9 +545,77 @@ public class AssetsStage implements StageWorker {
         if (!missing.isEmpty()) {
             log.warn("Run {}: {} of {} pictures could not be generated; finding stock photos or reusing pictures",
                     context.run().id(), missing.size(), shots.shots().size());
-            fillMissing(context, shots, style, missing, assets, stockUsed);
+            fillMissing(context, shots, style, missing, assets, stockUsed, seenPictures, reused);
         }
         boolean realistic = assets.stream().anyMatch(Asset::realistic);
         context.files().write(Stage.ASSETS, "assets.json", new AssetManifest(realistic, assets));
+        context.files().write(Stage.ASSETS, FOOTAGE_REPORT, report(shots, assets, clips, reused));
+    }
+
+    /** What is on screen, every repeat, and every AI picture with the reason it was needed. */
+    private FootageReport report(ShotList shots, List<Asset> assets, Map<String, FilmClipFinder.Clip> clips,
+                                 Map<String, List<String>> reused) {
+        Map<String, Shot> byId = new HashMap<>();
+        shots.shots().forEach(shot -> byId.put(shot.id(), shot));
+        Map<String, Double> seconds = new TreeMap<>();
+        List<FootageReport.Picture> pictures = new ArrayList<>();
+        for (Asset asset : assets) {
+            Shot shot = byId.get(asset.shotId());
+            String type = pictureType(asset);
+            seconds.merge(type, Math.round(shot.duration() * 10) / 10.0, Double::sum);
+            if (FootageReport.AI_PICTURE.equals(type) || FootageReport.REUSED.equals(type)) {
+                pictures.add(new FootageReport.Picture(shot.id(), Math.round(shot.duration() * 10) / 10.0,
+                        asset.provider(), pictureReason(type, shot, clips)));
+            }
+        }
+        Map<Integer, List<String>> moments = new TreeMap<>();
+        clips.values().forEach(clip -> clip.moments().forEach(moment ->
+                moments.computeIfAbsent(moment, m -> new ArrayList<>()).add(clip.shotId())));
+        List<FootageReport.Repeat> repeats = new ArrayList<>();
+        moments.forEach((moment, list) -> {
+            if (list.size() > 1) {
+                repeats.add(new FootageReport.Repeat("moment " + moment, list.stream().sorted().toList()));
+            }
+        });
+        reused.forEach((donor, list) -> {
+            List<String> all = new ArrayList<>(List.of(donor));
+            all.addAll(list);
+            repeats.add(new FootageReport.Repeat("picture " + donor, all));
+        });
+        return new FootageReport(shots.durationSec(), seconds, clips.size(), moments.size(), clipFinder.maxUses(),
+                repeats, pictures);
+    }
+
+    private static String pictureType(Asset asset) {
+        if ("clip".equals(asset.media())) {
+            return "footage";
+        }
+        if (GRAPHICS.equals(asset.provider())) {
+            return "animated_text";
+        }
+        if (HOST.equals(asset.provider())) {
+            return "host";
+        }
+        if ("map".equals(asset.media())) {
+            return "map";
+        }
+        if ("reused-fallback".equals(asset.provider())) {
+            return FootageReport.REUSED;
+        }
+        if (BACKDROP.equals(asset.provider())) {
+            return "backdrop";
+        }
+        return "ai".equals(asset.media()) ? FootageReport.AI_PICTURE : "real_media";
+    }
+
+    private static String pictureReason(String type, Shot shot, Map<String, FilmClipFinder.Clip> clips) {
+        if (FootageReport.REUSED.equals(type)) {
+            return "no AI picture available (free quota or provider), reused a neighbour with another crop";
+        }
+        if (clips.isEmpty()) {
+            return "no real media found for this shot";
+        }
+        return shot.duration() > 14 ? "shot too long for footage"
+                : "no footage moment and no real media fitted this shot";
     }
 }

@@ -248,7 +248,7 @@
   "prefs.clips": "Real footage of the work",
   "prefs.clipsHelp": "For videos about a film, series or anime: the app collects its trailers, teasers, TV spots and official clips (and any copy you put in storyforge-data\\library\\films), and shows the exact scene the narrator talks about, full screen and muted, under the commentary. A Content ID claim is still possible; QA lists every clip.",
   "prefs.clipShare": "Real footage, max share",
-  "prefs.clipShareHelp": "At most this much of the video may be the work's own footage. 70% is how film and anime channels look; lower it if you get Content ID claims.",
+  "prefs.clipShareHelp": "At most this much of the video may be the work's own footage. At 100%, AI pictures only appear when no footage or real media fits a shot. Lower it if you get Content ID claims.",
   "runs.col.progress": "Progress",
   "progress.doneIn": "Video finished in {time}.",
   "progress.queued": "Waiting to start",

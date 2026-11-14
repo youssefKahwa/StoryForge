@@ -54,6 +54,8 @@ public class RealMediaFinder {
     private static final double MIN_QUERY_COVERAGE = 0.75;
     /** Photos are shown as prints about 3/4 of the frame high; small Commons files are enlarged to that. */
     private static final int PRINT_HEIGHT = 820;
+    /** Correlation of two small grey frames above which they are the same picture, whatever the page says. */
+    private static final double SAME_PICTURE = 0.97;
 
     private final FfmpegService ffmpeg;
     private final JsonMapper json;
@@ -125,6 +127,58 @@ public class RealMediaFinder {
             Thread.currentThread().interrupt();
             return Optional.empty();
         }
+    }
+
+    /**
+     * True when this file shows a picture already in {@code seen}: the same upload often lives under several pages
+     * or sites, which the page check cannot tell. Otherwise it is added to {@code seen}.
+     */
+    public boolean repeatsEarlier(Path file, List<float[]> seen) {
+        try {
+            Path raw = Files.createTempFile("storyforge-picture", ".gray");
+            try {
+                ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", file.toString(), "-frames:v", "1", "-vf",
+                        "scale=16:9,format=gray", "-f", "rawvideo", raw.toString()));
+                float[] picture = unit(Files.readAllBytes(raw));
+                for (float[] earlier : seen) {
+                    double dot = 0;
+                    for (int i = 0; i < picture.length && i < earlier.length; i++) {
+                        dot += picture[i] * earlier[i];
+                    }
+                    if (dot >= SAME_PICTURE) {
+                        log.info("Real media {} shows a picture already used, passed over", file.getFileName());
+                        return true;
+                    }
+                }
+                seen.add(picture);
+                return false;
+            } finally {
+                Files.deleteIfExists(raw);
+            }
+        } catch (IOException | RuntimeException e) {
+            log.debug("Picture comparison skipped for {}: {}", file, e.getMessage());
+            return false;
+        }
+    }
+
+    /** Zero mean and unit length, so a brighter copy still matches; a flat picture becomes zero and matches nothing. */
+    static float[] unit(byte[] grey) {
+        double mean = 0;
+        for (byte value : grey) {
+            mean += value & 0xFF;
+        }
+        mean /= Math.max(1, grey.length);
+        float[] out = new float[grey.length];
+        double norm = 0;
+        for (int i = 0; i < grey.length; i++) {
+            out[i] = (float) ((grey[i] & 0xFF) - mean);
+            norm += out[i] * out[i];
+        }
+        norm = Math.sqrt(norm);
+        for (int i = 0; norm > 1 && i < out.length; i++) {
+            out[i] /= (float) norm;
+        }
+        return norm > 1 ? out : new float[grey.length];
     }
 
     private Optional<Found> commons(String query, Set<String> used, Path target)

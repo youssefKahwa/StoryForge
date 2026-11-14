@@ -1,5 +1,5 @@
 ---
-version: 0.4.0
+version: 0.5.0
 tier: fast
 ---
 ## system
@@ -32,8 +32,8 @@ Rules for every prompt (25-45 words, English):
 - One single frozen moment per image: never "cut to", never two places or two moments in one prompt.
 - Never readable text, letters, numbers, logos, maps with labels, or the face of a real, identifiable person.
 
-Real media (premium documentaries mix real photos and footage with illustrations; aim for about a third of the
-shots, never two thirds):
+Real media (real photos and footage beat illustrations: use them wherever they honestly fit, and illustrate only
+what real media cannot show):
 - "photo": the shot shows a specific, named, real place, building, ship, object, document or historical person
   that has public photographs (Wikimedia Commons). query = 2-5 words naming it unambiguously, with the wider
   place when the name is common, e.g. "Flannan Isles lighthouse", "Eilean Mor Flannan Isles", "Dyatlov Pass tent 1959".
