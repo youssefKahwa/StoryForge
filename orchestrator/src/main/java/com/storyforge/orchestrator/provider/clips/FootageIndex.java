@@ -243,7 +243,7 @@ final class FootageIndex {
     }
 
     /** One FFmpeg pass over the whole video, far faster than seeking per segment; kept next to the video. */
-    private byte[] frames(MediaSvcClient.Trailer source, Path dir, int fps) throws IOException {
+    byte[] frames(MediaSvcClient.Trailer source, Path dir, int fps) throws IOException {
         Path file = dir.resolve(FilmClipFinder.slug(source.videoId()) + ".frames");
         if (!Files.isRegularFile(file)) {
             Path partial = file.resolveSibling(file.getFileName() + ".part");
@@ -427,7 +427,7 @@ final class FootageIndex {
         }
     }
 
-    private List<Double> cuts(MediaSvcClient.Trailer source, Path dir) throws IOException {
+    List<Double> cuts(MediaSvcClient.Trailer source, Path dir) throws IOException {
         Path cache = dir.resolve(FilmClipFinder.slug(source.videoId()) + ".cuts.json");
         if (Files.isRegularFile(cache)) {
             return json.readValue(cache.toFile(), new TypeReference<List<Double>>() { });
@@ -442,6 +442,86 @@ final class FootageIndex {
         cuts.add(source.durationSec() > 0 ? source.durationSec() : cuts.get(cuts.size() - 1) + 2);
         json.writeValue(cache.toFile(), cuts);
         return cuts;
+    }
+
+    /** A library segment's frames as unit vectors: 16x9 for a quick look, 64x36 for the exact check. */
+    record Look(Segment segment, float[][] coarse, float[][] fine) {
+    }
+
+    /** The look of every segment, from the frame files the index already keeps next to the videos. */
+    List<Look> looks(List<Segment> segments, Path dir) throws IOException {
+        Map<String, byte[]> raw = new HashMap<>();
+        List<Look> looks = new ArrayList<>();
+        for (Segment segment : segments) {
+            MediaSvcClient.Trailer source = segment.source();
+            Path file = dir.resolve(FilmClipFinder.slug(source.videoId()) + ".frames");
+            if (!Files.isRegularFile(file)) {
+                continue;
+            }
+            byte[] bytes = raw.computeIfAbsent(source.videoId(), id -> {
+                try {
+                    return Files.readAllBytes(file);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+            int fps = source.videoId().startsWith(FILM_PREFIX) ? FILM_FPS : PROMO_FPS;
+            int count = bytes.length / (W * H);
+            int first = (int) (segment.start() * fps) + 1;
+            int last = Math.min(count, (int) (segment.end() * fps));
+            if (last <= first) {
+                continue;
+            }
+            float[][] coarse = new float[last - first][];
+            float[][] fine = new float[last - first][];
+            for (int f = first; f < last; f++) {
+                coarse[f - first] = unit(pooled(Arrays.copyOfRange(bytes, f * W * H, (f + 1) * W * H))[0]);
+                fine[f - first] = fine(bytes, f);
+            }
+            looks.add(new Look(segment, coarse, fine));
+        }
+        return looks;
+    }
+
+    /** One 64x36 frame as a zero-mean unit vector; a nearly flat frame becomes zero (it matches nothing). */
+    static float[] fine(byte[] raw, int frame) {
+        float[] out = new float[W * H];
+        int base = frame * W * H;
+        double mean = 0;
+        for (int i = 0; i < out.length; i++) {
+            out[i] = raw[base + i] & 0xFF;
+            mean += out[i];
+        }
+        mean /= out.length;
+        double norm = 0;
+        for (int i = 0; i < out.length; i++) {
+            out[i] -= (float) mean;
+            norm += out[i] * out[i];
+        }
+        norm = Math.sqrt(norm);
+        if (norm <= FLAT_NORM * 4) {
+            return new float[out.length];
+        }
+        for (int i = 0; i < out.length; i++) {
+            out[i] /= (float) norm;
+        }
+        return out;
+    }
+
+    /** The same frame mirrored left to right (commentary channels often flip footage). */
+    static byte[] mirrored(byte[] raw, int frame) {
+        byte[] out = new byte[W * H];
+        int base = frame * W * H;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                out[y * W + x] = raw[base + y * W + (W - 1 - x)];
+            }
+        }
+        return out;
+    }
+
+    static int frameSize() {
+        return W * H;
     }
 
     /** Moment number to its segments, for callers that work per moment. */

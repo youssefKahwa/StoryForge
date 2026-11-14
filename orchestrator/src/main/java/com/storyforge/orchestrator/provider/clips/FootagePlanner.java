@@ -1,6 +1,7 @@
 package com.storyforge.orchestrator.provider.clips;
 
 import com.storyforge.orchestrator.provider.clips.FootageIndex.Segment;
+import com.storyforge.orchestrator.sound.BeatGrid;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,6 +56,9 @@ final class FootagePlanner {
     /** Most library moments are 1.5-3 s, so a long shot is a quick montage of a few of them, the recap rhythm. */
     static final int MAX_MOMENTS = 5;
     static final double MIN_REUSE_GAP = 90;
+    /** A cut inside a montage moves this far at most to land on a beat; every piece keeps at least MIN_PIECE. */
+    static final double BEAT_TOLERANCE = 0.4;
+    static final double MIN_PIECE = 0.8;
     private static final double EDGE = 0.05;
     private static final double NEXT_TO = 1;
     private static final int UNUSED_CLEAN_VARIED = 0;
@@ -66,6 +70,7 @@ final class FootagePlanner {
 
     private final List<Segment> segments;
     private final int maxUses;
+    private final List<Double> beats;
     private final Map<Integer, Segment> byTile = new HashMap<>();
     private final Map<Integer, Segment> bestOf = new HashMap<>();
     /** The best copy of every moment of a set-up, longest first. */
@@ -81,8 +86,14 @@ final class FootagePlanner {
 
     /** {@code segments}: the usable footage, in source order. */
     FootagePlanner(List<Segment> segments, int maxUses) {
+        this(segments, maxUses, List.of());
+    }
+
+    /** {@code beats}: the music's beats in video time, sorted; cuts inside a montage move onto them. */
+    FootagePlanner(List<Segment> segments, int maxUses, List<Double> beats) {
         this.segments = segments;
         this.maxUses = maxUses;
+        this.beats = beats;
         for (int i = 0; i < segments.size(); i++) {
             Segment segment = segments.get(i);
             byTile.put(segment.tile(), segment);
@@ -278,20 +289,64 @@ final class FootagePlanner {
 
     /** Turns a chain into exact cuts, or nothing if it cannot cover the shot even played at the slowest speed. */
     private Optional<Choice> choice(Need need, List<Segment> chain, int step) {
-        double left = need.target();
+        double target = need.target();
+        double total = chain.stream().mapToDouble(FootagePlanner::room).sum();
+        if (total < target * SLOWEST) {
+            return Optional.empty();
+        }
+        // Every moment gets its share of the shot, so each cut inside keeps a little room to move onto a beat.
+        double ratio = Math.min(1, target / total);
         List<Part> parts = new ArrayList<>();
         for (Segment segment : chain) {
-            if (left <= EDGE) {
-                break;
-            }
             double room = room(segment);
-            double take = Math.min(left, room);
+            double take = room * ratio;
             // A second use starts as late as still fits, so it does not show the same frames again.
             double skip = Math.min(consumed.getOrDefault(segment.moment(), 0.0), room - take);
             parts.add(new Part(segment, segment.start() + EDGE + Math.max(0, skip), take));
-            left -= take;
         }
-        return need.target() - left < need.target() * SLOWEST ? Optional.empty()
-                : Optional.of(new Choice(need, parts, step));
+        return Optional.of(new Choice(need, total >= target ? onTheBeat(need, parts) : parts, step));
+    }
+
+    /**
+     * The cuts between the moments of a montage, moved onto the nearest beat when it is close and every piece stays
+     * long enough and inside its moment. Only for a clip that plays at normal speed (its times are video times).
+     */
+    List<Part> onTheBeat(Need need, List<Part> parts) {
+        if (beats.isEmpty() || parts.size() < 2) {
+            return parts;
+        }
+        List<Part> out = new ArrayList<>(parts);
+        double at = need.start();
+        for (int k = 0; k + 1 < out.size(); k++) {
+            Part left = out.get(k);
+            Part right = out.get(k + 1);
+            double cut = at + left.seconds();
+            Double beat = BeatGrid.nearest(beats, cut, BEAT_TOLERANCE);
+            if (beat != null) {
+                double shift = beat - cut;
+                double leftSeconds = left.seconds() + shift;
+                double rightSeconds = right.seconds() - shift;
+                double leftEnd = left.segment().end() - EDGE;
+                double rightEnd = right.segment().end() - EDGE;
+                if (leftSeconds >= MIN_PIECE && rightSeconds >= MIN_PIECE && left.from() + leftSeconds <= leftEnd
+                        && right.from() + rightSeconds <= rightEnd) {
+                    out.set(k, new Part(left.segment(), left.from(), leftSeconds));
+                    out.set(k + 1, new Part(right.segment(), right.from(), rightSeconds));
+                }
+            }
+            at += out.get(k).seconds();
+        }
+        return out;
+    }
+
+    /** Video times of the cuts between the moments of a clip that starts at {@code start}. */
+    static List<Double> cuts(double start, List<Part> parts) {
+        List<Double> out = new ArrayList<>();
+        double at = start;
+        for (int k = 0; k + 1 < parts.size(); k++) {
+            at += parts.get(k).seconds();
+            out.add(Math.round(at * 1000) / 1000.0);
+        }
+        return out;
     }
 }

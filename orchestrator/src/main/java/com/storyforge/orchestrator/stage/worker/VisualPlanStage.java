@@ -8,18 +8,23 @@ import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.MapPin;
 import com.storyforge.orchestrator.model.RealMedia;
 import com.storyforge.orchestrator.provider.geo.WikidataGeo;
+import com.storyforge.orchestrator.sound.BeatGrid;
+import com.storyforge.orchestrator.sound.MusicPlanner;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.ShotList.Shot;
 import com.storyforge.orchestrator.stage.Stage;
 import com.storyforge.orchestrator.stage.StageContext;
 import com.storyforge.orchestrator.stage.StageWorker;
+import com.storyforge.orchestrator.visual.BeatSnap;
 import com.storyforge.orchestrator.visual.ShotDirector;
 import com.storyforge.orchestrator.visual.ShotPlanner;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 
@@ -32,14 +37,19 @@ public class VisualPlanStage implements StageWorker {
     public static final String REAL_MEDIA = "real_media.json";
     public static final String MAPS = "maps.json";
     private static final long REVISION_SEED_STEP = 7919;
+    private static final Logger log = LoggerFactory.getLogger(VisualPlanStage.class);
 
     private final FormatRegistry formats;
     private final ShotPlanner planner;
     private final ShotDirector director;
     private final WikidataGeo geo;
+    private final MusicPlanner music;
+    private final BeatGrid beats;
 
     public VisualPlanStage(FormatRegistry formats, StoryForgeProperties properties, ShotDirector director,
-                           WikidataGeo geo) {
+                           WikidataGeo geo, MusicPlanner music, BeatGrid beats) {
+        this.music = music;
+        this.beats = beats;
         this.geo = geo;
         this.formats = formats;
         this.director = director;
@@ -68,7 +78,7 @@ public class VisualPlanStage implements StageWorker {
         ShotDirector.Result directed = director.direct(context, context.run().topicTitle(), scenes, alignment, plan,
                 style);
         RunOverrides overrides = context.files().overrides();
-        ShotList shots = applyRevisions(directed.shots(), overrides, style);
+        ShotList shots = onTheBeat(context, applyRevisions(directed.shots(), overrides, style));
         Map<String, RealMedia> real = new HashMap<>(directed.realMedia());
         Map<String, Integer> perScene = new HashMap<>();
         for (Shot shot : shots.shots()) {
@@ -90,6 +100,21 @@ public class VisualPlanStage implements StageWorker {
         context.files().write(Stage.VISUAL_PLAN, BIBLE, directed.bible());
         context.files().write(Stage.VISUAL_PLAN, OVERLAYS, directed.overlays());
         context.files().write(Stage.VISUAL_PLAN, SHOTLIST, shots);
+    }
+
+    /** Cuts inside a scene move onto the music's beat when one is close (the music is known before the mix). */
+    private ShotList onTheBeat(StageContext context, ShotList shots) {
+        try {
+            List<Double> grid = beats.videoBeats(music.segments(context.files(), context.run().id()));
+            ShotList snapped = BeatSnap.shots(shots, grid);
+            List<Double> cuts = snapped.shots().stream().skip(1).map(Shot::start).toList();
+            log.info("Run {}: {} beat(s) in the music, {}% of the shot cuts on the beat", context.run().id(),
+                    grid.size(), Math.round(BeatSnap.onBeat(cuts, grid, 0.06) * 100));
+            return snapped;
+        } catch (RuntimeException e) {
+            log.warn("Run {}: shot cuts left off the beat: {}", context.run().id(), e.getMessage());
+            return shots;
+        }
     }
 
     /** Owner image revisions: new prompt and a new seed, so only those images are generated again. */

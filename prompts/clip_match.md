@@ -1,5 +1,5 @@
 ---
-version: 0.5.0
+version: 0.6.0
 tier: high
 ---
 ## system
@@ -12,6 +12,11 @@ Footage catalogue, one line per moment of the work: number | seconds | tags | wh
 Tags: dark = hard to read on a phone, soft = low-quality copy, - = fine.
 {{catalog}}
 
+The owner's MAIN VIDEO, which our narration adapts part by part in the same order. Every ~10 seconds: when | what was
+said | what it showed (catalogue numbers are the exact moments it used; "looks like" describes footage the catalogue
+may only have something close to). "(none)" when there is no main video.
+{{creator}}
+
 Narration, one line per video shot: shot id | seconds | what the narrator says:
 {{shots}}
 
@@ -19,6 +24,10 @@ For every video shot give up to 3 picks, best first. The later picks are real al
 first has already been shown elsewhere or turns out unusable.
 - What is being said decides the picture. Exact first: the character, place, object or event being named, at that
   moment of the story. The picture must match THAT shot, not the shot before or after it.
+- The main video already chose a picture for every idea. Find the part of it that says what our shot says (it may be
+  in another language). When it showed catalogue moments there and they fit our words, pick them first. When it
+  showed footage described in words, pick the catalogue moment closest to that description (same character, place or
+  action).
 - When the narrator gives an opinion or explains a theme, show the scene it is about, or the character it is about,
   or a scene with the same mood.
 - Different shots show different moments. The viewer must feel the video keeps showing something new, so spread your

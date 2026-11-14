@@ -3,6 +3,9 @@ package com.storyforge.orchestrator.stage.worker;
 import com.storyforge.orchestrator.model.MapPin;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.settings.PreferencesService;
+import com.storyforge.orchestrator.sound.BeatGrid;
+import com.storyforge.orchestrator.sound.MusicPlanner;
+import com.storyforge.orchestrator.visual.BeatSnap;
 import com.storyforge.orchestrator.provider.clips.FilmClipFinder;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.format.FormatDefinition;
@@ -83,10 +86,15 @@ public class AssetsStage implements StageWorker {
     private final PreferencesService preferences;
     private final QuotaWaiter quotaWaiter;
     private final CharacterHost characterHost;
+    private final MusicPlanner music;
+    private final BeatGrid beatGrid;
 
     public AssetsStage(ImageProvider images, FormatRegistry formats, StoryForgeProperties properties,
                        RealMediaFinder finder, LlmRouter llm, FilmClipFinder clipFinder,
-                       PreferencesService preferences, QuotaWaiter quotaWaiter, CharacterHost characterHost) {
+                       PreferencesService preferences, QuotaWaiter quotaWaiter, CharacterHost characterHost,
+                       MusicPlanner music, BeatGrid beatGrid) {
+        this.music = music;
+        this.beatGrid = beatGrid;
         this.quotaWaiter = quotaWaiter;
         this.characterHost = characterHost;
         this.finder = finder;
@@ -429,14 +437,25 @@ public class AssetsStage implements StageWorker {
     }
 
     /** Fair-use trailer clips when the story is about a screen work and the owner has the mode on. */
-    private Map<String, FilmClipFinder.Clip> clips(StageContext context, ShotList shots, Set<String> taken) {
+    private Map<String, FilmClipFinder.Clip> clips(StageContext context, ShotList shots, Set<String> taken,
+                                                   List<Double> beats) {
         if (!clipFinder.enabled() || !preferences.get().fairUseClipsEnabled()) {
             return Map.of();
         }
         List<Scene> scenes = context.files().read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
         Alignment alignment = context.files().read(Stage.ALIGN, "alignment.json", Alignment.class);
         return clipFinder.find(context, shots, alignment, scenes, taken, video.width(), video.height(),
-                preferences.get().clipShare());
+                preferences.get().clipShare(), beats);
+    }
+
+    /** The beats of the music the mix will play, in video time; empty when there is none to cut to. */
+    private List<Double> beats(StageContext context) {
+        try {
+            return beatGrid.videoBeats(music.segments(context.files(), context.run().id()));
+        } catch (RuntimeException e) {
+            log.warn("Run {}: no beat grid, footage cuts stay where they are: {}", context.run().id(), e.getMessage());
+            return List.of();
+        }
     }
 
     @Override
@@ -452,7 +471,8 @@ public class AssetsStage implements StageWorker {
         Map<String, Path> hostShots = hostMoments(context, shots, new HashSet<>(maps.keySet()));
         Set<String> taken = new HashSet<>(maps.keySet());
         taken.addAll(hostShots.keySet());
-        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, new HashSet<>(taken));
+        List<Double> beats = beats(context);
+        Map<String, FilmClipFinder.Clip> clips = clips(context, shots, new HashSet<>(taken), beats);
         taken.addAll(clips.keySet());
         List<float[]> seenPictures = new ArrayList<>();
         Map<String, List<String>> reused = new HashMap<>();
@@ -549,12 +569,12 @@ public class AssetsStage implements StageWorker {
         }
         boolean realistic = assets.stream().anyMatch(Asset::realistic);
         context.files().write(Stage.ASSETS, "assets.json", new AssetManifest(realistic, assets));
-        context.files().write(Stage.ASSETS, FOOTAGE_REPORT, report(shots, assets, clips, reused));
+        context.files().write(Stage.ASSETS, FOOTAGE_REPORT, report(shots, assets, clips, reused, beats));
     }
 
     /** What is on screen, every repeat, and every AI picture with the reason it was needed. */
     private FootageReport report(ShotList shots, List<Asset> assets, Map<String, FilmClipFinder.Clip> clips,
-                                 Map<String, List<String>> reused) {
+                                 Map<String, List<String>> reused, List<Double> beats) {
         Map<String, Shot> byId = new HashMap<>();
         shots.shots().forEach(shot -> byId.put(shot.id(), shot));
         Map<String, Double> seconds = new TreeMap<>();
@@ -582,8 +602,13 @@ public class AssetsStage implements StageWorker {
             all.addAll(list);
             repeats.add(new FootageReport.Repeat("picture " + donor, all));
         });
+        List<Double> cuts = new ArrayList<>(shots.shots().stream().skip(1).map(Shot::start).toList());
+        clips.values().forEach(clip -> cuts.addAll(clip.cuts()));
+        double onBeat = Math.round(BeatSnap.onBeat(cuts, beats, 0.06) * 1000) / 1000.0;
+        List<String> creatorShots = clips.values().stream().filter(FilmClipFinder.Clip::creatorChoice)
+                .map(FilmClipFinder.Clip::shotId).sorted().toList();
         return new FootageReport(shots.durationSec(), seconds, clips.size(), moments.size(), clipFinder.maxUses(),
-                repeats, pictures);
+                repeats, pictures, beats.size(), cuts.size(), onBeat, creatorShots);
     }
 
     /** The kind of picture a shot shows, as the footage report and the QA review pages name it. */

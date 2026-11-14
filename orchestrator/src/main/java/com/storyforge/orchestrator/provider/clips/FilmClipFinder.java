@@ -1,6 +1,10 @@
 package com.storyforge.orchestrator.provider.clips;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
+import com.storyforge.orchestrator.inspiration.Inspiration;
+import com.storyforge.orchestrator.inspiration.InspirationFiles;
+import com.storyforge.orchestrator.inspiration.InspirationService;
+import com.storyforge.orchestrator.model.VideoTranscript;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.LicenseRecord;
@@ -85,9 +89,12 @@ public class FilmClipFinder {
     public record Matches(List<Match> matches) {
     }
 
-    /** moments: the footage moments on screen, for the report on repeats. */
+    /**
+     * moments: the footage moments on screen, for the report on repeats; cuts: video times of the cuts inside;
+     * creatorChoice: one of its moments is a moment the owner's main video showed.
+     */
     public record Clip(String shotId, Path file, LicenseRecord license, String credit, String label,
-                       double sourceSeconds, List<Integer> moments) {
+                       double sourceSeconds, List<Integer> moments, List<Double> cuts, boolean creatorChoice) {
     }
 
     public record Described(Integer tile, String scene, Boolean text) {
@@ -114,6 +121,8 @@ public class FilmClipFinder {
     private static final double EXTRA_PASS_ABOVE = 0.05;
     /** A clip that was rejected tries the next pick, a few times at most. */
     private static final int MAX_ATTEMPTS = 6;
+    /** The library holds less than this share of the main video's footage: search wider once. */
+    private static final double CREATOR_COVERAGE_TOP_UP = 0.5;
     private static final int SHEETS_PER_CALL = 6;
     private static final int TILE_W = 480;
     private static final int TILE_H = 270;
@@ -130,13 +139,22 @@ public class FilmClipFinder {
     private final Path claudeWork;
     private final FootageIndex index;
     private final int maxUses;
+    private final CreatorShots creator;
+    private final InspirationService inspirations;
+    private final InspirationFiles inspirationFiles;
 
     public FilmClipFinder(LlmRouter llm, MediaSvcClient media, FfmpegService ffmpeg, JsonMapper json,
-                          StoryForgeProperties properties,
+                          StoryForgeProperties properties, InspirationService inspirations,
+                          InspirationFiles inspirationFiles,
                           @Value("${storyforge.clips.enabled:false}") boolean enabled,
                           @Value("${storyforge.clips.max-uses:2}") int maxUses) {
         this.index = new FootageIndex(ffmpeg, json);
         this.maxUses = maxUses;
+        this.inspirations = inspirations;
+        this.inspirationFiles = inspirationFiles;
+        this.creator = new CreatorShots(ffmpeg, json, media, index, llm,
+                Path.of(properties.dataDir()).toAbsolutePath().resolve("inspirations").resolve("videos"),
+                Path.of(properties.llm().claudeCode().workDir()).toAbsolutePath());
         this.llm = llm;
         this.media = media;
         this.ffmpeg = ffmpeg;
@@ -158,7 +176,7 @@ public class FilmClipFinder {
     }
 
     public Map<String, Clip> find(StageContext context, ShotList shots, Alignment alignment, List<Scene> scenes,
-                                  Set<String> excluded, int width, int height, double share) {
+                                  Set<String> excluded, int width, int height, double share, List<Double> beats) {
         if (!enabled || share <= 0) {
             return Map.of();
         }
@@ -176,11 +194,19 @@ public class FilmClipFinder {
                 return Map.of();
             }
             Map<Integer, CatalogEntry> moments = catalog(context, work, segments, dir);
-            if (differentFootage(segments, moments) < shots.durationSec() * TOP_UP_BELOW) {
+            Optional<CreatorShots.MainVideo> main = mainVideo(context);
+            CreatorShots.Timeline timeline = main.isPresent() ? creatorTimeline(context, work, main.get(), segments, dir)
+                    : null;
+            boolean fewMoments = differentFootage(segments, moments) < shots.durationSec() * TOP_UP_BELOW;
+            boolean fewOfTheCreators = timeline != null && timeline.coverage() < CREATOR_COVERAGE_TOP_UP;
+            if (fewMoments || fewOfTheCreators) {
                 List<MediaSvcClient.Trailer> wider = sources(work, dir, true);
                 if (wider.size() > sources.size()) {
                     segments = index.segments(wider, dir);
                     moments = catalog(context, work, segments, dir);
+                    if (main.isPresent()) {
+                        timeline = creatorTimeline(context, work, main.get(), segments, dir);
+                    }
                 }
             }
             Map<Integer, CatalogEntry> described = moments;
@@ -194,9 +220,14 @@ public class FilmClipFinder {
             if (candidates.isEmpty() || usable.isEmpty()) {
                 return Map.of();
             }
-            Map<String, List<Pick>> ranked = match(context, work, candidates, usable, described, alignment);
-            FootagePlanner planner = new FootagePlanner(usable, maxUses);
-            Placing placing = new Placing(context, work, dir, planner, shots.durationSec() * share, width, height);
+            String creatorLines = creatorLines(timeline, main, usable);
+            Set<Integer> creatorMoments = timeline == null ? Set.of() : timeline.parts().stream()
+                    .map(CreatorShots.Part::moment).filter(m -> m != null).collect(Collectors.toSet());
+            Map<String, List<Pick>> ranked = match(context, work, candidates, usable, described, alignment,
+                    creatorLines);
+            FootagePlanner planner = new FootagePlanner(usable, maxUses, beats);
+            Placing placing = new Placing(context, work, dir, planner, shots.durationSec() * share, width, height,
+                    creatorMoments);
             List<Shot> gaps = new ArrayList<>();
             for (Shot shot : candidates) {
                 List<Pick> picks = ranked.getOrDefault(shot.id(), List.of());
@@ -209,7 +240,7 @@ public class FilmClipFinder {
             int continued = placing.clips.size() - matched;
             double empty = gaps.stream().mapToDouble(Shot::duration).sum();
             if (empty > shots.durationSec() * EXTRA_PASS_ABOVE) {
-                extraPass(context, work, gaps, usable, described, alignment, placing);
+                extraPass(context, work, gaps, usable, described, alignment, placing, creatorLines);
             }
             log.info("Run {}: footage on {} shot(s), {} s of {} s ({} matched, {} continued, {} from a second pass); "
                     + "{} shot(s) left for other pictures", context.run().id(), placing.clips.size(),
@@ -226,6 +257,56 @@ public class FilmClipFinder {
         return new Need(shot.id(), shot.start(), shot.end());
     }
 
+    /** The run's main inspiration video with a timed transcript (fetched again once when it has no times). */
+    private Optional<CreatorShots.MainVideo> mainVideo(StageContext context) {
+        Long id = context.run().inspirationId();
+        if (id == null) {
+            return Optional.empty();
+        }
+        try {
+            Inspiration inspiration = inspirations.get(id);
+            String url = inspiration.getMainUrl();
+            if (url == null || url.isBlank()) {
+                return Optional.empty();
+            }
+            List<VideoTranscript> all = new ArrayList<>(inspirationFiles.transcripts(id));
+            VideoTranscript transcript = all.stream().filter(t -> url.equals(t.url())).findFirst().orElse(null);
+            if (transcript == null || !transcript.timed()) {
+                VideoTranscript fresh = media.transcript(url);
+                all.removeIf(t -> url.equals(t.url()));
+                all.add(0, fresh);
+                inspirationFiles.saveTranscripts(id, all);
+                transcript = fresh;
+            }
+            return Optional.of(new CreatorShots.MainVideo(url, transcript));
+        } catch (RuntimeException e) {
+            log.warn("Run {}: main video not read: {}", context.run().id(), e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private CreatorShots.Timeline creatorTimeline(StageContext context, Work work, CreatorShots.MainVideo main,
+                                                  List<Segment> segments, Path dir) {
+        try {
+            return creator.timeline(context, label(work), main, segments, dir);
+        } catch (IOException | RuntimeException e) {
+            log.warn("Run {}: main video's shots not read: {}", context.run().id(), e.getMessage());
+            return null;
+        }
+    }
+
+    /** The main video for clip_match, with catalogue numbers for the moments the library holds. */
+    private static String creatorLines(CreatorShots.Timeline timeline, Optional<CreatorShots.MainVideo> main,
+                                       List<Segment> usable) {
+        if (timeline == null || main.isEmpty()) {
+            return "(none)";
+        }
+        Map<Integer, Integer> tileOf = new HashMap<>();
+        usable.stream().filter(Segment::best).forEach(s -> tileOf.put(s.moment(), s.tile()));
+        String lines = CreatorShots.lines(timeline, main.get().transcript().segments(), tileOf::get);
+        return lines.isBlank() ? "(none)" : lines;
+    }
+
     /** Seconds of footage that are truly different: one copy of each moment that is not a title card. */
     private static double differentFootage(List<Segment> segments, Map<Integer, CatalogEntry> moments) {
         return segments.stream().filter(Segment::best).filter(s -> {
@@ -236,13 +317,14 @@ public class FilmClipFinder {
 
     /** The shots still empty, matched again against only the moments not on screen yet. */
     private void extraPass(StageContext context, Work work, List<Shot> gaps, List<Segment> usable,
-                           Map<Integer, CatalogEntry> moments, Alignment alignment, Placing placing) {
+                           Map<Integer, CatalogEntry> moments, Alignment alignment, Placing placing,
+                           String creatorLines) {
         List<Segment> unused = usable.stream().filter(s -> !placing.planner.used(s.moment())).toList();
         if (unused.isEmpty()) {
             return;
         }
         try {
-            Map<String, List<Pick>> ranked = match(context, work, gaps, unused, moments, alignment);
+            Map<String, List<Pick>> ranked = match(context, work, gaps, unused, moments, alignment, creatorLines);
             gaps.removeIf(shot -> placing.place(shot, () -> placing.planner.choose(need(shot),
                     ranked.getOrDefault(shot.id(), List.of()))));
         } catch (RuntimeException e) {
@@ -252,7 +334,8 @@ public class FilmClipFinder {
 
     /** One text call: up to three ranked moments for every shot. */
     private Map<String, List<Pick>> match(StageContext context, Work work, List<Shot> shots, List<Segment> usable,
-                                          Map<Integer, CatalogEntry> moments, Alignment alignment) {
+                                          Map<Integer, CatalogEntry> moments, Alignment alignment,
+                                          String creatorLines) {
         String catalogLines = usable.stream().filter(Segment::best).map(s -> s.tile() + " | " + fmt1(s.length())
                 + " s | " + tags(s) + " | " + moments.get(s.moment()).scene()).collect(Collectors.joining("\n"));
         String shotLines = shots.stream().map(s -> s.id() + " | " + fmt1(s.duration()) + " s | "
@@ -260,6 +343,7 @@ public class FilmClipFinder {
         Matches matches = llm.json(context, Stage.ASSETS, "clip_match", Map.of(
                 "work", label(work),
                 "catalog", catalogLines,
+                "creator", creatorLines,
                 "shots", shotLines), Matches.class);
         Map<String, List<Pick>> ranked = new HashMap<>();
         for (Match match : matches.matches() == null ? List.<Match>of() : matches.matches()) {
@@ -287,10 +371,12 @@ public class FilmClipFinder {
         private final int width;
         private final int height;
         private final Map<String, Clip> clips = new HashMap<>();
+        private final Set<Integer> creatorMoments;
         private double total;
 
         Placing(StageContext context, Work work, Path dir, FootagePlanner planner, double limit, int width,
-                int height) {
+                int height, Set<Integer> creatorMoments) {
+            this.creatorMoments = creatorMoments;
             this.context = context;
             this.work = work;
             this.dir = dir;
@@ -309,7 +395,7 @@ public class FilmClipFinder {
                 if (choice.isEmpty()) {
                     return false;
                 }
-                Clip clip = render(context, work, dir, shot, choice.get(), width, height);
+                Clip clip = render(context, work, dir, shot, choice.get(), width, height, creatorMoments);
                 if (clip == null) {
                     // A fade-to-black or a night shot too dark to read: the next pick is better than any AI picture.
                     log.info("Run {} {}: footage unusable, trying the next pick", context.run().id(), shot.id());
@@ -326,7 +412,8 @@ public class FilmClipFinder {
     }
 
     /** Renders a clip to exactly the shot's length, or returns null if it is too dark to show or cannot be cut. */
-    private Clip render(StageContext context, Work work, Path dir, Shot shot, Choice choice, int width, int height) {
+    private Clip render(StageContext context, Work work, Path dir, Shot shot, Choice choice, int width, int height,
+                        Set<Integer> creatorMoments) {
         double target = choice.need().target();
         double source = choice.seconds();
         double factor = Math.max(FootagePlanner.SLOWEST, source / target);
@@ -378,7 +465,9 @@ public class FilmClipFinder {
         String evidence = "Footage from " + titles + ", " + fmt(source)
                 + " s shown without audio under original commentary and criticism (fair use): " + where;
         return new Clip(shot.id(), out, new LicenseRecord("fair_use_clip", "Footage: " + from.channel(), from.url(),
-                evidence, null), label(work), from.title(), source, choice.moments());
+                evidence, null), label(work), from.title(), source, choice.moments(),
+                factor >= 1 ? FootagePlanner.cuts(shot.start(), choice.parts()) : List.of(),
+                choice.moments().stream().anyMatch(creatorMoments::contains));
     }
 
     /**

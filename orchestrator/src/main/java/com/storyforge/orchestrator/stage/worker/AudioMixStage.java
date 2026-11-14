@@ -3,7 +3,6 @@ package com.storyforge.orchestrator.stage.worker;
 import com.storyforge.orchestrator.model.ShotList;
 import com.storyforge.orchestrator.model.Edl;
 import com.storyforge.orchestrator.edl.TransitionPlanner;
-import com.storyforge.orchestrator.artifact.RunOverrides;
 import com.storyforge.orchestrator.config.StoryForgeProperties;
 import com.storyforge.orchestrator.edl.EdlBuilder;
 import com.storyforge.orchestrator.host.HostPlanner;
@@ -21,6 +20,7 @@ import com.storyforge.orchestrator.model.Outline;
 import com.storyforge.orchestrator.model.Scene;
 import com.storyforge.orchestrator.settings.PreferencesService;
 import com.storyforge.orchestrator.sound.MusicLibrary;
+import com.storyforge.orchestrator.sound.MusicPlanner;
 import com.storyforge.orchestrator.sound.AmbiencePlanner;
 import com.storyforge.orchestrator.sound.SfxLibrary;
 import com.storyforge.orchestrator.sound.SoundBank;
@@ -48,7 +48,7 @@ public class AudioMixStage implements StageWorker {
     public static final String MIX = "mix.wav";
     public static final String PLAN = "sound_plan.json";
     /** Owner revision "no music at all" is stored as a music gain at or below this. */
-    public static final double MUSIC_OFF_DB = -40;
+    public static final double MUSIC_OFF_DB = MusicPlanner.MUSIC_OFF_DB;
     private static final int SAMPLE_RATE = 48_000;
     /** Loudness normalisation overshoots the true-peak target by up to ~0.8 dB (run 132: -0.73 for -1.5). */
     private static final double PEAK_MARGIN_DB = 1.2;
@@ -93,10 +93,13 @@ public class AudioMixStage implements StageWorker {
     private final PreferencesService preferences;
     private final SubscribeNudge subscribe;
     private final com.storyforge.orchestrator.host.HostMascot mascot;
+    private final MusicPlanner musicPlanner;
 
     public AudioMixStage(FfmpegService ffmpeg, MusicLibrary music, SfxLibrary sfx, SoundMixer mixer,
                          StoryForgeProperties properties, PreferencesService preferences, SoundBank bank,
-                         SubscribeNudge subscribe, com.storyforge.orchestrator.host.HostMascot mascot) {
+                         SubscribeNudge subscribe, com.storyforge.orchestrator.host.HostMascot mascot,
+                         MusicPlanner musicPlanner) {
+        this.musicPlanner = musicPlanner;
         this.mascot = mascot;
         this.subscribe = subscribe;
         this.bank = bank;
@@ -145,19 +148,13 @@ public class AudioMixStage implements StageWorker {
         List<Double> subscribeAt = subscribePlan(files, WavAudio.durationSec(voice), bubbles);
         files.write(Stage.AUDIO_MIX, SubscribeNudge.PLAN, new SubscribeNudge.Plan(subscribeAt));
         if (soundEnabled) {
-            List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
-            Alignment alignment = files.read(Stage.ALIGN, "alignment.json", Alignment.class);
+            // The same music plan the visual plan and the footage were cut to (their cuts sit on its beat).
+            MusicPlanner.Inputs musicInputs = musicPlanner.inputs(files);
+            List<Scene> scenes = musicInputs.scenes();
+            Alignment alignment = musicInputs.alignment();
             Outline outline = files.read(Stage.OUTLINE, "outline.json", Outline.class);
-            RunOverrides overrides = files.overrides();
-            scenes = scenes.stream().map(scene -> overrides.sceneMusic().containsKey(scene.id())
-                    ? scene.withMusic(new Scene.MusicCue(overrides.sceneMusic().get(scene.id()),
-                            scene.music() != null ? scene.music().intensity() : 0.5))
-                    : scene).toList();
-            double musicOffset = preferences.get().musicGainOffsetDb() + overrides.musicGainDb();
-            if (overrides.musicGainDb() <= MUSIC_OFF_DB) {
-                musicOffset = Double.NEGATIVE_INFINITY;
-            }
-            Map<String, List<MusicLibrary.Track>> library = Double.isInfinite(musicOffset) ? Map.of() : music.scan();
+            double musicOffset = musicInputs.musicOffsetDb();
+            Map<String, List<MusicLibrary.Track>> library = musicInputs.library();
             List<Edl.EdlChapter> chapters = EdlBuilder.chapters(scenes, alignment, outline);
             List<SoundPlan.SfxCue> transitionCues = new ArrayList<>();
             if (files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)) {

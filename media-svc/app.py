@@ -126,16 +126,26 @@ def caption_track(info: dict):
     return None, None
 
 
-def json3_text(url: str) -> str:
+def json3_text(url: str) -> tuple[str, list[dict]]:
+    """The caption text, and its timed lines (seconds): which words were said when."""
     import json
     import urllib.request
     with urllib.request.urlopen(url, timeout=60) as response:
         data = json.load(response)
-    text = " ".join(seg.get("utf8", "") for event in data.get("events", []) for seg in (event.get("segs") or []))
-    return " ".join(text.split())
+    events = data.get("events", [])
+    text = " ".join(seg.get("utf8", "") for event in events for seg in (event.get("segs") or []))
+    segments = []
+    for event in events:
+        line = " ".join("".join(seg.get("utf8", "") for seg in (event.get("segs") or [])).split())
+        if not line or "tStartMs" not in event:
+            continue
+        start = event["tStartMs"] / 1000
+        segments.append({"start": round(start, 2), "end": round(start + event.get("dDurationMs", 0) / 1000, 2),
+                         "text": line})
+    return " ".join(text.split()), segments
 
 
-def whisper_transcript(info: dict, url: str) -> tuple[str, str]:
+def whisper_transcript(info: dict, url: str) -> tuple[str, str, list[dict]]:
     import subprocess
     import tempfile
     import yt_dlp
@@ -151,7 +161,8 @@ def whisper_transcript(info: dict, url: str) -> tuple[str, str]:
                        check=True)
         samples, _ = sf.read(str(wav), dtype="float32")
         segments, detected = whisper_multi().transcribe(samples, beam_size=1, vad_filter=True)
-        return " ".join(s.text.strip() for s in segments), detected.language
+        timed = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()} for s in segments]
+        return " ".join(t["text"] for t in timed), detected.language, timed
     finally:
         for f in work.glob("*"):
             f.unlink(missing_ok=True)
@@ -171,12 +182,42 @@ def transcript(request: TranscriptRequest):
     source, track = caption_track(info)
     language = info.get("language")
     if track:
-        text = json3_text(track)
+        text, segments = json3_text(track)
     else:
-        text, language = whisper_transcript(info, request.url)
+        text, language, segments = whisper_transcript(info, request.url)
         source = "whisper"
     return {"video_id": info.get("id"), "title": info.get("title"), "channel": info.get("channel"),
-            "duration_sec": info.get("duration"), "language": language, "source": source, "transcript": text}
+            "duration_sec": info.get("duration"), "language": language, "source": source, "transcript": text,
+            "segments": segments}
+
+
+class VideoRequest(BaseModel):
+    url: str
+    out_dir: str
+    max_height: int = Field(480, ge=144, le=1080)
+
+
+@app.post("/video")
+def video(request: VideoRequest):
+    """The picture only (no audio) of one YouTube video, small: enough to recognise which footage it shows when.
+    Used to read the owner's main inspiration video, never shown in ours."""
+    if not YOUTUBE_URL.match(request.url):
+        raise HTTPException(status_code=400, detail="only YouTube video URLs are supported")
+    out_dir = inside_data_dir(request.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    import yt_dlp
+    height = request.max_height
+    options = {"quiet": True, "no_warnings": True, "noplaylist": True,
+               "format": f"bv*[height<={height}][ext=mp4]/bv*[height<={height}]",
+               "outtmpl": str(out_dir / "%(id)s.%(ext)s")}
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(request.url, download=True)
+            path = ydl.prepare_filename(info)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"video download failed: {e}") from e
+    return {"file": path, "video_id": info.get("id"), "title": info.get("title"),
+            "duration_sec": info.get("duration")}
 
 
 class TrailerRequest(BaseModel):

@@ -139,10 +139,24 @@ public class MediaSvcClient {
     public VideoTranscript transcript(String videoUrl) {
         JsonNode response = post("/transcript", Map.of("url", videoUrl));
         JsonNode duration = response.path("duration_sec");
+        List<VideoTranscript.Line> segments = new ArrayList<>();
+        for (JsonNode line : response.path("segments")) {
+            segments.add(new VideoTranscript.Line(line.path("start").asDouble(0), line.path("end").asDouble(0),
+                    line.path("text").asString("")));
+        }
         return new VideoTranscript(videoUrl, response.path("video_id").asString(null),
                 response.path("title").asString(null), response.path("channel").asString(null),
                 duration.isNumber() ? duration.asInt() : null, response.path("language").asString(null),
-                response.path("source").asString(null), response.path("transcript").asString(""));
+                response.path("source").asString(null), response.path("transcript").asString(""),
+                segments.isEmpty() ? null : segments);
+    }
+
+    /** The picture only of one YouTube video, at most {@code maxHeight} lines, for analysis (never shown). */
+    public Trailer video(String videoUrl, Path outDir, int maxHeight) {
+        JsonNode r = post("/video", Map.of("url", videoUrl, "out_dir", outDir.toAbsolutePath().toString(),
+                "max_height", maxHeight));
+        return new Trailer(Path.of(r.path("file").asString("")), r.path("video_id").asString(""),
+                r.path("title").asString(""), "", videoUrl, r.path("duration_sec").asDouble(0));
     }
 
     private JsonNode post(String path, Map<String, Object> body) {

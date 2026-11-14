@@ -288,6 +288,40 @@ class FootagePlannerTest {
     }
 
     @Test
+    void montageCutsMoveOntoTheBeat() {
+        List<Segment> short3 = List.of(
+                segment(1, A, 10, 13, 1, 1, 40, false),
+                segment(2, A, 20, 23, 2, 2, 40, false),
+                segment(3, A, 30, 33, 3, 3, 40, false));
+        FootagePlanner planner = new FootagePlanner(short3, 2, List.of(102.5, 105.0, 107.5));
+        Choice choice = planner.choose(new Need("s1", 100, 107), picks(1, 2, 3)).orElseThrow();
+        assertThat(FootagePlanner.cuts(100, choice.parts())).containsExactly(102.5, 105.0);
+        assertThat(choice.seconds()).isCloseTo(7.6, org.assertj.core.data.Offset.offset(1e-9));
+    }
+
+    @Test
+    void aMontageCutStaysWhenTheBeatWouldOverrunItsMoment() {
+        List<Segment> short3 = List.of(
+                segment(1, A, 10, 12.6, 1, 1, 40, false),
+                segment(2, A, 20, 23, 2, 2, 40, false),
+                segment(3, A, 30, 33, 3, 3, 40, false));
+        FootagePlanner planner = new FootagePlanner(short3, 2, List.of(102.6));
+        Choice choice = planner.choose(new Need("s1", 100, 107), picks(1, 2, 3)).orElseThrow();
+        assertThat(FootagePlanner.cuts(100, choice.parts()).get(0))
+                .isCloseTo(100 + 2.5 * 7.6 / 8.3, org.assertj.core.data.Offset.offset(0.001));
+    }
+
+    @Test
+    void theShotIsSharedBetweenItsMomentsSoEveryCutCanMove() {
+        List<Segment> two = List.of(
+                segment(1, A, 10, 14, 1, 1, 40, false),
+                segment(2, A, 20, 24, 2, 2, 40, false));
+        Choice choice = new FootagePlanner(two, 2).choose(new Need("s1", 0, 6), picks(1, 2)).orElseThrow();
+        assertThat(choice.parts()).extracting(FootagePlanner.Part::seconds)
+                .allSatisfy(seconds -> assertThat(seconds).isCloseTo(3.3, org.assertj.core.data.Offset.offset(1e-9)));
+    }
+
+    @Test
     void aWholeVideoNeverBreaksTheRules() {
         List<Segment> library = library();
         FootagePlanner planner = new FootagePlanner(library, 2);
