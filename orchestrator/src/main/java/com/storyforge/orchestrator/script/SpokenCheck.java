@@ -52,7 +52,113 @@ public final class SpokenCheck {
             + "|\\bin conclusion\\b|\\bto sum (?:it )?up\\b|\\bthat'?s (?:it|all) for (?:today|this video)\\b",
             Pattern.CASE_INSENSITIVE);
 
+    /**
+     * Plain statements in a row that may make a scene sound like a list of points being read. Only advice (minor):
+     * a scene told in the present tense is plain statements too ("It's abandoned. Tyler works nights."), so on run 165
+     * this rule could not tell the story script from the list one; the critic's story_drive and scenes_not_summary
+     * scores judge that.
+     */
+    static final int LIST_RUN = 5;
+    /** Sentences this short are punches or a montage ("The gas line. The father who left."), not list items. */
+    private static final int PUNCH_WORDS = 5;
+    private static final Pattern REACTION = Pattern.compile("\\b(?:i|i'm|i'd|i've|we|we're|us|our)\\b|\\*",
+            Pattern.CASE_INSENSITIVE);
+    /** Openers that tie a sentence to the last one or turn to the viewer, beyond the connectors. */
+    private static final Set<String> LINKS = Set.of("meanwhile", "except", "yes", "meaning", "instead", "after",
+            "when", "even", "only", "sure", "remember", "notice", "think", "imagine", "picture", "wait", "right",
+            "anyway", "actually", "here", "that's");
+
+    /** A statement with nothing that makes it talk: no connector, no question, no "you", no reaction, no emphasis. */
+    private static boolean plain(String sentence, String firstWord) {
+        String s = sentence.strip();
+        return s.endsWith(".") && !CONNECTORS.contains(firstWord) && !LINKS.contains(firstWord)
+                && !YOU.matcher(s).find() && !REACTION.matcher(s).find() && !s.contains("[");
+    }
+
+    /** Plugs for a channel's other places: never ours to read out (and often the inspiration creator's). */
+    private static final Pattern SOCIAL = Pattern.compile("\\b(?:instagram|insta|tiktok|twitter|facebook|snapchat"
+            + "|patreon|discord|telegram|x\\.com|my (?:other )?channel|second channel)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern COMMENT_QUESTION = Pattern.compile("\\bcomments?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TEASE = ASKS.get(ASKS.size() - 1);
+    private static final Pattern OPENING_CLOSER = Pattern.compile("^(\\s*)(?:in conclusion|to sum (?:it )?up),?\\s*",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern MARK = Pattern.compile("\\[(?:mood|beat)[^\\]]*\\]");
+
     private SpokenCheck() {
+    }
+
+    /**
+     * The last scene ends on one ask: every ask sentence and channel plug is dropped except the last question for the
+     * comments or tease of a next video; "thanks for watching" goes, "In conclusion," loses its opening words. Marks
+     * such as [mood: ...] in a dropped sentence move to the next one. Deterministic: run after the rewrites, which
+     * do not always fix it (the inspiration's own plug can survive them).
+     */
+    public static String cleanEnding(String markup) {
+        int start = markup.lastIndexOf("## SCENE");
+        if (start < 0) {
+            return markup;
+        }
+        String[] lines = markup.substring(start).split("\n", -1);
+        StringBuilder out = new StringBuilder(markup.substring(0, start));
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            String trimmed = line.strip();
+            boolean narration = !trimmed.isEmpty() && !trimmed.startsWith("## SCENE") && !trimmed.startsWith("[VOICE")
+                    && !trimmed.startsWith("[SILENCE_") && !trimmed.startsWith("@");
+            out.append(narration ? cleanLine(line) : line);
+            if (i < lines.length - 1) {
+                out.append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    private static String cleanLine(String line) {
+        List<String> sentences = new ArrayList<>();
+        Matcher m = SENTENCE.matcher(line);
+        while (m.find()) {
+            if (!m.group().isBlank()) {
+                sentences.add(m.group());
+            }
+        }
+        int keep = -1;
+        for (int i = sentences.size() - 1; i >= 0 && keep < 0; i--) {
+            String s = sentences.get(i);
+            boolean question = COMMENT_QUESTION.matcher(s).find() && s.contains("?");
+            if ((question || TEASE.matcher(s).find()) && !SOCIAL.matcher(s).find()) {
+                keep = i;
+            }
+        }
+        StringBuilder out = new StringBuilder();
+        StringBuilder carried = new StringBuilder();
+        for (int i = 0; i < sentences.size(); i++) {
+            String s = sentences.get(i);
+            boolean ask = SOCIAL.matcher(s).find() || ASKS.stream().anyMatch(p -> p.matcher(s).find());
+            boolean closer = CLOSER.matcher(s).find() && !OPENING_CLOSER.matcher(s).find();
+            if ((ask && i != keep) || closer) {
+                Matcher marks = MARK.matcher(s);
+                while (marks.find()) {
+                    carried.append(marks.group()).append(' ');
+                }
+                continue;
+            }
+            String kept = s;
+            Matcher opening = OPENING_CLOSER.matcher(s);
+            if (opening.find()) {
+                String rest = s.substring(opening.end());
+                kept = opening.group(1) + (rest.isEmpty() ? rest
+                        : rest.substring(0, 1).toUpperCase(Locale.ROOT) + rest.substring(1));
+            }
+            if (!carried.isEmpty()) {
+                kept = kept.replaceFirst("^(\\s*)", "$1" + Matcher.quoteReplacement(carried.toString()));
+                carried.setLength(0);
+            }
+            out.append(kept);
+        }
+        if (!carried.isEmpty()) {
+            out.append(' ').append(carried.toString().strip());
+        }
+        return out.toString().stripTrailing();
     }
 
     public record Stats(int sentences, double medianWords, double fragmentShare, int fragmentRuns, int longSentences,
@@ -79,6 +185,8 @@ public final class SpokenCheck {
             String text = scene.narration() == null ? "" : scene.narration();
             int run = 0;
             boolean flaggedRun = false;
+            int plainRun = 0;
+            boolean flaggedList = false;
             for (String sentence : sentences(text)) {
                 String[] tokens = sentence.split("\\s+");
                 int n = tokens.length;
@@ -117,6 +225,20 @@ public final class SpokenCheck {
                 String first = tokens[0].toLowerCase(Locale.ROOT).replaceAll("[^a-z']", "");
                 if (CONNECTORS.contains(first)) {
                     connectors++;
+                }
+                if (n <= PUNCH_WORDS) {
+                    // A punch or a montage beat: neither a list item nor a break in one.
+                } else if (plain(sentence, first)) {
+                    plainRun++;
+                    if (plainRun == LIST_RUN && !flaggedList) {
+                        flags.add(new Flag(scene.id(), "minor", "List rhythm: " + LIST_RUN + " plain statements in a "
+                                + "row, ending with \"" + shorten(sentence) + "\". If it reads like points, tell one "
+                                + "moment instead: link what matters with \"but\" or \"so\", react to it, or ask the "
+                                + "viewer.", false));
+                        flaggedList = true;
+                    }
+                } else {
+                    plainRun = 0;
                 }
             }
             Matcher you1 = YOU.matcher(text);
@@ -177,6 +299,13 @@ public final class SpokenCheck {
         Stats stats = new Stats(sentences, median, round(fragmentShare), runs, longOnes, round(connectorShare),
                 round(youPer100));
         return new Result(stats, List.copyOf(flags));
+    }
+
+    /** How many different kinds of ask (like, subscribe, follow, comment, share, bell, next video) a text makes. */
+    public static long askKinds(String text) {
+        String safe = text == null ? "" : text;
+        return ASKS.stream().filter(ask -> ask.matcher(safe).find()).count()
+                + (SOCIAL.matcher(safe).find() ? 1 : 0);
     }
 
     /** The last scene ends on one ask, and never announces that the video is over. */

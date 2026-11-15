@@ -99,6 +99,76 @@ class SpokenCheckTest {
     }
 
     @Test
+    void aSceneOfPlainStatementsInARowIsAList() {
+        String list = """
+                ## SCENE 01 | beat: b | duration_target: 30s
+                [TONE: neutral]
+                He hasn't slept in six months. He works a dull job in an office. He fills his flat with catalogue \
+                furniture. He goes to support groups for diseases he does not have. Marla shows up at the groups.
+                """;
+        assertThat(SpokenCheck.check(SfmParser.parse(list)).flags())
+                .anySatisfy(flag -> {
+                    assertThat(flag.issue()).startsWith("List rhythm");
+                    // Advice only: scenes told in the present tense look the same to this rule.
+                    assertThat(flag.severity()).isEqualTo("minor");
+                });
+
+        String montage = """
+                ## SCENE 01 | beat: b | duration_target: 30s
+                [TONE: neutral]
+                Then a bartender greets him as Mister Durden. Now rewind it. Waking up in airports. Never in the \
+                same room. The gas line. The father who left. He had no identity, so he built one.
+                """;
+        assertThat(SpokenCheck.check(SfmParser.parse(montage)).flags())
+                .noneSatisfy(flag -> assertThat(flag.issue()).startsWith("List rhythm"));
+
+        String story = """
+                ## SCENE 01 | beat: b | duration_target: 30s
+                [TONE: neutral]
+                He hasn't slept in six months. He works a dull job in an office. So he fills his flat with catalogue \
+                furniture, and you know what? It does *nothing*. He goes to support groups for diseases he does not \
+                have. But then Marla shows up.
+                """;
+        assertThat(SpokenCheck.check(SfmParser.parse(story)).flags())
+                .noneSatisfy(flag -> assertThat(flag.issue()).startsWith("List rhythm"));
+    }
+
+    @Test
+    void theEndingKeepsOnlyTheQuestionForTheComments() {
+        String markup = """
+                ## SCENE 01 | beat: a | duration_target: 20s
+                [VOICE: narrator_main] [TONE: playful]
+                Subscribe if you love Tyler. This line is not the last scene, so it stays.
+                @visual: a man
+
+                ## SCENE 02 | beat: b | duration_target: 20s
+                [VOICE: narrator_main] [TONE: warm]
+                In conclusion, Tyler is over the top on purpose. [mood: neutral] If this helped, subscribe, and \
+                follow me on Instagram. Tell me in the comments, which of his ideas would you keep? Thanks for watching.
+                [SILENCE_AFTER: 300ms]
+                @visual: a rooftop at dawn
+                """;
+        String cleaned = SpokenCheck.cleanEnding(markup);
+        assertThat(cleaned).contains("Subscribe if you love Tyler. This line is not the last scene, so it stays.");
+        assertThat(cleaned).contains("Tyler is over the top on purpose. [mood: neutral] Tell me in the comments, which "
+                + "of his ideas would you keep?");
+        assertThat(cleaned).doesNotContain("Instagram").doesNotContain("Thanks for watching")
+                .doesNotContain("In conclusion").contains("@visual: a rooftop at dawn");
+        assertThat(SfmParser.parse(cleaned)).hasSize(2);
+        assertThat(SpokenCheck.cleanEnding(cleaned)).isEqualTo(cleaned);
+    }
+
+    @Test
+    void anEndingWithOneTeaseIsLeftAlone() {
+        String markup = """
+                ## SCENE 01 | beat: a | duration_target: 20s
+                [VOICE: narrator_main] [TONE: warm]
+                So Tyler was never the answer. Watch this next video to see what Marla knew all along.
+                """;
+        assertThat(SpokenCheck.cleanEnding(markup)).isEqualTo(markup);
+    }
+
+    @Test
     void aRunOfFragmentsIsRobotRhythm() {
         String robot = """
                 ## SCENE 01 | beat: b | duration_target: 20s

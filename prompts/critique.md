@@ -1,5 +1,5 @@
 ---
-version: 0.6.0
+version: 0.7.1
 tier: fast
 ---
 ## system
@@ -15,7 +15,13 @@ Script (StoryForge Markup):
 {{script}}
 
 Score 1-10: hook (first 15 seconds), clarity, stakes, curiosity_gaps, pacing_variety, specificity, originality,
-factual_traceability, ending_payoff, human_voice, spoken_flow.
+factual_traceability, ending_payoff, human_voice, spoken_flow, story_drive, scenes_not_summary.
+- story_drive: high when it is ONE story the viewer must follow to the end: scenes joined by "but" and "so", each
+  caused by the one before, the main character's want and stakes clear early, the twist's clues planted before it
+  (see the outline's "spine" when there is one). 6 or less when it is a sequence of topics or a "random video talking"
+  that could be cut anywhere without losing anything.
+- scenes_not_summary: high when every scene tells a moment (where we are, what happens, a detail or a line) and the
+  commentary sits on that moment; 6 or less when scenes are lists of points or opinions read one after another.
 Calibration, use the whole scale:
 - 5 = a typical faceless AI channel. 7 = a solid mid-size channel. 8 = as good as a strong channel with a million
   subscribers. 9-10 = rare; only if you cannot find a single real problem in that dimension.
@@ -38,6 +44,12 @@ Hunt for these and flag each one with the scene id (quote the line):
   testament), triplets of adjectives. Major when repeated, else minor.
 - Essay framing ("people argue about this film through three lenses") instead of talk. Minor or major.
 - Promises the script sets up and never pays off. Major.
+- A list of points: four or more plain statements in a row that each make a separate point, with no moment, reaction
+  or question in between. Major. Plain sentences that show one moment unfolding ("It's abandoned, filthy. Tyler works
+  nights.") are a scene, and a run of short payoff beats ("The gas line. The father who left.") is a montage: neither
+  is a list.
+- A twist that lands with no clue planted before it, or a chapter that ends without a question or a turn. Major.
+- More than one ask at the end, a channel plug (Instagram, other channels) or "thanks for watching". Major.
 - Written-only structures: an aside between commas ("Fight Club, David Fincher's film, is..."), a colon or
   semicolon, a list of three or more names in one sentence, passive voice. Major when it breaks the flow.
 - Voice traps: digits, "$", "%", abbreviations, parentheses, homographs a voice may misread, slang a voice mangles
@@ -53,6 +65,6 @@ interpretations presented as opinions are never critical.
 Return:
 {"scores": {"hook": 0, "clarity": 0, "stakes": 0, "curiosity_gaps": 0, "pacing_variety": 0, "specificity": 0,
             "originality": 0, "factual_traceability": 0, "ending_payoff": 0, "human_voice": 0,
-            "spoken_flow": 0},
+            "spoken_flow": 0, "story_drive": 0, "scenes_not_summary": 0},
  "coldRead": ["0:00-1:00 ..."],
  "flags": [{"sceneId": "03", "severity": "critical|major|minor", "issue": "... -> fix: ...", "resolved": false}]}

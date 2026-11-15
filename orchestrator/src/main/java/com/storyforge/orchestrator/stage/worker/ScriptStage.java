@@ -49,7 +49,7 @@ public class ScriptStage implements StageWorker {
         vars.putAll(Map.of(
                 "topic", brief.title(),
                 "angle", brief.angle(),
-                "outline", json.writeValueAsString(outline.beats()),
+                "outline", json.writeValueAsString(outline.spine() == null ? outline.beats() : outline),
                 "claims", json.writeValueAsString(dossier.claims().stream()
                         .map(claim -> Map.of("id", claim.id(), "text", claim.text(), "contested", claim.contested()))
                         .toList()),

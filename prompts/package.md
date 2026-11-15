@@ -1,5 +1,5 @@
 ---
-version: 0.5.0
+version: 0.6.0
 tier: fast
 ---
 ## system
@@ -15,6 +15,18 @@ Opening line: {{hook}}
 Chapters: {{chapters}}
 Owner notes on earlier versions (follow them; "none" means no notes):
 {{owner_notes}}
+What people type in YouTube's search box about it (real suggestions, most typed first):
+{{searches}}
+The videos on it that already get the most views (views | title):
+{{competitors}}
+
+Using the searches and the competition (when given):
+- At least 4 of the titles contain one of the searched phrases word for word, naturally ("Fight Club Ending
+  Explained", "Tyler Durden's Speech Was a Warning"). Never stuff two phrases into one title.
+- Learn what the strongest titles do (a promise, a reversal, a personal take) but never copy one, and offer an angle
+  they do not cover.
+- "hookLine" (the description's first line, shown above the fold) contains the main searched phrase.
+- "tags": the searched phrases that honestly describe the video first, then broader ones.
 
 Return:
 {"titles": ["10 distinct titles, each <= 60 characters, curiosity plus clarity, include the main keyword"],

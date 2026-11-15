@@ -60,6 +60,27 @@ public class InspirationService {
         return create(request, false, null);
     }
 
+    /**
+     * The main video: the one given, else the first link (the owner's rule). Its transcript leads the analysis and the
+     * script; the others only add details.
+     */
+    static String mainUrl(String given, List<String> others) {
+        if (given != null && !given.isBlank()) {
+            return given.strip();
+        }
+        return others.isEmpty() ? null : others.get(0);
+    }
+
+    /** The main video first, then the others without it. */
+    static List<String> ordered(String main, List<String> others) {
+        List<String> urls = new ArrayList<>();
+        if (main != null) {
+            urls.add(main);
+        }
+        others.stream().filter(url -> !url.equals(main)).forEach(urls::add);
+        return urls;
+    }
+
     /** With autoStart, a run starts by itself as soon as the analysis is ready (Quick start). */
     @Transactional
     public Inspiration create(CreateInspirationRequest request, boolean autoStart, String ownerNotes) {
@@ -69,13 +90,8 @@ public class InspirationService {
         if (others.size() > MAX_VIDEOS) {
             throw new IllegalArgumentException("At most " + MAX_VIDEOS + " videos");
         }
-        // The main video comes first: its transcript leads the analysis and the script.
-        String main = request.mainUrl() == null || request.mainUrl().isBlank() ? null : request.mainUrl().strip();
-        List<String> urls = new ArrayList<>();
-        if (main != null) {
-            urls.add(main);
-        }
-        others.stream().filter(url -> !url.equals(main)).forEach(urls::add);
+        String main = mainUrl(request.mainUrl(), others);
+        List<String> urls = ordered(main, others);
         if (urls.isEmpty() && !pasted) {
             throw new IllegalArgumentException("Give at least one YouTube link or paste a transcript");
         }

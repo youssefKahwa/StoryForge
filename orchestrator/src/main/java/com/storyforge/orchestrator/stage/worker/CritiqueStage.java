@@ -63,7 +63,7 @@ public class CritiqueStage implements StageWorker {
     public void execute(StageContext context) {
         Outline outline = context.files().read(Stage.OUTLINE, "outline.json", Outline.class);
         Dossier dossier = context.files().read(Stage.RESEARCH, "dossier.json", Dossier.class);
-        String outlineJson = json.writeValueAsString(outline.beats());
+        String outlineJson = json.writeValueAsString(outline.spine() == null ? outline.beats() : outline);
         String claimsJson = json.writeValueAsString(dossier.claims());
         String markup = context.files().readText(Stage.SCRIPT, "script.sfm.md");
 
@@ -114,9 +114,28 @@ public class CritiqueStage implements StageWorker {
         if (!best.critique().lengthOk()) {
             best = trimmed(context, best, targetSeconds, tolerance, wordsPerMinute);
         }
+        best = endingCleaned(context, best, targetSeconds, tolerance, wordsPerMinute);
         context.files().write(Stage.CRITIQUE, "critique.json", best.critique());
         context.files().writeText(Stage.CRITIQUE, "script.sfm.md", best.markup());
         context.files().write(Stage.CRITIQUE, "scenes.json", best.scenes());
+    }
+
+    /** One ask at the end, whatever the rewrites did (see SpokenCheck.cleanEnding). */
+    private Version endingCleaned(StageContext context, Version best, int targetSeconds, double tolerance,
+                                  int wordsPerMinute) {
+        String cleaned = SpokenCheck.cleanEnding(best.markup());
+        if (cleaned.equals(best.markup())) {
+            return best;
+        }
+        try {
+            List<Scene> scenes = SfmParser.parse(cleaned);
+            log.info("Run {}: extra asks removed from the last scene", context.run().id());
+            return new Version(cleaned, scenes, best.critique().withLength(wordCount(scenes),
+                    estimatedSeconds(scenes, wordsPerMinute), targetSeconds, tolerance, wordsPerMinute));
+        } catch (SfmParseException e) {
+            log.warn("Ending clean-up produced invalid markup, kept the script as it was: {}", e.getMessage());
+            return best;
+        }
     }
 
     private Version trimmed(StageContext context, Version best, int targetSeconds, double tolerance,

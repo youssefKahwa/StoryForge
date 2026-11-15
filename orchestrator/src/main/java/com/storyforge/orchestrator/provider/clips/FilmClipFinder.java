@@ -1,10 +1,7 @@
 package com.storyforge.orchestrator.provider.clips;
 
 import com.storyforge.orchestrator.config.StoryForgeProperties;
-import com.storyforge.orchestrator.inspiration.Inspiration;
-import com.storyforge.orchestrator.inspiration.InspirationFiles;
-import com.storyforge.orchestrator.inspiration.InspirationService;
-import com.storyforge.orchestrator.model.VideoTranscript;
+import com.storyforge.orchestrator.inspiration.MainVideoReader;
 import com.storyforge.orchestrator.media.FfmpegService;
 import com.storyforge.orchestrator.model.Alignment;
 import com.storyforge.orchestrator.model.LicenseRecord;
@@ -140,18 +137,15 @@ public class FilmClipFinder {
     private final FootageIndex index;
     private final int maxUses;
     private final CreatorShots creator;
-    private final InspirationService inspirations;
-    private final InspirationFiles inspirationFiles;
+    private final MainVideoReader mainVideos;
 
     public FilmClipFinder(LlmRouter llm, MediaSvcClient media, FfmpegService ffmpeg, JsonMapper json,
-                          StoryForgeProperties properties, InspirationService inspirations,
-                          InspirationFiles inspirationFiles,
+                          StoryForgeProperties properties, MainVideoReader mainVideos,
                           @Value("${storyforge.clips.enabled:false}") boolean enabled,
                           @Value("${storyforge.clips.max-uses:2}") int maxUses) {
         this.index = new FootageIndex(ffmpeg, json);
         this.maxUses = maxUses;
-        this.inspirations = inspirations;
-        this.inspirationFiles = inspirationFiles;
+        this.mainVideos = mainVideos;
         this.creator = new CreatorShots(ffmpeg, json, media, index, llm,
                 Path.of(properties.dataDir()).toAbsolutePath().resolve("inspirations").resolve("videos"),
                 Path.of(properties.llm().claudeCode().workDir()).toAbsolutePath());
@@ -257,32 +251,10 @@ public class FilmClipFinder {
         return new Need(shot.id(), shot.start(), shot.end());
     }
 
-    /** The run's main inspiration video with a timed transcript (fetched again once when it has no times). */
+    /** The run's main inspiration video with a timed transcript. */
     private Optional<CreatorShots.MainVideo> mainVideo(StageContext context) {
-        Long id = context.run().inspirationId();
-        if (id == null) {
-            return Optional.empty();
-        }
-        try {
-            Inspiration inspiration = inspirations.get(id);
-            String url = inspiration.getMainUrl();
-            if (url == null || url.isBlank()) {
-                return Optional.empty();
-            }
-            List<VideoTranscript> all = new ArrayList<>(inspirationFiles.transcripts(id));
-            VideoTranscript transcript = all.stream().filter(t -> url.equals(t.url())).findFirst().orElse(null);
-            if (transcript == null || !transcript.timed()) {
-                VideoTranscript fresh = media.transcript(url);
-                all.removeIf(t -> url.equals(t.url()));
-                all.add(0, fresh);
-                inspirationFiles.saveTranscripts(id, all);
-                transcript = fresh;
-            }
-            return Optional.of(new CreatorShots.MainVideo(url, transcript));
-        } catch (RuntimeException e) {
-            log.warn("Run {}: main video not read: {}", context.run().id(), e.getMessage());
-            return Optional.empty();
-        }
+        return mainVideos.read(context.run().inspirationId())
+                .map(main -> new CreatorShots.MainVideo(main.url(), main.transcript()));
     }
 
     private CreatorShots.Timeline creatorTimeline(StageContext context, Work work, CreatorShots.MainVideo main,

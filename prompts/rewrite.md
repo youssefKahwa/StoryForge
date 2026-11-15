@@ -1,5 +1,5 @@
 ---
-version: 0.5.0
+version: 0.6.0
 tier: high
 ---
 ## system
@@ -27,7 +27,13 @@ How to revise:
 - If the hook scored below 8, rewrite the first scene so its first two sentences drop the viewer inside the most
   striking moment of the story; move ratings, spoiler warnings and context after that.
 - A scene in summary mode (a list of events) becomes one moment told from the inside: where we are, what someone
-  does, what it does to us. Move extra events into a bridge line or the next scene.
+  does, what it does to us. Move extra events into a bridge line or the next scene, or drop them.
+- Low story scores: story_drive (scenes joined by "but" and "so", each happening because of the one before),
+  curiosity (each scene ends on a question or a turn that needs the next one), scenes_not_summary (moments told as
+  scenes, not lists), payoff (the hook's question answered at the end, the twist's clues planted before it). When the
+  outline has a "spine", follow its moments, turns, loops and plants.
+- The ending: the answer, one line of meaning, then ONE ask (a question for the comments or a related story). No
+  channel plugs (Instagram, other channels), no "thanks for watching".
 - Write it to be spoken: breath groups of mostly 8-18 words, ideas linked with "and / so / but", about one
   sentence in three starting like talk (So, And, But, Now, Because), "you" in every scene, the key word at the end of
   the sentence. A punch line of 1-4 words only after a build-up, never two in a row.

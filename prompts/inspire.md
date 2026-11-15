@@ -1,5 +1,5 @@
 ---
-version: 0.3.0
+version: 0.4.0
 tier: high
 ---
 ## system
@@ -15,11 +15,13 @@ Transcripts of the owner's inspiration videos:
 {{transcripts}}
 
 Main video: {{main}}
-When a main video is named (its transcript has "main": true), the blueprint IS that video: its parts in its exact
-order, each part's share matching how much of the main video it takes, and every point it makes in that part (the
-story moments, examples, comparisons, opinions, jokes, questions to the viewer, reveals). The other videos only add
-facts, examples or takes inside those parts; never add a part the main video does not have. The voice is the main
-video's voice.
+When a main video is named (its transcript has "main": true), it is THE video we retell:
+- "blueprint", "voice" and "story" come from the main video only: its parts in its exact order, each part's share
+  matching how much of the main video it takes, and what it says in each part (story moments, examples, comparisons,
+  opinions, jokes, questions to the viewer, reveals).
+- The other videos never add a part, an order or a voice. Their useful details (a fact, an example, a take the main
+  video lacks) go in "extras", one per item, in your own words.
+- Never a point: the creator's channel plugs (their Instagram, other channels, sponsors, "subscribe to me").
 
 Return:
 {"topic": "short neutral name of the story, event, person or film",
@@ -39,9 +41,11 @@ Return:
                         films, teasing what comes next, pausing on a scene to explain it (4-8 items)"]},
  "angles": [{"title": "working title", "angle": "the framing our video takes",
              "whyOriginal": "what our version adds: structure, extra research, an English-speaking angle"}],
+ "extras": ["with a main video: a useful detail from the other videos (fact, example, take), one per item; else []"],
  "suggestedFormat": "GREAT_STORIES or FILM_ANALYSIS",
  "suggestedMinutes": 10,
  "cautions": ["legal or ethical risks to respect: living people, copyrighted films, contested claims"]}
-The blueprint merges all the videos into ONE running order (5-9 parts) that keeps the order the creators used; shares
-add up to 1. Cover everything substantial they say: a viewer of their videos should recognise every point in ours.
+Without a main video, the blueprint merges all the videos into ONE running order (5-9 parts) that keeps the order the
+creators used. Either way the shares add up to 1 and the blueprint covers everything substantial: the outline then
+chooses which moments fit our runtime.
 Give exactly 3 angles. suggestedMinutes is between 8 and 12.

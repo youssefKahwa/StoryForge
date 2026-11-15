@@ -12,6 +12,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import ApiRoutes from '../api/ApiRoutes';
 import AppLayout from '../components/AppLayout';
 import ExecutionTable from '../components/ExecutionTable';
+import GrowthView from '../components/GrowthView';
 import PublishKitView from '../components/PublishKitView';
 import QaReportView from '../components/QaReportView';
 import RevisePanel from '../components/RevisePanel';
@@ -93,6 +94,7 @@ const RunPage = ({ location }) => {
 
   const qaReport = useRunFile(detail, 'qa', 'qa_report.json');
   const pkg = useRunFile(detail, 'package', 'package.json');
+  const growth = useRunFile(detail, 'package', 'growth.json');
   const script = useRunFile(detail, 'critique', 'script.sfm.md');
   const publication = useRunFile(detail, 'publish', 'publication.json');
   const kit = useRunFile(detail, 'publish', 'kit.json');
@@ -224,6 +226,7 @@ const RunPage = ({ location }) => {
         defaultActiveKey={kit ? 'kit' : (videoUrl ? 'revise' : 'script')}
         items={[
           { key: 'kit', label: intl.formatMessage({ id: 'run.tab.kit' }), children: <PublishKitView kit={kit} runId={run.id} /> },
+          { key: 'growth', label: intl.formatMessage({ id: 'run.tab.growth' }), children: <GrowthView growth={growth} /> },
           {
             key: 'revise',
             label: intl.formatMessage({ id: 'run.tab.revise' }),

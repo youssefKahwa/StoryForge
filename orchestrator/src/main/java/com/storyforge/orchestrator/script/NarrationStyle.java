@@ -69,7 +69,8 @@ public class NarrationStyle {
             }
             String text = t.transcript().strip();
             int room = main ? MAIN_CHARS : Math.min(SOURCE_CHARS_PER_VIDEO, SOURCE_CHARS_TOTAL - out.length());
-            out.append(main ? "### MAIN VIDEO (follow it part by part): " : "### ")
+            out.append(main ? "### MAIN VIDEO (the story we retell, through the outline's spine): "
+                            : "### EXTRA (details only, never parts or order): ")
                     .append(t.title() == null ? "Video" : t.title()).append('\n')
                     .append(text.length() > room ? text.substring(0, room) + " [...]" : text).append("\n\n");
         }

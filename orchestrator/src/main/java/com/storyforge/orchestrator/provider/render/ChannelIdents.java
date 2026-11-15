@@ -92,6 +92,40 @@ public class ChannelIdents {
         this.subscribe = subscribe;
         this.cache = Path.of(properties.dataDir()).toAbsolutePath().resolve("library").resolve("ident");
         this.enabled = enabled;
+        this.narration = properties.narration();
+    }
+
+    private final StoryForgeProperties.Narration narration;
+
+    /**
+     * The ident's lines in the video's voice: a Magpie voice goes through the human delivery engine (/speak), a Kokoro
+     * voice through /tts. If Magpie cannot be used, the Kokoro fallback voice says them instead of dropping the ident.
+     */
+    private double voice(List<String> lines, String voice, Path wav) {
+        if (voice != null && voice.startsWith("magpie:")) {
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (int i = 0; i < lines.size(); i++) {
+                if (i > 0) {
+                    items.add(Map.of("kind", "beat", "ms", 350));
+                }
+                items.add(Map.of("kind", "text", "text", lines.get(i)));
+            }
+            try {
+                return media.speak(items, "magpie", voice.substring("magpie:".length()), 1.0, "en-us", "hype",
+                        narration.deliveryPace(), false, Map.of(), "ident", wav).durationSec();
+            } catch (RuntimeException e) {
+                log.warn("Ident voice {} unavailable ({}), using {}", voice, e.getMessage(), narration.fallback());
+                voice = narration.fallback();
+            }
+        }
+        List<Scene.Segment> segments = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) {
+                segments.add(Scene.Segment.pause(350));
+            }
+            segments.add(Scene.Segment.text(lines.get(i), false));
+        }
+        return media.tts(segments, voice, 1.0, "en-us", wav);
     }
 
     /** On, and the channel logo is there. */
@@ -200,15 +234,8 @@ public class ChannelIdents {
             Files.createDirectories(work);
             Files.copy(subscribe.logo(), work.resolve("logo.jpg"), StandardCopyOption.REPLACE_EXISTING);
             Path wav = work.resolve("voice.wav");
-            List<Scene.Segment> segments = new ArrayList<>();
             List<String> lines = kind.equals("intro") ? INTRO_LINES : OUTRO_LINES;
-            for (int i = 0; i < lines.size(); i++) {
-                if (i > 0) {
-                    segments.add(Scene.Segment.pause(350));
-                }
-                segments.add(Scene.Segment.text(lines.get(i), false));
-            }
-            double voiceSeconds = media.tts(segments, voice, 1.0, "en-us", wav);
+            double voiceSeconds = voice(lines, voice, wav);
             Map<String, Object> props = new LinkedHashMap<>();
             List<Cue> cues = new ArrayList<>();
             double lead;

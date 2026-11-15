@@ -8,6 +8,8 @@ import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Edl;
+import com.storyforge.orchestrator.model.GrowthReport;
+import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.PackageDraft;
 import com.storyforge.orchestrator.model.PackageDraft.ThumbnailConcept;
 import com.storyforge.orchestrator.model.PublishKit;
@@ -17,6 +19,8 @@ import com.storyforge.orchestrator.model.TopicBrief;
 import com.storyforge.orchestrator.model.VideoPackage;
 import com.storyforge.orchestrator.model.VideoPackage.ScoredTitle;
 import com.storyforge.orchestrator.packaging.DescriptionBuilder;
+import com.storyforge.orchestrator.packaging.GrowthResearch;
+import com.storyforge.orchestrator.script.SpokenCheck;
 import com.storyforge.orchestrator.packaging.ShortsPlanner;
 import com.storyforge.orchestrator.packaging.TitleScorer;
 import com.storyforge.orchestrator.provider.image.ImageProvider;
@@ -60,9 +64,14 @@ public class PackageStage implements StageWorker {
     private final FormatRegistry formats;
     private final StoryForgeProperties.Shorts shortsConfig;
     private final PreferencesService preferences;
+    private final GrowthResearch growth;
+
+    public static final String GROWTH = "growth.json";
 
     public PackageStage(LlmRouter llm, JsonMapper json, ImageProvider images, RenderProvider renderer,
-                        FormatRegistry formats, StoryForgeProperties properties, PreferencesService preferences) {
+                        FormatRegistry formats, StoryForgeProperties properties, PreferencesService preferences,
+                        GrowthResearch growth) {
+        this.growth = growth;
         this.shortsConfig = properties.shorts();
         this.preferences = preferences;
         this.llm = llm;
@@ -187,6 +196,54 @@ public class PackageStage implements StageWorker {
         return Stage.PACKAGE;
     }
 
+    /** The Growth panel: every title ranked, the searches used or not, the competition, and a checklist. */
+    private GrowthReport growthReport(GrowthResearch.Research research, PackageDraft draft, TopicBrief brief,
+                                      String description, String thumbnailText, List<Edl.EdlChapter> chapters,
+                                      Edl edl, List<Scene> scenes, com.storyforge.orchestrator.artifact.RunFiles files) {
+        List<ScoredTitle> ranked = TitleScorer.top(draft.titles() == null ? List.of() : draft.titles(),
+                brief.title(), 20, research.searches());
+        List<String> tags = draft.tags() == null ? List.of() : draft.tags();
+        String top = description.lines().limit(2).collect(java.util.stream.Collectors.joining("\n"));
+        String used = (ranked.isEmpty() ? "" : ranked.get(0).title() + " ") + String.join(" ", tags) + " " + top;
+        String usedLower = used.toLowerCase(java.util.Locale.ROOT);
+        List<GrowthReport.Search> searches = research.searches().stream()
+                .map(phrase -> new GrowthReport.Search(phrase, usedLower.contains(phrase))).toList();
+        List<GrowthReport.Competitor> competitors = research.competitors().stream()
+                .map(hit -> new GrowthReport.Competitor(hit.title(), hit.channel(), hit.views(), hit.durationSec(),
+                        hit.url())).toList();
+        String best = ranked.isEmpty() ? "" : ranked.get(0).title();
+        String phrase = TitleScorer.searchedPhrase(best, research.searches());
+        List<GrowthReport.Check> checklist = new ArrayList<>();
+        checklist.add(new GrowthReport.Check("The title uses a phrase people search", phrase != null,
+                phrase != null ? "\"" + phrase + "\"" : "none of the searched phrases is in the best title"));
+        checklist.add(new GrowthReport.Check("The title fits 60 characters", best.length() <= TitleScorer.MAX_LENGTH,
+                best.length() + " characters"));
+        boolean repeats = thumbnailText != null && !thumbnailText.isBlank()
+                && best.toLowerCase(java.util.Locale.ROOT).contains(thumbnailText.toLowerCase(java.util.Locale.ROOT));
+        checklist.add(new GrowthReport.Check("The thumbnail text adds to the title", !repeats,
+                "\"" + thumbnailText + "\""));
+        String name = research.name() == null ? "" : research.name().toLowerCase(java.util.Locale.ROOT);
+        boolean nameTop = !name.isBlank() && top.toLowerCase(java.util.Locale.ROOT).contains(name);
+        checklist.add(new GrowthReport.Check("The first lines of the description name it", nameTop,
+                nameTop ? "\"" + research.name() + "\" above the fold" : "add \"" + research.name() + "\" early"));
+        int youtubeChapters = DescriptionBuilder.youtubeChapters(chapters).size();
+        checklist.add(new GrowthReport.Check("3+ chapters (YouTube shows them)", youtubeChapters >= 3,
+                youtubeChapters + " chapter(s)"));
+        double minutes = edl.durationSec() / 60;
+        checklist.add(new GrowthReport.Check("8+ minutes (mid-roll ads)", minutes >= 8,
+                String.format(java.util.Locale.ROOT, "%.1f minutes", minutes)));
+        long asks = scenes.isEmpty() ? 0 : SpokenCheck.askKinds(scenes.get(scenes.size() - 1).narration());
+        checklist.add(new GrowthReport.Check("One ask at the end", asks <= 1, asks + " kind(s) of ask in the last scene"));
+        boolean introFirst = false;
+        if (files.exists(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE)) {
+            introFirst = files.read(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE,
+                    com.storyforge.orchestrator.provider.render.ChannelIdents.Timeline.class).introAt() < 5;
+        }
+        checklist.add(new GrowthReport.Check("The story starts before the channel intro", !introFirst,
+                introFirst ? "the intro plays first: viewers leave in the first seconds" : "the hook comes first"));
+        return new GrowthReport(research.name(), ranked, searches, competitors, tags, top, checklist);
+    }
+
     @Override
     public List<String> outputs() {
         return List.of("package.json", "description.txt", "thumbnail.png");
@@ -210,14 +267,21 @@ public class PackageStage implements StageWorker {
         QaReport qa = files.read(Stage.QA, "qa_report.json", QaReport.class);
         List<Scene> scenes = files.read(Stage.CRITIQUE, "scenes.json", new TypeReference<List<Scene>>() { });
 
+        InspirationIdeas ideas = files.exists(Stage.DISCOVER, DiscoverStage.INSPIRATION)
+                ? files.read(Stage.DISCOVER, DiscoverStage.INSPIRATION, InspirationIdeas.class) : null;
+        GrowthResearch.Research research = growth.research(GrowthResearch.name(ideas, brief.title()));
         PackageDraft draft = llm.json(context, stage(), "package", Map.of(
                 "topic", brief.title(),
                 "angle", brief.angle(),
                 "hook", scenes.get(0).narration(),
                 "chapters", json.writeValueAsString(edl.chapters().stream().map(Edl.EdlChapter::title).toList()),
-                "owner_notes", ownerNotes(files.overrides().packageNotes())),
+                "owner_notes", ownerNotes(files.overrides().packageNotes()),
+                "searches", research.searches().isEmpty() ? "(none)" : String.join("\n", research.searches()),
+                "competitors", research.competitors().isEmpty() ? "(none)" : research.competitors().stream()
+                        .map(hit -> String.format(java.util.Locale.ROOT, "%,d views | %s", hit.views(), hit.title()))
+                        .collect(java.util.stream.Collectors.joining("\n"))),
                 PackageDraft.class);
-        List<ScoredTitle> titles = TitleScorer.top(draft.titles(), brief.title(), TOP_TITLES);
+        List<ScoredTitle> titles = TitleScorer.top(draft.titles(), brief.title(), TOP_TITLES, research.searches());
         if (titles.isEmpty()) {
             throw new IllegalStateException("Packaging produced no usable titles");
         }
@@ -238,6 +302,8 @@ public class PackageStage implements StageWorker {
                 mediaCredits, hashtags);
         files.writeText(Stage.PACKAGE, "description.txt", description);
         List<PublishKit.ShortClip> shorts = shorts(context, edl, draft, brief, titles.get(0).title());
+        files.write(Stage.PACKAGE, GROWTH, growthReport(research, draft, brief, description, concepts.get(0).text(),
+                chapters, edl, scenes, files));
         files.write(Stage.PACKAGE, "package.json", new VideoPackage(titles.get(0).title(), titles, description,
                 draft.tags() == null ? List.of() : draft.tags(), draft.pinnedComment(),
                 Stage.PACKAGE.folder() + "/thumbnail.png", concepts.get(0).text(),

@@ -5,7 +5,9 @@ import java.util.List;
 
 /**
  * What the owner's inspiration videos say and how they say it. {@code blueprint} and {@code voice} are absent in
- * inspirations analysed before prompt inspire v0.2; the outline then falls back to the format's beats.
+ * inspirations analysed before prompt inspire v0.2; the outline then falls back to the format's beats. With a main
+ * video (inspire v0.4) the blueprint, voice and story are the main video's alone; {@code extras} holds the useful
+ * details of the other videos (facts, examples, takes), which never become parts.
  */
 public record InspirationIdeas(
         String topic,
@@ -17,7 +19,8 @@ public record InspirationIdeas(
         List<Angle> angles,
         VideoFormat suggestedFormat,
         Integer suggestedMinutes,
-        List<String> cautions) {
+        List<String> cautions,
+        List<String> extras) {
 
     public static final int MIN_MINUTES = 8;
     public static final int MAX_MINUTES = 12;

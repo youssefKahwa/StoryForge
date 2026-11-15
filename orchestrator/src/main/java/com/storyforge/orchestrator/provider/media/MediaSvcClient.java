@@ -144,11 +144,33 @@ public class MediaSvcClient {
             segments.add(new VideoTranscript.Line(line.path("start").asDouble(0), line.path("end").asDouble(0),
                     line.path("text").asString("")));
         }
+        List<VideoTranscript.Heat> heatmap = new ArrayList<>();
+        for (JsonNode heat : response.path("heatmap")) {
+            heatmap.add(new VideoTranscript.Heat(heat.path("start").asDouble(0), heat.path("end").asDouble(0),
+                    heat.path("value").asDouble(0)));
+        }
         return new VideoTranscript(videoUrl, response.path("video_id").asString(null),
                 response.path("title").asString(null), response.path("channel").asString(null),
                 duration.isNumber() ? duration.asInt() : null, response.path("language").asString(null),
                 response.path("source").asString(null), response.path("transcript").asString(""),
-                segments.isEmpty() ? null : segments);
+                segments.isEmpty() ? null : segments, heatmap.isEmpty() ? null : heatmap);
+    }
+
+    /** One YouTube search result: what already gets views on the topic. */
+    public record SearchHit(String videoId, String title, String channel, long views, double durationSec,
+                            String url) {
+    }
+
+    /** The top results of a YouTube search with their view counts (no download). */
+    public List<SearchHit> search(String query, int max) {
+        JsonNode r = post("/search", Map.of("query", query, "max_results", max));
+        List<SearchHit> hits = new ArrayList<>();
+        for (JsonNode v : r.path("results")) {
+            hits.add(new SearchHit(v.path("video_id").asString(""), v.path("title").asString(""),
+                    v.path("channel").asString(""), v.path("views").asLong(0), v.path("duration_sec").asDouble(0),
+                    v.path("url").asString("")));
+        }
+        return hits;
     }
 
     /** The picture only of one YouTube video, at most {@code maxHeight} lines, for analysis (never shown). */

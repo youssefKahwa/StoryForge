@@ -1,5 +1,5 @@
 ---
-version: 0.9.0
+version: 1.0.0
 tier: high
 ---
 ## system
@@ -14,7 +14,9 @@ long as they are clearly opinions. Output StoryForge Markup only, nothing else.
 ## user
 Write the full narration for "{{topic}}" ({{angle}}).
 HARD LENGTH LIMIT: {{total_words}} spoken words in total (±10%). Count them; the runtime depends on it.
-Outline (follow the beat order, cover every listed point, respect the word budgets): {{outline}}
+Outline (follow the beat order and the word budgets; with a "spine", tell each beat's "moment" as a scene, raise its
+"question", land its "take", go to the next beat through its "turn" and end the beat on its "loop"; open with the
+spine's chosen hook): {{outline}}
 Story summary (what happens, for accuracy): {{story}}
 Claims you may use for real-world facts (cite their ids per scene): {{claims}}
 How the owner's favourite creators sound (match this energy, never their words): {{voice}}
@@ -66,30 +68,32 @@ catalogs, asking which dining set defines him as a person. And come on, man, nob
 Perfect system, right? [beat] Until *Marla* walks in. [mood: neutral] She's faking it too, and the second he sees her
 faking, his own fake cure stops working."
 
-3. Retention craft
-- Cold open: the first two sentences drop the viewer INTO the most striking moment of the story (an image, a line,
-  a choice). Ratings, "spoiler warning" and context come after, in one or two lines.
-- Name the big question within 20 seconds and keep it alive to the end.
-- End every chapter with an open loop that the next chapter pays off. Re-hook every 60-90 seconds with a surprise,
-  a reveal or a sharp opinion.
+3. A story that keeps them watching (the viewer stays because they need to know what happens next)
+- The hook: 0-5 seconds inside the most striking moment (an image, a line, a choice); 5-15 seconds what this video
+  gives them; 15-30 seconds why it matters. Ratings, "spoiler warning" and context come after, in one or two lines.
+- The want and the stakes by the end of the second scene: what the main character lacks, what he wants, what it will
+  cost him. The big question is named within 20 seconds and stays open until the last scene.
+- "But" and "so" between scenes, never "and then": every scene happens because of the one before it.
+- Plant the twist: the clues in the spine's "plants" are said in passing early ("notice he has no name... we'll come
+  back to that") and paid off when the twist lands ("remember the name thing?").
+- Every chapter opens with a question and ends on a new one (the beat's "loop"). Re-hook every 60-90 seconds with a
+  surprise, a reveal or a sharp opinion.
+- About two thirds story, one third commentary, and the commentary sits on a moment (a take right after the scene
+  that earns it), never as a separate list of opinions. Never more than two plain facts in a row without a reaction,
+  a question to the viewer or a moment.
 - Last scene: pay off the big question from the start, say what it all means in one line, then make ONE ask, either
   a question for the comments or a related story to watch next. Never a list of asks ("like, subscribe, and follow
   me"): the subscribe button is on screen already. Never announce the end ("thanks for watching", "in conclusion",
   "that's it for today"): go from the last point straight into the ask.
 
 4. The owner's MAIN VIDEO (when a source above is marked "MAIN VIDEO")
-It is the script you are adapting. Go through it part by part in its exact order and keep about 80% of its content:
-every story moment, example, comparison, opinion, joke, question to the viewer and reveal, at about the same length
-per part, built up the same way. A viewer of the main video should feel it is the same video in English. Say it in
-your own spoken English sentences: a faithful adaptation, never a line-by-line translation. The other sources and the
-claims only fill gaps and fix facts.
+It is the story you are retelling, in its order and with its energy, but in OUR runtime: the spine already chose its
+moments and its best takes. Tell those as scenes in your own spoken English, never a line-by-line translation, and do
+not squeeze back in what the spine left out. Never repeat the creator's channel plugs (their Instagram, other
+channels, sponsors, "subscribe to me").
 
-5. Close adaptation of the other inspiration videos (the owner chose them because he loves how they tell it)
-When source videos are given, follow them closely, part by part, in the same order: every moment of the story they
-tell, every example, every opinion and comparison they make, their jokes, their questions to the viewer, the way they
-build up to a reveal. A viewer of the source should recognise the whole video. Write it as a native English
-storyteller would say it: your own sentences, never a sentence-by-sentence translation. Add a little: a clearer
-setup, a sharper line, a fact from the claims.
+5. The other inspiration videos (marked EXTRA) only add a fact, an example or a take inside a scene; they never add
+a scene, a part or an order of their own.
 
 StoryForge Markup rules, one block per scene (a scene is 20-45 seconds). Delivery marks inside the narration:
 - [TONE: ...] in the scene header says how the scene starts (playful, excited, tense, serious, sad, angry...).
@@ -109,6 +113,7 @@ Narration text, written the way you would say it out loud, with a *key* word. [b
 @say: <word> = <how it is said>   (optional, only for a hard name)
 
 Before you answer, check silently: total words within the limit; no banned word or phrase; no scene that is a list
-of events; most sentences 8-18 words and never two fragments in a row; about one sentence in three starts like talk;
-"you" in every scene; no colon, semicolon, bracket or aside between commas; no digits, "$", "%" or abbreviations; at
-most one [beat] per scene.
+of events; every scene tells one moment and ends on a question or a turn; the twist's clues are planted before it;
+most sentences 8-18 words and never two fragments in a row; about one sentence in three starts like talk; "you" in
+every scene; no colon, semicolon, bracket or aside between commas; no digits, "$", "%" or abbreviations; at most one
+[beat] per scene; one ask at the end and no channel plugs.

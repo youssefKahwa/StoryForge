@@ -186,9 +186,35 @@ def transcript(request: TranscriptRequest):
     else:
         text, language, segments = whisper_transcript(info, request.url)
         source = "whisper"
+    heatmap = [{"start": round(h.get("start_time", 0), 2), "end": round(h.get("end_time", 0), 2),
+                "value": round(h.get("value", 0), 3)} for h in (info.get("heatmap") or [])]
     return {"video_id": info.get("id"), "title": info.get("title"), "channel": info.get("channel"),
             "duration_sec": info.get("duration"), "language": language, "source": source, "transcript": text,
-            "segments": segments}
+            "segments": segments, "heatmap": heatmap}
+
+
+class SearchRequest(BaseModel):
+    query: str
+    max_results: int = Field(10, ge=1, le=20)
+
+
+@app.post("/search")
+def search(request: SearchRequest):
+    """The top YouTube results for a search, with views and length (metadata only, nothing downloaded): what already
+    gets views on a topic, for titles and tags."""
+    import yt_dlp
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True,
+                               "extract_flat": True}) as ydl:
+            found = ydl.extract_info(f"ytsearch{request.max_results}:{request.query}", download=False)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"YouTube search failed: {e}") from e
+    results = []
+    for entry in found.get("entries") or []:
+        results.append({"video_id": entry.get("id"), "title": entry.get("title"), "channel": entry.get("channel"),
+                        "views": entry.get("view_count") or 0, "duration_sec": entry.get("duration") or 0,
+                        "url": entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}"})
+    return {"results": results}
 
 
 class VideoRequest(BaseModel):

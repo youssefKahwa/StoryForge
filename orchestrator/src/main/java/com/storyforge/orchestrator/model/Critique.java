@@ -20,11 +20,16 @@ public record Critique(
     public record Flag(String sceneId, String severity, String issue, boolean resolved) {
     }
 
+    /** Below this, a script is not one story told in scenes yet: it goes back to the rewrite like a failed hook. */
+    public static final double MIN_STORY = 7;
+    private static final List<String> STORY = List.of("story_drive", "scenes_not_summary");
+
     public Critique evaluated(double minAverage, double minHook, int rewriteCount) {
         Map<String, Double> safe = scores == null ? Map.of() : scores;
         double avg = safe.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
         double hookScore = safe.getOrDefault("hook", 0.0);
-        boolean pass = avg >= minAverage && hookScore >= minHook;
+        boolean story = STORY.stream().allMatch(key -> !safe.containsKey(key) || safe.get(key) >= MIN_STORY);
+        boolean pass = avg >= minAverage && hookScore >= minHook && story;
         return new Critique(safe, Math.round(avg * 100) / 100.0, hookScore, pass, rewriteCount, words, estimatedSeconds,
                 targetSeconds, lengthOk, coldRead == null ? List.of() : coldRead, flags == null ? List.of() : flags);
     }
