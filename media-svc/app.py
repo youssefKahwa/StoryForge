@@ -211,10 +211,38 @@ def search(request: SearchRequest):
         raise HTTPException(status_code=502, detail=f"YouTube search failed: {e}") from e
     results = []
     for entry in found.get("entries") or []:
+        channel_url = entry.get("channel_url") or (
+            f"https://www.youtube.com/channel/{entry['channel_id']}" if entry.get("channel_id") else None)
         results.append({"video_id": entry.get("id"), "title": entry.get("title"), "channel": entry.get("channel"),
                         "views": entry.get("view_count") or 0, "duration_sec": entry.get("duration") or 0,
-                        "url": entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}"})
+                        "url": entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}",
+                        "channel_url": channel_url})
     return {"results": results}
+
+
+class ChannelRequest(BaseModel):
+    channel_url: str
+    max_videos: int = Field(30, ge=4, le=60)
+
+
+@app.post("/channel")
+def channel(request: ChannelRequest):
+    """A channel's usual views: the median of its latest uploads (metadata only). A video's views divided by it say
+    whether its packaging beat that channel's own normal (an outlier), which raw views cannot."""
+    import statistics
+    import yt_dlp
+    url = request.channel_url.rstrip("/")
+    if not url.endswith("/videos"):
+        url += "/videos"
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, "extract_flat": True,
+                               "playlistend": request.max_videos}) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Channel read failed: {e}") from e
+    views = sorted(e.get("view_count") for e in (info.get("entries") or []) if e.get("view_count"))
+    return {"channel": info.get("channel") or info.get("title"), "videos": len(views),
+            "median_views": int(statistics.median(views)) if views else 0}
 
 
 class VideoRequest(BaseModel):

@@ -31,11 +31,21 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class GrowthResearch {
 
-    public record Research(String name, List<String> searches, List<MediaSvcClient.SearchHit> competitors) {
+    /** medians: video id -> its channel's median views over the latest uploads (the outlier yardstick). */
+    public record Research(String name, List<String> searches, List<MediaSvcClient.SearchHit> competitors,
+                           java.util.Map<String, Long> medians) {
+
+        public Research(String name, List<String> searches, List<MediaSvcClient.SearchHit> competitors) {
+            this(name, searches, competitors, java.util.Map.of());
+        }
+
         static Research empty(String name) {
             return new Research(name, List.of(), List.of());
         }
     }
+
+    /** Channels whose usual views are read (a few seconds each). */
+    private static final int OUTLIER_CHANNELS = 5;
 
     private static final Logger log = LoggerFactory.getLogger(GrowthResearch.class);
     private static final String SUGGEST = "https://suggestqueries.google.com/complete/search?client=firefox&ds=yt"
@@ -97,9 +107,21 @@ public class GrowthResearch {
         } catch (RuntimeException e) {
             log.warn("YouTube search for '{}' failed: {}", query, e.getMessage());
         }
-        log.info("Growth research for '{}': {} searched phrases, {} competing videos", name, top.size(),
-                competitors.size());
-        return new Research(name, top, competitors);
+        java.util.Map<String, Long> medians = new java.util.HashMap<>();
+        for (MediaSvcClient.SearchHit hit : competitors.stream().filter(h -> h.channelUrl() != null)
+                .limit(OUTLIER_CHANNELS).toList()) {
+            try {
+                long median = media.channelMedianViews(hit.channelUrl());
+                if (median > 0) {
+                    medians.put(hit.videoId(), median);
+                }
+            } catch (RuntimeException e) {
+                log.debug("Channel views of {} not read: {}", hit.channel(), e.getMessage());
+            }
+        }
+        log.info("Growth research for '{}': {} searched phrases, {} competing videos, {} channel median(s)", name,
+                top.size(), competitors.size(), medians.size());
+        return new Research(name, top, competitors, medians);
     }
 
     static boolean useful(String phrase) {

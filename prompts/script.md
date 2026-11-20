@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.0.1
 tier: high
 ---
 ## system
@@ -16,7 +16,7 @@ Write the full narration for "{{topic}}" ({{angle}}).
 HARD LENGTH LIMIT: {{total_words}} spoken words in total (±10%). Count them; the runtime depends on it.
 Outline (follow the beat order and the word budgets; with a "spine", tell each beat's "moment" as a scene, raise its
 "question", land its "take", go to the next beat through its "turn" and end the beat on its "loop"; open with the
-spine's chosen hook): {{outline}}
+spine's chosen hook, without its "[formula name]" tag, which is never said): {{outline}}
 Story summary (what happens, for accuracy): {{story}}
 Claims you may use for real-world facts (cite their ids per scene): {{claims}}
 How the owner's favourite creators sound (match this energy, never their words): {{voice}}

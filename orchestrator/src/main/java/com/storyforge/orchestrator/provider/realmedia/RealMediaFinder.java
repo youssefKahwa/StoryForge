@@ -119,6 +119,9 @@ public class RealMediaFinder {
             if (photo.isEmpty()) {
                 photo = nasa(request.query(), used, target);
             }
+            if (photo.isEmpty()) {
+                photo = openverse(request.query(), used, target);
+            }
             return photo.isPresent() || pixabayKey.isEmpty() ? photo : pixabayPhoto(request.query(), used, target);
         } catch (IOException | RuntimeException e) {
             log.warn("Real media search failed for '{}': {}", request.query(), e.getMessage());
@@ -411,6 +414,109 @@ public class RealMediaFinder {
     }
 
     /**
+     * Openverse (api.openverse.org, no key): openly licensed photos from Flickr, museums, rawpixel and more, beyond
+     * Commons (searched directly before, so excluded here). Only CC0, the Public Domain Mark and CC BY: share-alike
+     * and non-commercial terms never reach a monetized video. Anonymous use allows 200 searches a day, so searches
+     * are cached for 24 h and capped at {@link #OPENVERSE_DAILY} a day.
+     */
+    private Optional<Found> openverse(String query, Set<String> used, Path target)
+            throws IOException, InterruptedException {
+        String key = "openverse-" + sha1(query);
+        if (!cached(key) && !openverseBudget()) {
+            return Optional.empty();
+        }
+        // No size or aspect filter: most Flickr results are 1024 px "_b" files, enough for the print style, and the
+        // filters left 0-1 results for scene searches (tested 2026-11-20); width and shape are checked per result.
+        String url = "https://api.openverse.org/v1/images/?q=" + enc(query) + "&license=cc0,pdm,by"
+                + "&mature=false&page_size=20&excluded_source=wikimedia";
+        for (JsonNode hit : cachedJson(key, url).path("results")) {
+            Optional<OpenverseHit> pick = OpenverseHit.of(hit);
+            if (pick.isEmpty() || used.contains(pick.get().page())
+                    || coverage(query, pick.get().title() + " " + pick.get().tags()) < MIN_QUERY_COVERAGE) {
+                continue;
+            }
+            OpenverseHit h = pick.get();
+            Path image;
+            try {
+                image = download(h.url(), ".img");
+            } catch (IOException e) {
+                continue;
+            }
+            Path out = target.resolveSibling(target.getFileName() + ".jpg");
+            ffmpeg.ffmpeg(List.of("-y", "-loglevel", "error", "-i", image.toString(), "-vf",
+                    "scale=-2:" + PRINT_HEIGHT + ":flags=lanczos,unsharp=5:5:0.5:5:5:0", "-q:v", "2", out.toString()));
+            used.add(h.page());
+            return Optional.of(new Found(out, RealMedia.PHOTO, "openverse",
+                    new LicenseRecord(h.licenseType(), "Openverse/" + h.source() + ": " + h.creator(), h.page(),
+                            h.attribution(), null),
+                    "Photo: " + shorten(h.creator(), 40) + " / " + h.source() + " · " + h.licenseLabel(), h.page(),
+                    shorten(h.title() + " — " + h.tags(), 300)));
+        }
+        return Optional.empty();
+    }
+
+    /** One Openverse image result we may use: its licence is CC0, PDM or CC BY and it has a picture and a page. */
+    record OpenverseHit(String url, String page, String title, String creator, String source, String license,
+                        String version, String attribution, String tags) {
+
+        static Optional<OpenverseHit> of(JsonNode hit) {
+            String license = hit.path("license").asString("").toLowerCase(Locale.ROOT);
+            String url = hit.path("url").asString("");
+            String page = hit.path("foreign_landing_url").asString("");
+            int width = hit.path("width").asInt(0);
+            if (!Set.of("cc0", "pdm", "by").contains(license) || url.isEmpty() || page.isEmpty()
+                    || hit.path("mature").asBoolean(false) || width < OPENVERSE_MIN_WIDTH
+                    || width < hit.path("height").asInt(0)) {
+                return Optional.empty();
+            }
+            List<String> tags = new ArrayList<>();
+            hit.path("tags").forEach(t -> tags.add(t.path("name").asString("")));
+            String creator = hit.path("creator").asString("");
+            return Optional.of(new OpenverseHit(url, page, hit.path("title").asString(""),
+                    creator.isBlank() ? "unknown author" : creator, hit.path("source").asString("openverse"),
+                    license, hit.path("license_version").asString(""), hit.path("attribution").asString(""),
+                    String.join(" ", tags)));
+        }
+
+        String licenseType() {
+            return switch (license) {
+                case "cc0" -> "cc0";
+                case "pdm" -> "public_domain";
+                default -> "cc-by";
+            };
+        }
+
+        String licenseLabel() {
+            return switch (license) {
+                case "cc0" -> "CC0";
+                case "pdm" -> "Public domain";
+                default -> "CC BY " + version;
+            };
+        }
+    }
+
+    static final int OPENVERSE_DAILY = 150;
+    /** Flickr's "_b" files are 1024 px: shown as a print 820 px high, that is enough. */
+    static final int OPENVERSE_MIN_WIDTH = 1000;
+    private int openverseCalls;
+    private long openverseDay;
+
+    private synchronized boolean openverseBudget() {
+        long day = System.currentTimeMillis() / Duration.ofDays(1).toMillis();
+        if (day != openverseDay) {
+            openverseDay = day;
+            openverseCalls = 0;
+        }
+        return openverseCalls++ < OPENVERSE_DAILY;
+    }
+
+    private boolean cached(String key) throws IOException {
+        Path file = cache.resolve(key + ".json");
+        return Files.isRegularFile(file)
+                && Files.getLastModifiedTime(file).toMillis() > System.currentTimeMillis() - Duration.ofHours(24).toMillis();
+    }
+
+    /**
      * Pixabay photos as a fallback when Commons has nothing (Content License; downloaded, never hotlinked, as the API
      * rules require). largeImageURL is at most 1280 px, enough for the print style.
      */
@@ -511,17 +617,25 @@ public class RealMediaFinder {
     }
 
     private long lastPixabayCall;
+    private long lastOpenverseCall;
 
-    /** Pixabay allows 100 requests a minute; keep a little under it. */
+    /** Pixabay allows 100 requests a minute and Openverse 20 without a key; keep a little under both. */
     private synchronized void throttle(String url) throws InterruptedException {
-        if (!url.contains("pixabay.com")) {
+        boolean pixabay = url.contains("pixabay.com");
+        boolean openverse = url.contains("api.openverse.org");
+        if (!pixabay && !openverse) {
             return;
         }
-        long wait = lastPixabayCall + 650 - System.currentTimeMillis();
+        long last = pixabay ? lastPixabayCall : lastOpenverseCall;
+        long wait = last + (pixabay ? 650 : 3200) - System.currentTimeMillis();
         if (wait > 0) {
             Thread.sleep(wait);
         }
-        lastPixabayCall = System.currentTimeMillis();
+        if (pixabay) {
+            lastPixabayCall = System.currentTimeMillis();
+        } else {
+            lastOpenverseCall = System.currentTimeMillis();
+        }
     }
 
     private JsonNode get(String url, String authorization) throws IOException, InterruptedException {

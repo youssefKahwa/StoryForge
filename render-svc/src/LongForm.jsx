@@ -4,6 +4,7 @@ import { EASE } from './motion';
 import { KenBurnsImage } from './components/KenBurnsImage';
 import { MediaShot } from './components/MediaShot';
 import { KineticText } from './components/KineticText';
+import { MotionGraphic, isMotion } from './components/motion/MotionGraphic';
 import { ChapterCard } from './components/ChapterCard';
 import { FilmLook } from './components/FilmLook';
 import { Captions } from './components/Captions';
@@ -63,10 +64,13 @@ const Shot = ({ shot, index, shots, assetBase, durationInFrames }) => {
   const kind = index === 0 ? 'cut' : (shot.transition || 'cut');
   const next = shots[index + 1];
   const style = { ...exitStyle(next && next.transition, frame, durationInFrames), ...enterStyle(kind, frame) };
+  const visible = next ? durationInFrames - OVERLAP_FRAMES : durationInFrames;
   const content = isGraphic(shot.type) ? (
     <>
       <Backdrop shot={backdrop(shots, index)} assetBase={assetBase} durationInFrames={durationInFrames} />
-      <KineticText text={shot.text || ''} durationInFrames={next ? durationInFrames - OVERLAP_FRAMES : durationInFrames} />
+      {isMotion(shot.animation)
+        ? <MotionGraphic graphic={shot.animation} shotStart={shot.start} durationInFrames={visible} />
+        : <KineticText text={shot.text || ''} durationInFrames={visible} />}
     </>
   ) : <MediaShot shot={shot} src={assetUrl(assetBase, shot.asset)} durationInFrames={durationInFrames} />;
   return (

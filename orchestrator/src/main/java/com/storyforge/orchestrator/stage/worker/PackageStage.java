@@ -8,7 +8,6 @@ import com.storyforge.orchestrator.model.AssetManifest;
 import com.storyforge.orchestrator.model.AudioQa;
 import com.storyforge.orchestrator.model.Dossier;
 import com.storyforge.orchestrator.model.Edl;
-import com.storyforge.orchestrator.model.GrowthReport;
 import com.storyforge.orchestrator.model.InspirationIdeas;
 import com.storyforge.orchestrator.model.PackageDraft;
 import com.storyforge.orchestrator.model.PackageDraft.ThumbnailConcept;
@@ -19,8 +18,8 @@ import com.storyforge.orchestrator.model.TopicBrief;
 import com.storyforge.orchestrator.model.VideoPackage;
 import com.storyforge.orchestrator.model.VideoPackage.ScoredTitle;
 import com.storyforge.orchestrator.packaging.DescriptionBuilder;
+import com.storyforge.orchestrator.packaging.GrowthAdvisor;
 import com.storyforge.orchestrator.packaging.GrowthResearch;
-import com.storyforge.orchestrator.script.SpokenCheck;
 import com.storyforge.orchestrator.packaging.ShortsPlanner;
 import com.storyforge.orchestrator.packaging.TitleScorer;
 import com.storyforge.orchestrator.provider.image.ImageProvider;
@@ -52,7 +51,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class PackageStage implements StageWorker {
 
     private static final int TOP_TITLES = 3;
-    private static final int MAX_THUMBNAIL_WORDS = 4;
+    /** Read at feed size in a glance: 3 words at most (youtube-agent-skill's packaging rule). */
+    private static final int MAX_THUMBNAIL_WORDS = 3;
 
     private static final int MAX_THUMBNAILS = 3;
     private static final Logger log = LoggerFactory.getLogger(PackageStage.class);
@@ -196,52 +196,24 @@ public class PackageStage implements StageWorker {
         return Stage.PACKAGE;
     }
 
-    /** The Growth panel: every title ranked, the searches used or not, the competition, and a checklist. */
-    private GrowthReport growthReport(GrowthResearch.Research research, PackageDraft draft, TopicBrief brief,
-                                      String description, String thumbnailText, List<Edl.EdlChapter> chapters,
-                                      Edl edl, List<Scene> scenes, com.storyforge.orchestrator.artifact.RunFiles files) {
-        List<ScoredTitle> ranked = TitleScorer.top(draft.titles() == null ? List.of() : draft.titles(),
-                brief.title(), 20, research.searches());
-        List<String> tags = draft.tags() == null ? List.of() : draft.tags();
-        String top = description.lines().limit(2).collect(java.util.stream.Collectors.joining("\n"));
-        String used = (ranked.isEmpty() ? "" : ranked.get(0).title() + " ") + String.join(" ", tags) + " " + top;
-        String usedLower = used.toLowerCase(java.util.Locale.ROOT);
-        List<GrowthReport.Search> searches = research.searches().stream()
-                .map(phrase -> new GrowthReport.Search(phrase, usedLower.contains(phrase))).toList();
-        List<GrowthReport.Competitor> competitors = research.competitors().stream()
-                .map(hit -> new GrowthReport.Competitor(hit.title(), hit.channel(), hit.views(), hit.durationSec(),
-                        hit.url())).toList();
-        String best = ranked.isEmpty() ? "" : ranked.get(0).title();
-        String phrase = TitleScorer.searchedPhrase(best, research.searches());
-        List<GrowthReport.Check> checklist = new ArrayList<>();
-        checklist.add(new GrowthReport.Check("The title uses a phrase people search", phrase != null,
-                phrase != null ? "\"" + phrase + "\"" : "none of the searched phrases is in the best title"));
-        checklist.add(new GrowthReport.Check("The title fits 60 characters", best.length() <= TitleScorer.MAX_LENGTH,
-                best.length() + " characters"));
-        boolean repeats = thumbnailText != null && !thumbnailText.isBlank()
-                && best.toLowerCase(java.util.Locale.ROOT).contains(thumbnailText.toLowerCase(java.util.Locale.ROOT));
-        checklist.add(new GrowthReport.Check("The thumbnail text adds to the title", !repeats,
-                "\"" + thumbnailText + "\""));
-        String name = research.name() == null ? "" : research.name().toLowerCase(java.util.Locale.ROOT);
-        boolean nameTop = !name.isBlank() && top.toLowerCase(java.util.Locale.ROOT).contains(name);
-        checklist.add(new GrowthReport.Check("The first lines of the description name it", nameTop,
-                nameTop ? "\"" + research.name() + "\" above the fold" : "add \"" + research.name() + "\" early"));
-        int youtubeChapters = DescriptionBuilder.youtubeChapters(chapters).size();
-        checklist.add(new GrowthReport.Check("3+ chapters (YouTube shows them)", youtubeChapters >= 3,
-                youtubeChapters + " chapter(s)"));
-        double minutes = edl.durationSec() / 60;
-        checklist.add(new GrowthReport.Check("8+ minutes (mid-roll ads)", minutes >= 8,
-                String.format(java.util.Locale.ROOT, "%.1f minutes", minutes)));
-        long asks = scenes.isEmpty() ? 0 : SpokenCheck.askKinds(scenes.get(scenes.size() - 1).narration());
-        checklist.add(new GrowthReport.Check("One ask at the end", asks <= 1, asks + " kind(s) of ask in the last scene"));
-        boolean introFirst = false;
-        if (files.exists(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE)) {
-            introFirst = files.read(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE,
-                    com.storyforge.orchestrator.provider.render.ChannelIdents.Timeline.class).introAt() < 5;
+    /** The video's first two sentences, spoken words only (marks like [mood: x] removed). */
+    static String opening(List<Scene> scenes) {
+        if (scenes.isEmpty() || scenes.get(0).narration() == null) {
+            return "";
         }
-        checklist.add(new GrowthReport.Check("The story starts before the channel intro", !introFirst,
-                introFirst ? "the intro plays first: viewers leave in the first seconds" : "the hook comes first"));
-        return new GrowthReport(research.name(), ranked, searches, competitors, tags, top, checklist);
+        String text = scenes.get(0).narration().replaceAll("\\[[^\\]]*]", " ").replaceAll("\\s+", " ").strip();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.+?[.!?])\\s+(.+?[.!?])(\\s|$)").matcher(text);
+        return m.find() ? m.group(1) + " " + m.group(2) : text;
+    }
+
+    /** "views (x their channel's usual) | title", so the package learns from what beat its own channel. */
+    private static String competitorLines(GrowthResearch.Research research) {
+        return research.competitors().stream().map(hit -> {
+            Long median = research.medians().get(hit.videoId());
+            String outlier = median == null || median <= 0 ? ""
+                    : String.format(java.util.Locale.ROOT, " (x%.1f their channel's usual)", hit.views() / (double) median);
+            return String.format(java.util.Locale.ROOT, "%,d views%s | %s", hit.views(), outlier, hit.title());
+        }).collect(java.util.stream.Collectors.joining("\n"));
     }
 
     @Override
@@ -277,11 +249,11 @@ public class PackageStage implements StageWorker {
                 "chapters", json.writeValueAsString(edl.chapters().stream().map(Edl.EdlChapter::title).toList()),
                 "owner_notes", ownerNotes(files.overrides().packageNotes()),
                 "searches", research.searches().isEmpty() ? "(none)" : String.join("\n", research.searches()),
-                "competitors", research.competitors().isEmpty() ? "(none)" : research.competitors().stream()
-                        .map(hit -> String.format(java.util.Locale.ROOT, "%,d views | %s", hit.views(), hit.title()))
-                        .collect(java.util.stream.Collectors.joining("\n"))),
+                "competitors", research.competitors().isEmpty() ? "(none)" : competitorLines(research)),
                 PackageDraft.class);
-        List<ScoredTitle> titles = TitleScorer.top(draft.titles(), brief.title(), TOP_TITLES, research.searches());
+        String opening = opening(scenes);
+        List<ScoredTitle> titles = TitleScorer.top(draft.titles(), brief.title(), TOP_TITLES, research.searches(),
+                opening);
         if (titles.isEmpty()) {
             throw new IllegalStateException("Packaging produced no usable titles");
         }
@@ -302,10 +274,15 @@ public class PackageStage implements StageWorker {
                 mediaCredits, hashtags);
         files.writeText(Stage.PACKAGE, "description.txt", description);
         List<PublishKit.ShortClip> shorts = shorts(context, edl, draft, brief, titles.get(0).title());
-        files.write(Stage.PACKAGE, GROWTH, growthReport(research, draft, brief, description, concepts.get(0).text(),
-                chapters, edl, scenes, files));
+        Double introAt = files.exists(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE)
+                ? files.read(Stage.ASSEMBLE, com.storyforge.orchestrator.provider.render.ChannelIdents.TIMELINE,
+                        com.storyforge.orchestrator.provider.render.ChannelIdents.Timeline.class).introAt() : null;
+        files.write(Stage.PACKAGE, GROWTH, GrowthAdvisor.build(new GrowthAdvisor.Input(research, draft.titles(),
+                brief.title(), opening, draft.tags(), description, concepts.get(0).text(), chapters, edl.durationSec(),
+                scenes.isEmpty() ? null : scenes.get(scenes.size() - 1).narration(), introAt, shorts.size())));
         files.write(Stage.PACKAGE, "package.json", new VideoPackage(titles.get(0).title(), titles, description,
-                draft.tags() == null ? List.of() : draft.tags(), draft.pinnedComment(),
+                draft.tags() == null ? List.of() : draft.tags().stream().limit(GrowthAdvisor.MAX_TAGS).toList(),
+                draft.pinnedComment(),
                 Stage.PACKAGE.folder() + "/thumbnail.png", concepts.get(0).text(),
                 rendered.subList(1, rendered.size()), DescriptionBuilder.youtubeChapters(chapters),
                 qa.disclosureRequired(), hashtags, draft.communityPost(), shorts));

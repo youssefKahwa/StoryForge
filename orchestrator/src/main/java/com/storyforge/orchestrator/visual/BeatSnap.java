@@ -34,10 +34,8 @@ public final class BeatSnap {
             if (beat == null || beat - left.start() < MIN_SHOT || right.end() - beat < MIN_SHOT) {
                 continue;
             }
-            shots.set(i, new Shot(left.id(), left.sceneId(), left.type(), left.start(), beat, left.prompt(),
-                    left.motion(), left.text(), left.seed()));
-            shots.set(i + 1, new Shot(right.id(), right.sceneId(), right.type(), beat, right.end(), right.prompt(),
-                    right.motion(), right.text(), right.seed()));
+            shots.set(i, left.withTimes(left.start(), beat));
+            shots.set(i + 1, right.withTimes(beat, right.end()));
         }
         return new ShotList(list.durationSec(), shots);
     }

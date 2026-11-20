@@ -58,12 +58,17 @@ public class AssembleStage implements StageWorker {
     private final SubscribeNudge subscribe;
     private final org.springframework.beans.factory.ObjectProvider<
             com.storyforge.orchestrator.provider.render.ChannelIdents> idents;
+    private final com.storyforge.orchestrator.media.FfmpegService ffmpeg;
+    private final double truePeakMax;
 
     public AssembleStage(RenderProvider renderer, FormatRegistry formats, StoryForgeProperties properties,
                          PreferencesService preferences, HostMascot host, SubscribeNudge subscribe,
                          org.springframework.beans.factory.ObjectProvider<
-                                 com.storyforge.orchestrator.provider.render.ChannelIdents> idents) {
+                                 com.storyforge.orchestrator.provider.render.ChannelIdents> idents,
+                         com.storyforge.orchestrator.media.FfmpegService ffmpeg) {
         this.idents = idents;
+        this.ffmpeg = ffmpeg;
+        this.truePeakMax = properties.qa().truePeakMax();
         this.subscribe = subscribe;
         this.host = host;
         this.renderer = renderer;
@@ -259,7 +264,7 @@ public class AssembleStage implements StageWorker {
         edl = edl.withShots(edl.shots().stream().map(shot -> new Edl.EdlShot(shot.id(), shot.sceneId(), shot.type(),
                 shot.start(), shot.end(), shot.asset(), shot.motion(), shot.text(),
                 transitions.getOrDefault(shot.id(), TransitionPlanner.CUT), shot.media(), shot.credit(),
-                maps.get(shot.id()), punches.get(shot.id()))).toList());
+                maps.get(shot.id()), punches.get(shot.id()), shot.animation())).toList());
 
         edl = withHost(context, edl, alignment);
         edl = withSubscribe(context, edl);
@@ -285,5 +290,21 @@ public class AssembleStage implements StageWorker {
         }
         context.usage().provider(renderer.name());
         withIdents(context, captions, reuse, fingerprint);
+        peakGuard(context);
+    }
+
+    /** The finished file's true peak under YouTube's limit (each AAC encode of the mix adds overs). */
+    private void peakGuard(StageContext context) {
+        Path video = context.files().path(Stage.ASSEMBLE, QaService.VIDEO);
+        if (!java.nio.file.Files.isRegularFile(video)) {
+            return;
+        }
+        try {
+            var stats = ffmpeg.truePeakGuard(video, truePeakMax);
+            log.info("Run {}: final audio {} LUFS, true peak {} dBTP", context.run().id(), stats.integratedLufs(),
+                    stats.truePeakDb());
+        } catch (RuntimeException e) {
+            log.warn("Run {}: true-peak guard skipped: {}", context.run().id(), e.getMessage());
+        }
     }
 }

@@ -35,7 +35,8 @@ public final class EdlBuilder {
                         .orElseThrow(() -> new IllegalStateException("No asset for " + shot.id())),
                 shot.motion(), shot.text(), "cut",
                 assets.forShot(shot.id()).map(AssetManifest.Asset::media).orElse("ai"),
-                assets.forShot(shot.id()).map(AssetManifest.Asset::credit).orElse(null), null, null)).toList();
+                assets.forShot(shot.id()).map(AssetManifest.Asset::credit).orElse(null), null, null,
+                shot.animation())).toList();
         return new Edl(VERSION, frame.width(), frame.height(), frame.fps(), alignment.durationSec(), null,
                 shots, audio, captions, chapters(scenes, alignment, outline), style,
                 overlays == null ? List.of() : overlays, null);

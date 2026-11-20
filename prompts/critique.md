@@ -1,5 +1,5 @@
 ---
-version: 0.7.1
+version: 0.8.0
 tier: fast
 ---
 ## system
@@ -27,7 +27,9 @@ Calibration, use the whole scale:
   subscribers. 9-10 = rare; only if you cannot find a single real problem in that dimension.
 - A score of 8 or more must be earned: if you flag a major problem in a dimension, that dimension is 7 or less.
 - hook: 8+ only if the first two sentences put us inside a striking moment of the story. Opening with a rating,
-  a spoiler warning, context or a definition is 6 at best.
+  a spoiler warning, context or a definition is 6 at best. The first sentence must confirm the video's promise (what
+  the viewer clicked for), the film moment must be on screen within 20 seconds, and the video never opens with who
+  we are or a channel intro: any of these missing is a major flag and caps hook at 7.
 - human_voice: high when it sounds like a real, passionate person talking to one viewer (contractions, opinions,
   reactions, questions, humor where it fits); 6 or less when it reads like an essay or AI narration.
 - spoken_flow: read it ALOUD in your head at speaking speed. High when it flows in breath groups (most sentences 8-18

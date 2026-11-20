@@ -210,8 +210,12 @@ public class ChannelIdents {
         args.addAll(input);
         // No video filter: the rendered video and the intro/outro already are 1080p, 30 fps, yuv420p. A filter here
         // (fps=30, or setpts after a seek) lost frames: one every few seconds, or the last 1.4 s of a cut.
+        // The oversampled limiter: this is the second AAC encode of the soundtrack, and its overs added up to +2.2
+        // dBTP on run 166 (YouTube's limit is -1).
         args.addAll(List.of("-pix_fmt", "yuv420p",
-                "-af", "aformat=sample_rates=48000:channel_layouts=stereo", "-c:v", "libx264", "-preset", "veryfast",
+                "-af", "aformat=channel_layouts=stereo," + com.storyforge.orchestrator.media.FfmpegService
+                        .truePeakLimiter(com.storyforge.orchestrator.media.FfmpegService.SAFE_CEILING_DB),
+                "-c:v", "libx264", "-preset", "veryfast",
                 "-crf", "19", "-bf", "0", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-f", "mpegts",
                 out.toString()));
         ffmpeg.ffmpeg(args);

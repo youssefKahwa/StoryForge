@@ -158,7 +158,11 @@ public class MediaSvcClient {
 
     /** One YouTube search result: what already gets views on the topic. */
     public record SearchHit(String videoId, String title, String channel, long views, double durationSec,
-                            String url) {
+                            String url, String channelUrl) {
+
+        public SearchHit(String videoId, String title, String channel, long views, double durationSec, String url) {
+            this(videoId, title, channel, views, durationSec, url, null);
+        }
     }
 
     /** The top results of a YouTube search with their view counts (no download). */
@@ -168,9 +172,14 @@ public class MediaSvcClient {
         for (JsonNode v : r.path("results")) {
             hits.add(new SearchHit(v.path("video_id").asString(""), v.path("title").asString(""),
                     v.path("channel").asString(""), v.path("views").asLong(0), v.path("duration_sec").asDouble(0),
-                    v.path("url").asString("")));
+                    v.path("url").asString(""), v.path("channel_url").asString(null)));
         }
         return hits;
+    }
+
+    /** The channel's usual views: the median over its latest uploads (0 when it cannot be read). */
+    public long channelMedianViews(String channelUrl) {
+        return post("/channel", Map.of("channel_url", channelUrl, "max_videos", 30)).path("median_views").asLong(0);
     }
 
     /** The picture only of one YouTube video, at most {@code maxHeight} lines, for analysis (never shown). */

@@ -82,12 +82,19 @@ public class SoundBank {
     private Map<String, List<Sound>> index;
     private long lastCall;
 
+    private final SoundPacks packs;
+
     public SoundBank(StoryForgeProperties properties, FfmpegService ffmpeg, JsonMapper json,
                      @Value("${FREESOUND_API_KEY:}") String apiKey) {
-        this.root = Path.of(properties.sound().libraryDir()).toAbsolutePath().resolve("sfx-bank");
+        Path library = Path.of(properties.sound().libraryDir()).toAbsolutePath();
+        this.root = library.resolve("sfx-bank");
         this.ffmpeg = ffmpeg;
         this.json = json;
         this.apiKey = apiKey == null ? "" : apiKey.strip();
+        this.packs = new SoundPacks(library.resolve("sfx-packs"), root.resolve("packs"), ffmpeg, json, file -> {
+            double[] levels = levels(file);
+            return new double[] {peak(file), levels[0], levels[1]};
+        });
     }
 
     public static boolean isCategory(String name) {
@@ -99,6 +106,13 @@ public class SoundBank {
         Category spec = CATEGORIES.get(category);
         if (spec == null) {
             return Optional.empty();
+        }
+        // The owner's approved sound packs first (transitions, hits, UI sounds; never ambience beds).
+        if (SoundPacks.WORDS.containsKey(category)) {
+            Optional<Sound> fromPack = packs.pick(category, spec.queries(), spec.minSeconds(), spec.maxSeconds(), seed);
+            if (fromPack.isPresent()) {
+                return fromPack;
+            }
         }
         List<Sound> sounds = ensure(category, spec);
         return sounds.isEmpty() ? Optional.empty() : Optional.of(sounds.get((int) Math.floorMod(seed, sounds.size())));
@@ -118,6 +132,10 @@ public class SoundBank {
         if (words.length() < 3) {
             return Optional.empty();
         }
+        Optional<Sound> fromPack = packs.cue(words, 0.3, 8, seed);
+        if (fromPack.isPresent()) {
+            return fromPack;
+        }
         String key = "cue_" + words.replace(' ', '_');
         List<Sound> sounds = ensure(key, new Category(List.of(words), 0.3, 8, CUE_KEEP));
         return sounds.isEmpty() ? Optional.empty() : Optional.of(sounds.get((int) Math.floorMod(seed, sounds.size())));
@@ -125,6 +143,10 @@ public class SoundBank {
 
     /** The licence of a bank file, if the file belongs to the bank. */
     public synchronized Optional<LicenseRecord> license(String file) {
+        Optional<LicenseRecord> pack = packs.license(file);
+        if (pack.isPresent()) {
+            return pack;
+        }
         return index().values().stream().flatMap(List::stream).filter(s -> s.file().equals(file)).findFirst()
                 .map(Sound::license);
     }

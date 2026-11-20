@@ -325,8 +325,7 @@ public class ShotDirector {
     }
 
     static Shot withPrompt(Shot shot, String prompt) {
-        return new Shot(shot.id(), shot.sceneId(), shot.type(), shot.start(), shot.end(), prompt, shot.motion(),
-                shot.text(), shot.seed());
+        return shot.withPrompt(prompt, shot.seed());
     }
 
     private static String nullToEmpty(String value) {

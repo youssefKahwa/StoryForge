@@ -27,6 +27,14 @@ public class FfmpegService {
     private static final double LOUDNESS_TOLERANCE = 0.3;
     private static final double LIMIT_MARGIN_DB = 0.5;
     private static final double LIMITER_COMPENSATION = 1.3;
+    /**
+     * Where an encode's oversampled limiter sits: an AAC encode of a brickwalled mix overshoots by 1-2 dB (run 166: a
+     * mix at -2.7 dBFS came out at +2.2 dBTP after two encodes), so the ceiling is 1.5 dB under YouTube's -1 dBTP.
+     */
+    public static final double SAFE_CEILING_DB = -2.5;
+    /** The guard re-encodes only when the true peak is this close to the limit. */
+    static final double GUARD_HEADROOM_DB = 0.2;
+    private static final int GUARD_PASSES = 2;
 
     private final String ffmpeg;
     private final String ffprobe;
@@ -102,6 +110,43 @@ public class FfmpegService {
             gain += error * LIMITER_COMPENSATION;
         }
         return result;
+    }
+
+    /**
+     * A peak limiter run at 4x the sample rate, so it also catches the peaks between samples that an encode turns
+     * into overs (a plain limiter only sees the samples).
+     */
+    public static String truePeakLimiter(double ceilingDb) {
+        return String.format(Locale.ROOT, "aresample=192000,alimiter=limit=%.4f:attack=1:release=50:level=false,"
+                + "aresample=48000", Math.pow(10, ceilingDb / 20));
+    }
+
+    static boolean needsPeakGuard(double truePeakDb, double maxDb) {
+        return truePeakDb > maxDb - GUARD_HEADROOM_DB;
+    }
+
+    /**
+     * The finished video's true peak brought under maxDb: when it is over, the audio alone is encoded again (the
+     * picture is copied) through the oversampled limiter, at most twice, the second time 1 dB lower. The limiter
+     * only trims the overs, so the loudness stays where the mix put it.
+     */
+    public LoudnessStats truePeakGuard(Path video, double maxDb) {
+        LoudnessStats stats = measureLoudness(video);
+        double ceiling = maxDb - 1.5;
+        for (int pass = 0; pass < GUARD_PASSES && needsPeakGuard(stats.truePeakDb(), maxDb); pass++) {
+            Path limited = video.resolveSibling(video.getFileName() + ".peak.mp4");
+            ffmpeg(List.of("-y", "-loglevel", "error", "-i", video.toString(), "-map", "0:v:0", "-map", "0:a:0",
+                    "-c:v", "copy", "-af", truePeakLimiter(ceiling), "-c:a", "aac", "-b:a", "256k", "-ar", "48000",
+                    "-ac", "2", "-movflags", "+faststart", limited.toString()));
+            try {
+                java.nio.file.Files.move(limited, video, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            stats = measureLoudness(video);
+            ceiling -= 1;
+        }
+        return stats;
     }
 
     private JsonNode loudnormJson(String output, Path file) {

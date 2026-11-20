@@ -80,6 +80,8 @@ public class AudioMixStage implements StageWorker {
     private static final long CLICK_ID = 825193;
     private static final long CHIME_ID = 571512;
     private static final long POP_ID = 527522;
+    /** Items of an animation closer than this get no tick of their own (a burst of clicks sounds like a glitch). */
+    static final double MOTION_SOUND_GAP = 0.5;
     /** Chapter card on screen (LongForm CHAPTER_FRAMES at 30 fps). */
     private static final double CHAPTER_SECONDS = 3.5;
 
@@ -201,6 +203,7 @@ public class AudioMixStage implements StageWorker {
             all.addAll(ambience(scenes, alignment, runSeed));
             all.addAll(hostFoley(files, runSeed));
             all.addAll(subscribeSounds(subscribeAt, runSeed));
+            all.addAll(motionSounds(files));
             for (double[] bubble : bubbles) {
                 addSound(all, "pop", POP_ID, bubble[0] + 0.12, -21, "talking logo pops in");
             }
@@ -329,6 +332,36 @@ public class AudioMixStage implements StageWorker {
             }
             addSound(cues, "bell", CHIME_ID, t + SubscribeNudge.BELL_AT, -18, reason);
             addSound(cues, "whoosh_fast", SWOOSH_ID, t + SubscribeNudge.EXIT_AT, -27, reason);
+        }
+        return cues;
+    }
+
+    /**
+     * The animated explainers' sound design: a soft swoosh as the graphic builds, then a quiet tick or pop as each
+     * item appears (at least {@link #MOTION_SOUND_GAP} apart, low under the voice). Times come from the shot list.
+     */
+    private List<SoundPlan.SfxCue> motionSounds(com.storyforge.orchestrator.artifact.RunFiles files) {
+        List<SoundPlan.SfxCue> cues = new ArrayList<>();
+        if (!files.exists(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST)) {
+            return cues;
+        }
+        for (ShotList.Shot shot : files.read(Stage.VISUAL_PLAN, VisualPlanStage.SHOTLIST, ShotList.class).shots()) {
+            if (shot.animation() == null) {
+                continue;
+            }
+            String reason = "animation " + shot.animation().template() + " " + shot.id();
+            addSound(cues, "whoosh_fast", SWOOSH_ID, shot.start() + 0.25, -26, reason);
+            double last = shot.start();
+            String tick = "evidence".equals(shot.animation().template()) || "list".equals(shot.animation().template())
+                    ? "click" : "pop";
+            long id = "click".equals(tick) ? CLICK_ID : POP_ID;
+            for (var item : shot.animation().items()) {
+                if (item.at() == null || item.at() - last < MOTION_SOUND_GAP) {
+                    continue;
+                }
+                addSound(cues, tick, id, item.at() + 0.1, -25, reason);
+                last = item.at();
+            }
         }
         return cues;
     }

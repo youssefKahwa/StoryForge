@@ -54,7 +54,13 @@ public record Edl(
      */
     public record EdlShot(String id, String sceneId, String type, double start, double end, String asset,
                           String motion, String text, String transition, String media, String credit,
-                          MapPin map, EdlPunch punch) {
+                          MapPin map, EdlPunch punch, MotionGraphic animation) {
+
+        public EdlShot(String id, String sceneId, String type, double start, double end, String asset,
+                       String motion, String text, String transition, String media, String credit, MapPin map,
+                       EdlPunch punch) {
+            this(id, sceneId, type, start, end, asset, motion, text, transition, media, credit, map, punch, null);
+        }
     }
 
     /** From {@code at} (seconds, absolute) to the end of the shot the picture is cropped around (x, y), 0..1. */

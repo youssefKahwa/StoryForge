@@ -95,6 +95,7 @@ const RunPage = ({ location }) => {
   const qaReport = useRunFile(detail, 'qa', 'qa_report.json');
   const pkg = useRunFile(detail, 'package', 'package.json');
   const growth = useRunFile(detail, 'package', 'growth.json');
+  const motion = useRunFile(detail, 'visual_plan', 'motion.json');
   const script = useRunFile(detail, 'critique', 'script.sfm.md');
   const publication = useRunFile(detail, 'publish', 'publication.json');
   const kit = useRunFile(detail, 'publish', 'kit.json');
@@ -187,6 +188,11 @@ const RunPage = ({ location }) => {
       </div>
 
       {active && <RunProgress run={run} />}
+      {active && (
+        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+          <FormattedMessage id="run.keepAwake" />
+        </Typography.Text>
+      )}
 
       {publication && (
         <Alert
@@ -243,6 +249,17 @@ const RunPage = ({ location }) => {
             children: reviewPages.length ? (
               <Space direction="vertical" size="middle" className="full-width">
                 <Typography.Text type="secondary"><FormattedMessage id="run.shotsHelp" /></Typography.Text>
+                {Array.isArray(motion) && motion.length ? (
+                  <Space wrap>
+                    <Typography.Text strong><FormattedMessage id="run.animations" /></Typography.Text>
+                    {motion.map((m) => (
+                      <Tag key={m.shot} color="blue">
+                        {`${Math.floor(m.start / 60)}:${String(Math.floor(m.start % 60)).padStart(2, '0')} ${m.animation.template}`}
+                        {m.animation.title ? ` · ${m.animation.title}` : ''}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : null}
                 {reviewPages.map((page) => {
                   const url = `${ApiRoutes.runFile(run.id, 'qa', page.name)}?v=${page.sizeBytes}`;
                   return (

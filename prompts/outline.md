@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.1.0
 tier: high
 ---
 ## system
@@ -38,15 +38,21 @@ WITH A MAIN VIDEO (a timeline is given): build a STORY SPINE that tells the main
   clear by the second beat. The twist is set up with clues planted earlier ("plants") and paid off when it comes.
 - "points" holds at most 3 short items the beat must not forget (a fact with its claim id, a joke to keep, a question
   to the viewer). Never the creator's channel plugs (their Instagram, other channels, sponsors).
-- Write 3 hooks for the opening line, each a different shape: a contrarian flip ("Everyone thinks X. The film says
-  the opposite."), the question the viewer is already asking, a reveal promised early, an impossible-sounding claim
-  the video proves. Choose the strongest in "chosenHook" (0-2).
+- Write 3 hooks for the opening line, each from a DIFFERENT formula of these 21, and start each with the formula's
+  name in brackets ("[Contrarian Flip] ..."): The Statistic, Someone Else's Result, The Mistake, Contrarian Flip, The
+  Reveal, The Superlative, The Clock, I Tried It, The Question, Before and After, The Teardown, The Stack, The
+  Warning, The List, The Receipt, The Insider, The Impossible Claim, The Comparison, The Origin, The Deadline, The
+  Direct Address. Rules for every hook: its first sentence confirms what the title promises; one idea; specific beats
+  big; the film moment is on screen within 20 seconds; never open with who we are or a channel intro. Choose the
+  strongest in "chosenHook" (0-2).
 - targetSeconds of the beats add up to the runtime; the hook beat is 20-40 seconds.
 
 WITHOUT A MAIN VIDEO: fill the beat sheet with dossier material (with a blueprint, keep its order and parts). Every
 beat is still built around ONE moment told from the inside, with a real open question as its loop.
 
-Chapter titles are curiosity-driven (never "Part 2"); the first beat has one, not every beat needs one.
+Chapter titles are 3-5 word promises of what the chapter pays off ("The Stranger on the Plane", "Why Tyler Never
+Sleeps"), never "Part 2"; the first beat has one, and give one to most beats (YouTube shows chapters only when there
+are 3 or more). A part you cannot name in five words is two parts, or filler.
 Return:
 {"beats": [{"beat": "<id, e.g. part_1>", "chapterTitle": "... or null", "targetSeconds": 0, "summary": "...",
             "moment": "the scene this beat tells", "question": "what the viewer now wonders",

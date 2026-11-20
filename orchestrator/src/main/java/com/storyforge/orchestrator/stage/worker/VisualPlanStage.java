@@ -46,8 +46,12 @@ public class VisualPlanStage implements StageWorker {
     private final MusicPlanner music;
     private final BeatGrid beats;
 
+    private final com.storyforge.orchestrator.visual.MotionDirector motion;
+
     public VisualPlanStage(FormatRegistry formats, StoryForgeProperties properties, ShotDirector director,
-                           WikidataGeo geo, MusicPlanner music, BeatGrid beats) {
+                           WikidataGeo geo, MusicPlanner music, BeatGrid beats,
+                           com.storyforge.orchestrator.visual.MotionDirector motion) {
+        this.motion = motion;
         this.music = music;
         this.beats = beats;
         this.geo = geo;
@@ -78,7 +82,11 @@ public class VisualPlanStage implements StageWorker {
         ShotDirector.Result directed = director.direct(context, context.run().topicTitle(), scenes, alignment, plan,
                 style);
         RunOverrides overrides = context.files().overrides();
-        ShotList shots = onTheBeat(context, applyRevisions(directed.shots(), overrides, style));
+        ShotList animated = motion.animate(context, scenes, alignment,
+                applyRevisions(directed.shots(), overrides, style));
+        ShotList shots = onTheBeat(context, animated);
+        java.util.Set<String> plain = shots.shots().stream().filter(s -> s.animation() == null).map(Shot::id)
+                .collect(java.util.stream.Collectors.toSet());
         Map<String, RealMedia> real = new HashMap<>(directed.realMedia());
         Map<String, Integer> perScene = new HashMap<>();
         for (Shot shot : shots.shots()) {
@@ -98,7 +106,9 @@ public class VisualPlanStage implements StageWorker {
         context.files().write(Stage.VISUAL_PLAN, REAL_MEDIA, real);
         context.files().write(Stage.VISUAL_PLAN, MAPS, maps);
         context.files().write(Stage.VISUAL_PLAN, BIBLE, directed.bible());
-        context.files().write(Stage.VISUAL_PLAN, OVERLAYS, directed.overlays());
+        // An overlay never sits on an animation, nor on a shot an animation took over.
+        context.files().write(Stage.VISUAL_PLAN, OVERLAYS, directed.overlays().stream()
+                .filter(o -> o.shotId() == null || plain.contains(o.shotId())).toList());
         context.files().write(Stage.VISUAL_PLAN, SHOTLIST, shots);
     }
 
@@ -133,8 +143,7 @@ public class VisualPlanStage implements StageWorker {
             }
             String prompt = override.prompt() == null || override.prompt().isBlank() ? shot.prompt()
                     : style.promptPrefix() + ", " + override.prompt();
-            out.add(new Shot(shot.id(), shot.sceneId(), shot.type(), shot.start(), shot.end(), prompt, shot.motion(),
-                    shot.text(), shot.seed() + REVISION_SEED_STEP * Math.max(1, override.attempt())));
+            out.add(shot.withPrompt(prompt, shot.seed() + REVISION_SEED_STEP * Math.max(1, override.attempt())));
         }
         return new ShotList(shots.durationSec(), out);
     }

@@ -16,7 +16,8 @@ import java.util.stream.Collectors;
 public final class ShortsPlanner {
 
     public static final double END_CARD_SECONDS = 2.5;
-    private static final double MIN_SECONDS = 15;
+    /** Shorts of 20-55 s: shorter ones cannot hold a turn (youtube-agent-skill's Shorts rule). */
+    static final double MIN_SECONDS = 20;
     private static final List<String> PRIORITY = List.of("cold_open", "midpoint_twist", "climax", "dark_moment",
             "escalation_3", "escalation_2", "escalation_1", "hook_thesis", "verdict", "counter_reading");
 
