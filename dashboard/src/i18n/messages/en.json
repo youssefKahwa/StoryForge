@@ -34,7 +34,7 @@
   "run.tab.shots": "Shots",
   "run.tab.growth": "Growth",
   "run.animations": "Animated explainers:",
-  "run.keepAwake": "While it works the PC is kept awake, but closing the lid still puts it to sleep: keep it open and plugged in (rendering is slower on battery).",
+  "run.keepAwake": "While it works the PC is kept awake and the screen stays on, but closing the lid still puts it to sleep: keep it open and plugged in (rendering is slower on battery).",
   "growth.notReady": "The Growth suggestions appear when the video is packaged.",
   "growth.help": "To get more views for \"{name}\": titles ranked by what people search, the words viewers type, the videos that already get views on it, and a checklist.",
   "growth.titles": "Titles, best first (click to copy)",
